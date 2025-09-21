@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.ncloud-docs.com)",
+      "Bash(mkdir:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "WebSearch",
+      "WebFetch(domain:developers.rtzr.ai)"
+    ],
+    "deny": []
+  }
+}

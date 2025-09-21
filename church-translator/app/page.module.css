@@ -1,0 +1,133 @@
+.main {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--background);
+}
+
+.container {
+  width: 100%;
+  max-width: 600px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.title {
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-size: 1.125rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.speakerCard,
+.listenerCard {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px 30px;
+  text-align: center;
+  transition: border-color 0.2s ease;
+}
+
+.speakerCard {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.speakerCard:hover {
+  border-color: var(--primary);
+}
+
+.speakerCard h2,
+.listenerCard h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.speakerCard p,
+.listenerCard p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.input {
+  width: 100%;
+  padding: 12px;
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  text-align: center;
+  background: var(--background);
+  color: var(--text-primary);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  transition: border-color 0.2s ease;
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--text-secondary);
+}
+
+.joinButton {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 12px 32px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.joinButton:hover {
+  opacity: 0.9;
+}
+
+@media (max-width: 640px) {
+  .title {
+    font-size: 2rem;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .speakerCard,
+  .listenerCard {
+    padding: 32px 24px;
+  }
+}
