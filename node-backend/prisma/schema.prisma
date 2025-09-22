@@ -1,0 +1,81 @@
+// BridgeSpeak Database Schema
+// Prisma로 정의한 모델 구조 (Sequelize처럼 코드로 모델 정의!)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============== 모델 정의 ==============
+
+// 방 (Room) 모델
+model Room {
+  id          String    @id @default(uuid())
+  roomCode    String    @unique  // 6자리 방 코드
+  speakerName String    @default("Speaker")
+  status      String @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  listeners   Listener[]
+  transcripts Transcript[]
+  sttTexts    SttText[]
+
+  @@index([roomCode])
+  @@index([status])
+  @@map("rooms")
+}
+
+// 리스너 세션
+model Listener {
+  id        String   @id @default(uuid())
+  socketId  String   @unique
+  roomId    String
+  name      String?
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+
+  // Relations
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@map("listeners")
+}
+
+// STT 원문 기록 (실시간 음성 인식 텍스트)
+model SttText {
+  id          String   @id @default(uuid())
+  roomId      String
+  text        String
+  timestamp   DateTime @default(now())
+
+  // Relations
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, timestamp])
+  @@map("stt_texts")
+}
+
+// 번역 기록 (4-5문장 배치 번역)
+model Transcript {
+  id          String   @id @default(uuid())
+  roomId      String
+  korean      String
+  english     String
+  timestamp   DateTime @default(now())
+  batchId     String?
+
+  // Relations
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, timestamp])
+  @@map("transcripts")
+}
+
+// Enum 정의 (SQLite는 enum을 지원하지 않으므로 String으로 처리)
+// RoomStatus: "ACTIVE" | "INACTIVE" | "CLOSING"

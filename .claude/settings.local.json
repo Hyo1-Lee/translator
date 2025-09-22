@@ -7,7 +7,16 @@
       "Bash(npm init:*)",
       "Bash(npm install:*)",
       "WebSearch",
-      "WebFetch(domain:developers.rtzr.ai)"
+      "WebFetch(domain:developers.rtzr.ai)",
+      "Bash(python test:*)",
+      "Bash(pip install:*)",
+      "Bash(findstr:*)",
+      "Bash(python:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npm run prisma:merge:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)"
     ],
     "deny": []
   }

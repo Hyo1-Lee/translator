@@ -1,0 +1,26 @@
+// User 모델 정의
+// 향후 인증 시스템 추가를 위한 사용자 모델
+
+model User {
+  id          String    @id @default(uuid())
+  email       String?   @unique
+  password    String?   // 해시된 패스워드
+  name        String
+  role        String    @default("USER") // "USER" | "SPEAKER" | "ADMIN"
+
+  // Profile
+  avatar      String?
+  bio         String?
+  language    String    @default("ko") // 선호 언어
+
+  // Stats
+  totalSpeakTime   Int     @default(0) // 총 발언 시간 (초)
+  totalListenTime  Int     @default(0) // 총 청취 시간 (초)
+  roomsCreated     Int     @default(0) // 생성한 방 수
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([email])
+  @@map("users")
+}

@@ -1,0 +1,31 @@
+// Subscription 모델 정의
+// 구독/결제 관련 모델
+
+model Subscription {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  plan        String    @default("FREE") // "FREE" | "BASIC" | "PRO" | "ENTERPRISE"
+
+  // Limits
+  maxRoomDuration    Int     @default(60)     // 최대 방 지속 시간 (분)
+  maxListeners       Int     @default(10)     // 최대 동시 리스너 수
+  monthlyMinutes     Int     @default(300)    // 월간 사용 가능 분
+  usedMinutes        Int     @default(0)      // 사용한 분
+
+  // Billing
+  status      String    @default("ACTIVE")    // "ACTIVE" | "PAUSED" | "CANCELLED"
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+
+  // Payment
+  paymentMethod String?
+  lastPayment   DateTime?
+  nextPayment   DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("subscriptions")
+}

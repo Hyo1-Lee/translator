@@ -1,0 +1,19 @@
+// Room 모델 정의
+// 방 관련 테이블
+
+model Room {
+  id          String    @id @default(uuid())
+  roomCode    String    @unique  // 6자리 방 코드
+  speakerName String    @default("Speaker")
+  status      String    @default("ACTIVE") // "ACTIVE" | "INACTIVE" | "CLOSING"
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  listeners   Listener[]
+  transcripts Transcript[]
+
+  @@index([roomCode])
+  @@index([status])
+  @@map("rooms")
+}

@@ -21,7 +21,7 @@ export default function Speaker() {
   const router = useRouter();
 
   useEffect(() => {
-    socketRef.current = io('http://localhost:4000');
+    socketRef.current = io('http://localhost:5000'); // Node.js 백엔드로 변경!
 
     socketRef.current.on('connect', () => {
       socketRef.current.emit('create-room', { name: '연사' });

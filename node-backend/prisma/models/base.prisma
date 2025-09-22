@@ -1,0 +1,11 @@
+// Base configuration
+// 이 파일에는 기본 설정만 포함됩니다
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
