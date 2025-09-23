@@ -1,156 +1,410 @@
+/* Speaker Page - ECHO Modern Design */
+
 .main {
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: var(--background);
+  background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+  padding: 2rem 1rem;
 }
 
 .container {
-  width: 100%;
-  max-width: 500px;
+  max-width: 800px;
+  margin: 0 auto;
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .backButton {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
   cursor: pointer;
-  padding: 0;
-  margin-bottom: 40px;
-  transition: color 0.2s ease;
+  backdrop-filter: blur(10px);
 }
 
 .backButton:hover {
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateX(-3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.connectionStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+}
+
+.connected {
+  color: #4ade80;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.connected::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #4ade80;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.2); }
+}
+
+.disconnected {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Room Info Card */
+.roomInfo {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 3rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  margin-bottom: 2rem;
+  text-align: center;
+  position: relative;
+}
+
+.roomInfo h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 2rem;
 }
 
 .roomCode {
-  text-align: center;
-  margin-bottom: 40px;
-  padding: 30px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--background-subtle);
+  background: linear-gradient(135deg, rgba(120, 119, 198, 0.1) 0%, rgba(120, 119, 198, 0.05) 100%);
+  border: 1px solid rgba(120, 119, 198, 0.2);
+  border-radius: 16px;
+  padding: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .label {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+.codeContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
 }
 
 .code {
-  font-size: 2rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: 0.15em;
-  font-family: 'Courier New', monospace;
+  font-size: 3rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.2em;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+  text-shadow: 0 4px 12px rgba(120, 119, 198, 0.3);
 }
 
-.status {
+.copyButton {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, #7877c6 0%, #5a59a3 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(120, 119, 198, 0.3);
+}
+
+.copyButton:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 8px 20px rgba(120, 119, 198, 0.4);
+}
+
+.newRoomButton {
+  padding: 0.75rem 1.5rem;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.newRoomButton:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+/* Stats Grid */
+.stats {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
 }
 
 .statusItem {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
   text-align: center;
+  transition: all 0.3s ease;
+}
+
+.statusItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .statusLabel {
   display: block;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .statusValue {
   display: block;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 2rem;
+  font-weight: 800;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ffffff 0%, #8b8fc7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.controls {
-  display: flex;
-  justify-content: center;
-}
-
-.startButton,
-.stopButton {
-  padding: 16px 48px;
-  font-size: 1rem;
-  font-weight: 600;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: opacity 0.2s ease;
-}
-
-.startButton {
-  background: var(--primary);
-  color: white;
-}
-
-.startButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.stopButton {
-  background: var(--error);
-  color: white;
-}
-
-.startButton:hover:not(:disabled),
-.stopButton:hover {
-  opacity: 0.9;
-}
-
+/* Audio Level */
 .audioLevel {
-  margin-bottom: 40px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--background-subtle);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
 }
 
 .audioLabelText {
   display: block;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-  text-align: center;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .audioMeter {
   width: 100%;
-  height: 20px;
-  background: #f0f0f0;
-  border-radius: 10px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 8px;
+  margin-bottom: 0.5rem;
 }
 
 .audioBar {
   height: 100%;
+  background: linear-gradient(90deg, #7877c6, #8b8fc7);
   transition: width 0.1s ease;
-  border-radius: 10px;
+  border-radius: 4px;
 }
 
 .audioPercent {
   display: block;
-  text-align: center;
+  text-align: right;
   font-size: 0.875rem;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
+  font-family: monospace;
 }
 
+/* Controls */
+.controls {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.startButton,
+.stopButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.25rem 3rem;
+  border: none;
+  border-radius: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  min-width: 200px;
+}
+
+.startButton {
+  background: linear-gradient(135deg, #7877c6 0%, #5a59a3 100%);
+  color: white;
+  box-shadow: 0 10px 30px rgba(120, 119, 198, 0.3);
+}
+
+.startButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(120, 119, 198, 0.4);
+}
+
+.startButton:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.3);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.stopButton {
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+}
+
+.stopButton:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+  box-shadow: 0 15px 40px rgba(239, 68, 68, 0.4);
+}
+
+/* Transcript Preview */
+.transcriptPreview {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2rem;
+}
+
+.transcriptPreview h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.transcriptList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.transcriptItem {
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border-left: 3px solid #7877c6;
+  transition: all 0.3s ease;
+}
+
+.transcriptItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateX(4px);
+}
+
+.sttText,
+.koreanText {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+  margin-bottom: 0.5rem;
+}
+
+.englishText {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+/* Responsive Design */
 @media (max-width: 640px) {
+  .main {
+    padding: 1rem;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
   .code {
-    font-size: 1.5rem;
+    font-size: 2rem;
+  }
+
+  .codeContainer {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .controls {
+    width: 100%;
+  }
+
+  .startButton,
+  .stopButton {
+    width: 100%;
   }
 }

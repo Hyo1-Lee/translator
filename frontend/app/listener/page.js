@@ -1,81 +1,163 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import io from 'socket.io-client';
 import styles from './listener.module.css';
 
-function ListenerContent() {
-  const [connected, setConnected] = useState(false);
-  const [sttBatches, setSttBatches] = useState([]);  // STT 텍스트 배치별로 저장
-  const [currentBatch, setCurrentBatch] = useState('');  // 현재 모아지고 있는 배치
-  const [translations, setTranslations] = useState([]);  // 번역된 텍스트 배치
+// Constants
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const STORAGE_KEY = 'listener_preferences';
 
+function ListenerContent() {
+  // State management
+  const [roomCode, setRoomCode] = useState('');
+  const [isJoined, setIsJoined] = useState(false);
+  const [speakerName, setSpeakerName] = useState('');
+  const [listenerName, setListenerName] = useState('');
+  const [sttChunks, setSttChunks] = useState([]);
+  const [translationChunks, setTranslationChunks] = useState([]);
+  const [currentSttText, setCurrentSttText] = useState('');
+  const [isConnected, setIsConnected] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [showTranslation, setShowTranslation] = useState(true);
+  const [fontSize, setFontSize] = useState('medium');
+
+  // Refs
   const socketRef = useRef(null);
+  const transcriptEndRef = useRef(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const roomId = searchParams.get('room');
 
+  // Get room from URL if provided
+  const urlRoom = searchParams.get('room');
+
+  // Load preferences
+  const loadPreferences = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const prefs = JSON.parse(saved);
+          setListenerName(prefs.listenerName || '');
+          setAutoScroll(prefs.autoScroll !== false);
+          setShowTranslation(prefs.showTranslation !== false);
+          setFontSize(prefs.fontSize || 'medium');
+          return prefs;
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  // Save preferences
+  const savePreferences = useCallback((prefs) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    }
+  }, []);
+
+  // Auto scroll to bottom
   useEffect(() => {
-    if (!roomId) {
-      router.push('/');
-      return;
+    if (autoScroll && transcriptEndRef.current) {
+      transcriptEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [sttChunks, translationChunks, currentSttText, autoScroll]);
+
+  // Initialize socket connection
+  useEffect(() => {
+    // Load preferences
+    const prefs = loadPreferences();
+
+    // Set room code from URL if provided
+    if (urlRoom) {
+      setRoomCode(urlRoom.toUpperCase());
+    } else if (prefs?.lastRoomCode) {
+      setRoomCode(prefs.lastRoomCode);
     }
 
-    socketRef.current = io('http://localhost:5000'); // Node.js 백엔드로 변경!
+    socketRef.current = io(BACKEND_URL, {
+      transports: ['websocket', 'polling']
+    });
 
     socketRef.current.on('connect', () => {
-      socketRef.current.emit('join-room', { roomId });
+      console.log('Connected to server');
+      setIsConnected(true);
+
+      // Auto-join if room code is from URL
+      if (urlRoom && !isJoined) {
+        const name = prefs?.listenerName || 'Guest';
+        setListenerName(name);
+        socketRef.current.emit('join-room', {
+          roomId: urlRoom.toUpperCase(),
+          name
+        });
+      }
     });
 
-    socketRef.current.on('room-joined', () => {
-      setConnected(true);
+    socketRef.current.on('disconnect', () => {
+      console.log('Disconnected from server');
+      setIsConnected(false);
     });
 
-    // STT 원문 수신 (실시간)
+    socketRef.current.on('room-joined', (data) => {
+      console.log('[Listener] Room joined:', data);
+      setSpeakerName(data.speakerName);
+      setIsJoined(true);
+    });
+
+    // Listen for STT texts - continuous text stream
     socketRef.current.on('stt-text', (data) => {
-      setCurrentBatch(prev => {
-        // 현재 배치에 텍스트 추가
-        return prev ? prev + ' ' + data.text : data.text;
-      });
+      console.log('[Listener] Received stt-text:', data);
+      // Always append to current text (for both new and history)
+      setCurrentSttText(prev => prev ? prev + ' ' + data.text : data.text);
     });
 
-    // 번역 배치 수신 (4-5문장씩)
+    // Listen for translations - creates chunks
     socketRef.current.on('translation-batch', (data) => {
-      // 번역 시작 시 현재 배치를 완성된 배치로 이동
-      if (data.english === '번역 중...' && currentBatch) {
-        setSttBatches(prev => [...prev, currentBatch]);
-        setCurrentBatch('');
+      console.log('[Listener] Received translation-batch:', data);
+
+      if (data.isHistory) {
+        // For history, just add to chunks directly
+        setSttChunks(prev => [...prev, {
+          id: `stt-${data.batchId || Date.now()}-${Math.random()}`,
+          text: data.korean,
+          timestamp: data.timestamp,
+          isHistory: true
+        }]);
+      } else {
+        // For new translations, move current STT to a chunk
+        setCurrentSttText(prevText => {
+          if (prevText) {
+            // Save current text as a chunk
+            setSttChunks(prev => [...prev, {
+              id: `stt-${data.batchId || Date.now()}-${Math.random()}`,
+              text: data.korean, // Use the korean text from translation batch
+              timestamp: data.timestamp
+            }]);
+          }
+          return ''; // Start new current text
+        });
       }
 
-      setTranslations(prev => {
-        // 같은 배치 ID가 있으면 업데이트, 없으면 추가
-        const existingIndex = prev.findIndex(item => item.batchId === data.batchId);
-
-        if (existingIndex !== -1) {
-          // 기존 배치 업데이트 (번역 완료)
-          const updated = [...prev];
-          updated[existingIndex] = data;
-          return updated;
-        } else {
-          // 새 배치 추가 (영어만 저장)
-          return [...prev, {
-            batchId: data.batchId,
-            english: data.english,
-            timestamp: data.timestamp
-          }];
-        }
-      });
+      // Add translation chunk (English only)
+      setTranslationChunks(prev => [...prev, {
+        id: `trans-${data.batchId || Date.now()}-${Math.random()}`,
+        text: data.english,
+        timestamp: data.timestamp,
+        isHistory: data.isHistory || false
+      }]);
     });
 
-    socketRef.current.on('speaker-disconnected', () => {
-      alert('연사가 연결을 끊었습니다.');
-      router.push('/');
-    });
-
-    socketRef.current.on('error', (error) => {
-      alert(error.message || '연결 오류');
-      router.push('/');
+    socketRef.current.on('error', (data) => {
+      console.error('Socket error:', data);
+      alert(data.message);
+      if (data.message === 'Room not found') {
+        setIsJoined(false);
+        setRoomCode('');
+      }
     });
 
     return () => {
@@ -83,88 +165,283 @@ function ListenerContent() {
         socketRef.current.disconnect();
       }
     };
-  }, [roomId, router]);
+  }, [urlRoom]);
 
-  // 자동 스크롤을 위한 ref
-  const sttEndRef = useRef(null);
-  const translationEndRef = useRef(null);
+  // Join room
+  const joinRoom = () => {
+    if (!roomCode.trim()) {
+      alert('방 코드를 입력해주세요.');
+      return;
+    }
 
-  // STT 텍스트 추가 시 자동 스크롤
-  useEffect(() => {
-    sttEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [sttBatches, currentBatch]);
+    const name = listenerName || prompt('이름을 입력하세요 (선택사항):') || 'Guest';
+    setListenerName(name);
 
-  // 번역 추가 시 자동 스크롤
-  useEffect(() => {
-    translationEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [translations]);
+    // Save preferences
+    savePreferences({
+      listenerName: name,
+      autoScroll,
+      showTranslation,
+      fontSize,
+      lastRoomCode: roomCode
+    });
+
+    socketRef.current.emit('join-room', {
+      roomId: roomCode.toUpperCase(),
+      name
+    });
+  };
+
+  // Leave room
+  const leaveRoom = () => {
+    setIsJoined(false);
+    setSpeakerName('');
+    setSttChunks([]);
+    setTranslationChunks([]);
+    setCurrentSttText('');
+    setRoomCode('');
+
+    // Remove room from URL if present
+    if (urlRoom) {
+      router.push('/listener');
+    }
+
+    socketRef.current.disconnect();
+    socketRef.current = io(BACKEND_URL, {
+      transports: ['websocket', 'polling']
+    });
+  };
+
+  // Export transcripts
+  const exportTranscripts = () => {
+    let data = '';
+
+    // Combine chunks with their translations
+    for (let i = 0; i < Math.max(sttChunks.length, translationChunks.length); i++) {
+      if (sttChunks[i]) {
+        data += `[Korean] ${sttChunks[i].text}\n`;
+      }
+      if (translationChunks[i]) {
+        data += `[English] ${translationChunks[i].text}\n`;
+      }
+      data += '\n';
+    }
+
+    // Add current text if exists
+    if (currentSttText) {
+      data += `\n[Current] ${currentSttText}`;
+    }
+
+    const blob = new Blob([data], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transcript_${roomCode}_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Clear transcripts
+  const clearTranscripts = () => {
+    if (confirm('모든 기록을 삭제하시겠습니까?')) {
+      setSttChunks([]);
+      setTranslationChunks([]);
+      setCurrentSttText('');
+    }
+  };
+
+  // Toggle settings
+  const toggleAutoScroll = () => {
+    setAutoScroll(!autoScroll);
+    savePreferences({
+      listenerName,
+      autoScroll: !autoScroll,
+      showTranslation,
+      fontSize
+    });
+  };
+
+  const toggleShowTranslation = () => {
+    setShowTranslation(!showTranslation);
+    savePreferences({
+      listenerName,
+      autoScroll,
+      showTranslation: !showTranslation,
+      fontSize
+    });
+  };
+
+  const changeFontSize = (size) => {
+    setFontSize(size);
+    savePreferences({
+      listenerName,
+      autoScroll,
+      showTranslation,
+      fontSize: size
+    });
+  };
+
+  if (!isJoined) {
+    return (
+      <main className={styles.main}>
+        <div className={styles.joinContainer}>
+          <button onClick={() => router.push('/')} className={styles.backButton}>
+            ← 돌아가기
+          </button>
+
+          <div className={styles.joinBox}>
+            <h1>청취자 모드</h1>
+            <p>방 코드를 입력하여 실시간 번역을 확인하세요</p>
+
+            <div className={styles.connectionStatus}>
+              <span className={isConnected ? styles.connected : styles.disconnected}>
+                {isConnected ? '● 서버 연결됨' : '○ 서버 연결 중...'}
+              </span>
+            </div>
+
+            <input
+              type="text"
+              placeholder="방 코드 입력 (예: ABC123)"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+              onKeyPress={(e) => e.key === 'Enter' && joinRoom()}
+              className={styles.input}
+              maxLength={6}
+            />
+
+            <button
+              onClick={joinRoom}
+              disabled={!isConnected || !roomCode.trim()}
+              className={styles.joinButton}
+            >
+              입장하기
+            </button>
+
+            <div className={styles.tips}>
+              <h3>💡 사용 팁</h3>
+              <ul>
+                <li>연사로부터 6자리 방 코드를 받으세요</li>
+                <li>입장 후 실시간으로 번역된 내용을 확인할 수 있습니다</li>
+                <li>번역 내용은 텍스트 파일로 내보낼 수 있습니다</li>
+                <li>자동 스크롤, 글꼴 크기 등을 조정할 수 있습니다</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className={styles.main}>
       <div className={styles.container}>
         <div className={styles.header}>
-          <button onClick={() => router.push('/')} className={styles.backButton}>
+          <button onClick={leaveRoom} className={styles.leaveButton}>
             ← 나가기
           </button>
-          <span className={styles.connectionStatus}>
-            {connected ? '연결됨' : '연결 중...'}
-          </span>
+          <div className={styles.roomInfo}>
+            <span className={styles.speakerName}>{speakerName}</span>
+            <span className={styles.roomCodeDisplay}>방 코드: {roomCode}</span>
+          </div>
+          <div className={styles.connectionStatus}>
+            <span className={isConnected ? styles.connected : styles.disconnected}>
+              {isConnected ? '● 연결됨' : '○ 연결 끊김'}
+            </span>
+          </div>
+        </div>
+
+        <div className={styles.toolbar}>
+          <div className={styles.toolbarLeft}>
+            <button
+              onClick={toggleAutoScroll}
+              className={autoScroll ? styles.toolButtonActive : styles.toolButton}
+            >
+              {autoScroll ? '📜 자동 스크롤' : '📜 수동 스크롤'}
+            </button>
+            <button
+              onClick={toggleShowTranslation}
+              className={showTranslation ? styles.toolButtonActive : styles.toolButton}
+            >
+              {showTranslation ? '🌐 번역 표시' : '🇰🇷 원문만'}
+            </button>
+            <select
+              value={fontSize}
+              onChange={(e) => changeFontSize(e.target.value)}
+              className={styles.fontSizeSelector}
+            >
+              <option value="small">글꼴: 작게</option>
+              <option value="medium">글꼴: 보통</option>
+              <option value="large">글꼴: 크게</option>
+            </select>
+          </div>
+          <div className={styles.toolbarRight}>
+            <button onClick={clearTranscripts} className={styles.toolButton}>
+              🗑️ 초기화
+            </button>
+            <button
+              onClick={exportTranscripts}
+              className={styles.exportButton}
+              disabled={sttChunks.length === 0 && !currentSttText}
+            >
+              💾 내보내기
+            </button>
+          </div>
         </div>
 
         <div className={styles.contentArea}>
-          {/* 왼쪽: STT 실시간 텍스트 */}
+          {/* Left: STT real-time continuous text */}
           <div className={styles.sttSection}>
-            <div className={styles.sectionHeader}>실시간 음성 인식</div>
-            <div className={styles.sttContainer}>
-              {sttBatches.length === 0 && !currentBatch ? (
+            <div className={styles.sectionHeader}>🎤 실시간 음성인식</div>
+            <div className={`${styles.sttContainer} ${styles[`fontSize-${fontSize}`]}`}>
+              {sttChunks.length === 0 && !currentSttText ? (
                 <div className={styles.emptyState}>
                   <p>음성 인식 대기 중...</p>
+                  <p>연사가 말을 시작하면 여기에 표시됩니다</p>
                 </div>
               ) : (
-                <>
-                  {/* 완성된 배치들 (문단처럼 표시) */}
-                  {sttBatches.map((batch, index) => (
-                    <div key={index} className={styles.textParagraph}>
-                      {batch}
+                <div className={styles.continuousText}>
+                  {/* Show completed chunks */}
+                  {sttChunks.map((chunk) => (
+                    <div key={chunk.id} className={styles.textChunk}>
+                      {chunk.text}
                     </div>
                   ))}
-                  {/* 현재 진행 중인 배치 */}
-                  {currentBatch && (
-                    <div className={styles.textParagraphCurrent}>
-                      {currentBatch}
-                    </div>
+                  {/* Show current ongoing text */}
+                  {currentSttText && (
+                    <span className={styles.currentText}>
+                      {currentSttText}
+                      <span className={styles.cursor}>|</span>
+                    </span>
                   )}
-                  <div ref={sttEndRef} />
-                </>
+                </div>
               )}
             </div>
           </div>
 
-          {/* 오른쪽: 번역된 텍스트 (배치) */}
-          <div className={styles.translationSection}>
-            <div className={styles.sectionHeader}>번역</div>
-            <div className={styles.translationsContainer}>
-              {translations.length === 0 ? (
-                <div className={styles.emptyState}>
-                  <p>번역 대기 중...</p>
-                </div>
-              ) : (
-                <>
-                  {translations.map((batch, index) => (
-                    <div key={batch.batchId || index} className={styles.textParagraph}>
-                      {batch.english === '번역 중...' ? (
-                        <span className={styles.translating}>번역 중...</span>
-                      ) : (
-                        batch.english
-                      )}
-                    </div>
-                  ))}
-                  <div ref={translationEndRef} />
-                </>
-              )}
+          {/* Right: English Translation only */}
+          {showTranslation && (
+            <div className={styles.translationSection}>
+              <div className={styles.sectionHeader}>🌐 English Translation</div>
+              <div className={`${styles.translationsContainer} ${styles[`fontSize-${fontSize}`]}`}>
+                {translationChunks.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <p>Waiting for translation...</p>
+                    <p>Translation will appear after speech is recognized</p>
+                  </div>
+                ) : (
+                  <div className={styles.continuousText}>
+                    {translationChunks.map((chunk) => (
+                      <div key={chunk.id} className={styles.translationChunk}>
+                        {chunk.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
+        <div ref={transcriptEndRef} />
       </div>
     </main>
   );
@@ -172,7 +449,12 @@ function ListenerContent() {
 
 export default function Listener() {
   return (
-    <Suspense fallback={<div style={{ padding: '20px' }}>Loading...</div>}>
+    <Suspense fallback={
+      <div className={styles.loading}>
+        <div className={styles.spinner}></div>
+        <p>Loading...</p>
+      </div>
+    }>
       <ListenerContent />
     </Suspense>
   );

@@ -1,0 +1,99 @@
+// Real-time Translation Service Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============== Core Models ==============
+
+// Room Model - Represents a translation session
+model Room {
+  id            String    @id @default(uuid())
+  roomCode      String    @unique  // 6-character room code
+  speakerId     String    @unique  // Speaker's socket/session ID
+  speakerName   String    @default("Speaker")
+  status        String    @default("ACTIVE") // ACTIVE | PAUSED | ENDED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  endedAt       DateTime?
+
+  // Relations
+  listeners     Listener[]
+  transcripts   Transcript[]
+  sttTexts      SttText[]
+  roomSettings  RoomSettings?
+
+  @@index([roomCode])
+  @@index([status])
+  @@index([speakerId])
+  @@map("rooms")
+}
+
+// Room Settings - Configuration for each room
+model RoomSettings {
+  id                  String   @id @default(uuid())
+  roomId              String   @unique
+  targetLanguage      String   @default("en") // Target translation language
+  enableTranslation   Boolean  @default(true)
+  enableAutoScroll    Boolean  @default(true)
+  maxListeners        Int      @default(100)
+
+  // Relations
+  room                Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("room_settings")
+}
+
+// Listener Session
+model Listener {
+  id        String   @id @default(uuid())
+  socketId  String   @unique
+  roomId    String
+  name      String   @default("Guest")
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+
+  // Relations
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([socketId])
+  @@map("listeners")
+}
+
+// STT Raw Text - Real-time speech recognition
+model SttText {
+  id          String   @id @default(uuid())
+  roomId      String
+  text        String
+  confidence  Float?   // STT confidence score
+  timestamp   DateTime @default(now())
+
+  // Relations
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, timestamp])
+  @@map("stt_texts")
+}
+
+// Translation Record - Batch translated text
+model Transcript {
+  id          String   @id @default(uuid())
+  roomId      String
+  korean      String   // Original Korean text
+  english     String   // Translated English text
+  batchId     String?  // Batch identifier for grouped translations
+  timestamp   DateTime @default(now())
+
+  // Relations
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, timestamp])
+  @@index([batchId])
+  @@map("transcripts")
+}

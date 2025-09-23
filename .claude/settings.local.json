@@ -16,7 +16,10 @@
       "Bash(npx prisma:*)",
       "Bash(npm run prisma:merge:*)",
       "Bash(taskkill:*)",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(tree:*)",
+      "Bash(npx npm-check-updates:*)",
+      "Bash(cmd /c:*)"
     ],
     "deny": []
   }
