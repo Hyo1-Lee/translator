@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import axios from 'axios';
-import { EventEmitter } from 'events';
+import { STTProvider, TranscriptResult } from './stt-provider.interface';
 
 interface RTZRConfig {
   clientId: string;
@@ -13,25 +13,16 @@ interface RTZRToken {
   expiresAt: number;
 }
 
-interface TranscriptResult {
-  text: string;
-  confidence?: number;
-  final: boolean;
-}
-
-export class RTZRClient extends EventEmitter {
+export class RTZRClient extends STTProvider {
   private config: RTZRConfig;
   private token: RTZRToken | null = null;
   private ws: WebSocket | null = null;
-  private isConnected: boolean = false;
   private pendingAudioBuffer: Buffer[] = [];
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
-  private roomId: string;
 
   constructor(roomId: string, config: RTZRConfig) {
-    super();
-    this.roomId = roomId;
+    super(roomId);
     this.config = config;
   }
 
@@ -225,5 +216,10 @@ export class RTZRClient extends EventEmitter {
   // Check connection status
   isActive(): boolean {
     return this.isConnected && this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  // Get provider name
+  getProviderName(): string {
+    return 'rtzr-vito';
   }
 }

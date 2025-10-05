@@ -100,11 +100,43 @@ async function bootstrap() {
   const translationService = new TranslationService({
     apiKey: process.env.OPENAI_API_KEY || ''
   });
+  const sttProvider = (process.env.STT_PROVIDER as 'rtzr' | 'openai') || 'rtzr';
+  const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
+
+  console.log('='.repeat(50));
+  console.log('🎤 STT Configuration');
+  console.log(`📌 Provider: ${sttProvider.toUpperCase()}`);
+  console.log(`📝 Prompt Template: ${promptTemplate}`);
+  if (sttProvider === 'openai') {
+    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
+    console.log(`🤖 Model: ${model}`);
+    console.log(`🎚️  VAD Threshold: ${process.env.OPENAI_VAD_THRESHOLD || '0.5'}`);
+    console.log(`⏱️  VAD Silence: ${process.env.OPENAI_VAD_SILENCE || '500'}ms`);
+  } else {
+    console.log(`🌐 RTZR API: ${process.env.RTZR_API_URL || 'https://openapi.vito.ai'}`);
+  }
+  console.log('='.repeat(50));
+
   const sttManager = new STTManager(
     {
-      clientId: process.env.RTZR_CLIENT_ID || '',
-      clientSecret: process.env.RTZR_CLIENT_SECRET || '',
-      apiUrl: process.env.RTZR_API_URL || 'https://openapi.vito.ai'
+      provider: sttProvider,
+      defaultPromptTemplate: promptTemplate,
+      rtzr: {
+        clientId: process.env.RTZR_CLIENT_ID || '',
+        clientSecret: process.env.RTZR_CLIENT_SECRET || '',
+        apiUrl: process.env.RTZR_API_URL || 'https://openapi.vito.ai'
+      },
+      openai: {
+        apiKey: process.env.OPENAI_API_KEY || '',
+        model: process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17',
+        voice: (process.env.OPENAI_VOICE as any) || 'alloy',
+        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.8'),
+        maxOutputTokens: process.env.OPENAI_MAX_TOKENS === 'inf' ? 'inf' : parseInt(process.env.OPENAI_MAX_TOKENS || '4096'),
+        vadThreshold: parseFloat(process.env.OPENAI_VAD_THRESHOLD || '0.5'),
+        vadSilenceDuration: parseInt(process.env.OPENAI_VAD_SILENCE || '500'),
+        prefixPadding: parseInt(process.env.OPENAI_PREFIX_PADDING || '300'),
+        turnDetection: (process.env.OPENAI_TURN_DETECTION as any) || 'server_vad'
+      }
     },
     translationService
   );

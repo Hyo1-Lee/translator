@@ -257,17 +257,24 @@ export class SocketHandler {
       // Verify speaker
       const room = await this.roomService.getRoom(roomId);
       if (!room || room.speakerId !== socket.id) {
+        console.warn(`[Audio] Unauthorized audio stream attempt for room ${roomId}`);
         return;
       }
 
       // Convert base64 to buffer
       const audioBuffer = Buffer.from(audio, 'base64');
 
+      console.log(`[Audio][${roomId}] Received ${audioBuffer.length} bytes from speaker`);
+
       // Send to STT
       this.sttManager.sendAudio(roomId, audioBuffer);
 
     } catch (error) {
-      console.error('[Audio] Stream error:', error);
+      console.error(`[Audio] Stream error:`, error);
+      if (error instanceof Error) {
+        console.error(`[Audio] Error details: ${error.message}`);
+        console.error(`[Audio] Stack trace:`, error.stack);
+      }
     }
   }
 
