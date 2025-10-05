@@ -84,15 +84,17 @@ export class RTZRClient extends EventEmitter {
       throw new Error('Failed to obtain access token');
     }
 
-    // WebSocket connection parameters
+    // WebSocket connection parameters - using only confirmed parameters
     const params = new URLSearchParams({
-      sample_rate: '16000',
-      encoding: 'LINEAR16',
-      use_itn: 'true',
+      sample_rate: '16000', // 8000 ~ 48000
+      encoding: 'LINEAR16', // LINEAR16, FLAC, MULAW, ALAW, AMR, AMR_WB, OGG_OPUS, OPUS
+      model_name: 'sommers_ko', // sommers_ko, whisper
+      domain: 'MEETING', // CALL, MEETING
+      use_itn: 'false', // 영어/숫자/단위 변환
       use_disfluency_filter: 'true',
       use_profanity_filter: 'false',
       use_punctuation: 'true',
-      use_word_timestamp: 'false'
+      // language: 'ko' // whisper인 경우
     });
 
     const wsUrl = `wss://openapi.vito.ai/v1/transcribe:streaming?${params.toString()}`;

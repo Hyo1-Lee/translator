@@ -19,7 +19,8 @@
       "Bash(netstat:*)",
       "Bash(tree:*)",
       "Bash(npx npm-check-updates:*)",
-      "Bash(cmd /c:*)"
+      "Bash(cmd /c:*)",
+      "WebFetch(domain:platform.openai.com)"
     ],
     "deny": []
   }

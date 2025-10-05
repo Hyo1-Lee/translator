@@ -274,22 +274,11 @@ export class SocketHandler {
   // Send transcript history
   private async sendTranscriptHistory(socket: Socket, roomId: string): Promise<void> {
     try {
-      // Get recent transcripts
-      const [sttTexts, translations] = await Promise.all([
-        this.transcriptService.getRecentSttTexts(roomId, 100),
-        this.transcriptService.getRecentTranslations(roomId, 30)
-      ]);
+      // Get recent translations (which include Korean text)
+      const translations = await this.transcriptService.getRecentTranslations(roomId, 30);
 
-      // Send STT texts (oldest first)
-      sttTexts.reverse().forEach((stt: any) => {
-        socket.emit('stt-text', {
-          text: stt.text,
-          timestamp: stt.timestamp.getTime(),
-          isHistory: true
-        });
-      });
-
-      // Send translations (oldest first)
+      // Send translations only (oldest first)
+      // Each translation batch contains the combined Korean text and English translation
       translations.reverse().forEach((translation: any) => {
         socket.emit('translation-batch', {
           batchId: translation.batchId || translation.id,
@@ -299,6 +288,8 @@ export class SocketHandler {
           isHistory: true
         });
       });
+
+      console.log(`[History] Sent ${translations.length} translation batches for room ${roomId}`);
 
     } catch (error) {
       console.error('[History] Error loading transcripts:', error);

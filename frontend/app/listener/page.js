@@ -111,8 +111,10 @@ function ListenerContent() {
     // Listen for STT texts - continuous text stream
     socketRef.current.on('stt-text', (data) => {
       console.log('[Listener] Received stt-text:', data);
-      // Always append to current text (for both new and history)
-      setCurrentSttText(prev => prev ? prev + ' ' + data.text : data.text);
+      // Only append new texts, ignore history (history comes from translation-batch)
+      if (!data.isHistory) {
+        setCurrentSttText(prev => prev ? prev + ' ' + data.text : data.text);
+      }
     });
 
     // Listen for translations - creates chunks
@@ -120,27 +122,16 @@ function ListenerContent() {
       console.log('[Listener] Received translation-batch:', data);
 
       if (data.isHistory) {
-        // For history, just add to chunks directly
+        // For history, add the batch Korean text as a chunk (already combined)
         setSttChunks(prev => [...prev, {
           id: `stt-${data.batchId || Date.now()}-${Math.random()}`,
           text: data.korean,
           timestamp: data.timestamp,
           isHistory: true
         }]);
-      } else {
-        // For new translations, move current STT to a chunk
-        setCurrentSttText(prevText => {
-          if (prevText) {
-            // Save current text as a chunk
-            setSttChunks(prev => [...prev, {
-              id: `stt-${data.batchId || Date.now()}-${Math.random()}`,
-              text: data.korean, // Use the korean text from translation batch
-              timestamp: data.timestamp
-            }]);
-          }
-          return ''; // Start new current text
-        });
       }
+      // Note: For real-time, we don't create STT chunks here anymore
+      // The STT text is already being displayed via currentSttText
 
       // Add translation chunk (English only)
       setTranslationChunks(prev => [...prev, {
@@ -431,9 +422,9 @@ function ListenerContent() {
                 ) : (
                   <div className={styles.continuousText}>
                     {translationChunks.map((chunk) => (
-                      <div key={chunk.id} className={styles.translationChunk}>
+                      <span key={chunk.id} className={styles.translationChunk}>
                         {chunk.text}
-                      </div>
+                      </span>
                     ))}
                   </div>
                 )}

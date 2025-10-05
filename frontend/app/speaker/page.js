@@ -169,14 +169,21 @@ export default function Speaker() {
     try {
       setStatus("마이크 요청 중...");
 
-      // Request microphone permission
+      // Request microphone permission with optimized settings
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 16000,
+          sampleSize: 16,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          // Additional constraints for better quality
+          googEchoCancellation: true,
+          googAutoGainControl: true,
+          googNoiseSuppression: true,
+          googHighpassFilter: true,
+          googTypingNoiseDetection: true,
         },
       });
 
@@ -195,8 +202,8 @@ export default function Speaker() {
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
-      // Create script processor for streaming
-      const bufferSize = 2048;
+      // Create script processor for streaming with larger buffer for stability
+      const bufferSize = 4096; // Increased buffer size for better stability
       processorRef.current = audioContextRef.current.createScriptProcessor(
         bufferSize,
         1,
@@ -216,13 +223,16 @@ export default function Speaker() {
           maxLevel = Math.max(maxLevel, Math.abs(inputData[i]));
         }
 
-        // Send audio if not silent
-        if (maxLevel > 0.001) {
-          // Convert to Int16Array
+        // Send audio if not silent (adjusted threshold for better sensitivity)
+        if (maxLevel > 0.0005) { // Lowered threshold for better voice detection
+          // Convert to Int16Array with proper scaling
           const int16Data = new Int16Array(inputData.length);
           for (let i = 0; i < inputData.length; i++) {
             const s = Math.max(-1, Math.min(1, inputData[i]));
-            int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+            // Apply slight amplification for distant voices
+            const amplified = s * 1.2;
+            const clamped = Math.max(-1, Math.min(1, amplified));
+            int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
           }
 
           // Encode to base64 and send

@@ -14,12 +14,19 @@ interface TranscriptData {
   confidence?: number;
 }
 
+interface RoomContext {
+  previousTranslations: string[];  // Previous 2-3 translation batches for context
+  summary: string;                  // Running summary of the conversation
+  lastBatchText: string;           // Last batch's Korean text
+}
+
 export class STTManager {
   private clients: Map<string, RTZRClient> = new Map();
   private config: STTConfig;
   private translationService: TranslationService;
   private textBuffers: Map<string, string[]> = new Map();
   private bufferTimers: Map<string, NodeJS.Timeout> = new Map();
+  private roomContexts: Map<string, RoomContext> = new Map();
 
   constructor(config: STTConfig, translationService: TranslationService) {
     this.config = config;
@@ -40,8 +47,13 @@ export class STTManager {
 
     const client = new RTZRClient(roomId, this.config);
 
-    // Initialize text buffer for this room
+    // Initialize text buffer and context for this room
     this.textBuffers.set(roomId, []);
+    this.roomContexts.set(roomId, {
+      previousTranslations: [],
+      summary: '',
+      lastBatchText: ''
+    });
 
     // Handle transcripts
     client.on('transcript', async (result: any) => {
@@ -89,18 +101,27 @@ export class STTManager {
       clearTimeout(existingTimer);
     }
 
-    // Check if buffer is ready for translation (4-5 sentences)
+    // Check if buffer is ready for translation
     const fullText = buffer.join(' ');
-    const sentenceCount = fullText.split(/[.!?]/).filter(s => s.trim()).length;
 
-    if (sentenceCount >= 4) {
-      // Flush buffer immediately when we have enough sentences
+    // Improved sentence detection for Korean text
+    const sentences = fullText.match(/[^\.!\?]+[\.!\?]+/g) || [];
+    const sentenceCount = sentences.length;
+    const wordCount = fullText.split(/\s+/).filter(word => word.length > 0).length;
+    const textLength = fullText.length;
+
+    // Flush conditions:
+    // 1. 3+ sentences (lowered from 4 for faster response)
+    // 2. 30+ words (for long single sentences)
+    // 3. 150+ characters (for continuous speech without clear sentence endings)
+    if (sentenceCount >= 3 || wordCount >= 30 || textLength >= 150) {
+      // Flush buffer immediately when we have enough content
       await this.flushBuffer(roomId, onTranslation);
     } else if (buffer.length > 0) {
-      // Set timer to flush buffer after 5 seconds of no new input
+      // Set timer to flush buffer after 3 seconds (reduced from 5 for faster response)
       const timer = setTimeout(async () => {
         await this.flushBuffer(roomId, onTranslation);
-      }, 5000);
+      }, 3000); // Reduced from 5000ms for faster response
       this.bufferTimers.set(roomId, timer);
     }
   }
@@ -124,10 +145,34 @@ export class STTManager {
       this.bufferTimers.delete(roomId);
     }
 
-    // Translate
+    // Translate with context
     if (onTranslation) {
-      const translation = await this.translationService.translate(korean, 'en');
+      const context = this.roomContexts.get(roomId);
+      if (!context) return;
+
+      // Build contextual prompt with previous translations
+      const contextualKorean = this.buildContextualText(korean, context);
+
+      const translation = await this.translationService.translateWithContext(
+        korean,
+        contextualKorean,
+        context.summary,
+        'en'
+      );
+
       if (translation) {
+        // Update context for next translation
+        context.previousTranslations.push(korean);
+        if (context.previousTranslations.length > 3) {
+          context.previousTranslations.shift(); // Keep only last 3 batches
+        }
+        context.lastBatchText = korean;
+
+        // Update summary periodically (every 5 batches)
+        if (context.previousTranslations.length % 5 === 0) {
+          await this.updateConversationSummary(roomId);
+        }
+
         onTranslation({
           roomId,
           korean,
@@ -135,6 +180,28 @@ export class STTManager {
           batchId: `batch-${Date.now()}`,
           timestamp: new Date()
         });
+      }
+    }
+  }
+
+  // Build contextual text with sliding window
+  private buildContextualText(currentText: string, context: RoomContext): string {
+    const previousContext = context.previousTranslations.slice(-2).join(' ');
+    return previousContext ? `${previousContext} ${currentText}` : currentText;
+  }
+
+  // Update conversation summary
+  private async updateConversationSummary(roomId: string): Promise<void> {
+    const context = this.roomContexts.get(roomId);
+    if (!context) return;
+
+    const recentText = context.previousTranslations.slice(-5).join(' ');
+    if (recentText) {
+      // Generate summary using LLM
+      const summary = await this.translationService.generateSummary(recentText, context.summary);
+      if (summary) {
+        context.summary = summary;
+        console.log(`[STT] Updated summary for room ${roomId}`);
       }
     }
   }
