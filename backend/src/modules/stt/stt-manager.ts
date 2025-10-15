@@ -61,16 +61,16 @@ export class STTManager {
     roomId: string,
     onTranscript: (data: TranscriptData) => void,
     onTranslation?: (data: any) => void,
-    providerOverride?: STTProviderType
+    promptTemplate?: string,
+    customPrompt?: string
   ): Promise<void> {
     // Check if client already exists
     if (this.clients.has(roomId)) {
-      console.log(`[STT] Client already exists for room ${roomId}`);
       return;
     }
 
     // Determine which provider to use
-    const provider = providerOverride || this.config.provider;
+    const provider = this.config.provider;
 
     // Create appropriate client based on provider
     let client: STTProvider;
@@ -80,16 +80,14 @@ export class STTManager {
         throw new Error('OpenAI configuration is missing');
       }
 
-      const promptTemplate = this.config.defaultPromptTemplate || 'church';
-      client = new OpenAIRealtimeClient(roomId, this.config.openai, promptTemplate);
-      console.log(`[STT] Creating OpenAI Realtime client for room ${roomId} with prompt: ${promptTemplate}`);
+      const template = promptTemplate || this.config.defaultPromptTemplate || 'general';
+      client = new OpenAIRealtimeClient(roomId, this.config.openai, template, customPrompt);
     } else {
       if (!this.config.rtzr) {
         throw new Error('RTZR configuration is missing');
       }
 
       client = new RTZRClient(roomId, this.config.rtzr);
-      console.log(`[STT] Creating RTZR client for room ${roomId}`);
     }
 
     // Initialize text buffer and context for this room
@@ -125,7 +123,6 @@ export class STTManager {
     await client.connect();
 
     this.clients.set(roomId, client);
-    console.log(`[STT] ${client.getProviderName()} client created for room ${roomId}`);
   }
 
   // Buffer text and trigger translation when ready
@@ -156,17 +153,17 @@ export class STTManager {
     const textLength = fullText.length;
 
     // Flush conditions:
-    // 1. 3+ sentences (lowered from 4 for faster response)
-    // 2. 30+ words (for long single sentences)
-    // 3. 150+ characters (for continuous speech without clear sentence endings)
-    if (sentenceCount >= 3 || wordCount >= 30 || textLength >= 150) {
+    // 1. 2+ sentences (lowered for faster response)
+    // 2. 20+ words (for long single sentences)
+    // 3. 100+ characters (for continuous speech without clear sentence endings)
+    if (sentenceCount >= 2 || wordCount >= 20 || textLength >= 100) {
       // Flush buffer immediately when we have enough content
       await this.flushBuffer(roomId, onTranslation);
     } else if (buffer.length > 0) {
-      // Set timer to flush buffer after 3 seconds (reduced from 5 for faster response)
+      // Set timer to flush buffer after 2 seconds (reduced for faster response)
       const timer = setTimeout(async () => {
         await this.flushBuffer(roomId, onTranslation);
-      }, 3000); // Reduced from 5000ms for faster response
+      }, 2000); // Reduced from 3000ms for faster response
       this.bufferTimers.set(roomId, timer);
     }
   }
@@ -177,10 +174,13 @@ export class STTManager {
     onTranslation?: (data: any) => void
   ): Promise<void> {
     const buffer = this.textBuffers.get(roomId);
-    if (!buffer || buffer.length === 0) return;
+    if (!buffer || buffer.length === 0) {
+      return;
+    }
 
     // Create batch for translation
     const korean = buffer.join(' ');
+    console.log(`[Translation][${roomId}] Korean text: "${korean}"`);
     this.textBuffers.set(roomId, []); // Clear buffer
 
     // Clear timer
@@ -193,7 +193,10 @@ export class STTManager {
     // Translate with context
     if (onTranslation) {
       const context = this.roomContexts.get(roomId);
-      if (!context) return;
+      if (!context) {
+        console.error(`[Translation][${roomId}] Context not found!`);
+        return;
+      }
 
       // Build contextual prompt with previous translations
       const contextualKorean = this.buildContextualText(korean, context);
@@ -206,6 +209,7 @@ export class STTManager {
       );
 
       if (translation) {
+        console.log(`[Translation][${roomId}] English: "${translation}"`);
         // Update context for next translation
         context.previousTranslations.push(korean);
         if (context.previousTranslations.length > 3) {
@@ -225,6 +229,8 @@ export class STTManager {
           batchId: `batch-${Date.now()}`,
           timestamp: new Date()
         });
+      } else {
+        console.error(`[Translation][${roomId}] Translation returned null`);
       }
     }
   }
@@ -246,7 +252,6 @@ export class STTManager {
       const summary = await this.translationService.generateSummary(recentText, context.summary);
       if (summary) {
         context.summary = summary;
-        console.log(`[STT] Updated summary for room ${roomId}`);
       }
     }
   }
@@ -257,16 +262,13 @@ export class STTManager {
       const client = this.clients.get(roomId);
 
       if (!client) {
-        console.warn(`[STT][${roomId}] No client found for room`);
         return;
       }
 
       if (!client.isActive()) {
-        console.warn(`[STT][${roomId}] Client exists but not active (provider: ${client.getProviderName()})`);
         return;
       }
 
-      console.log(`[STT][${roomId}][${client.getProviderName()}] Sending ${audioData.length} bytes`);
       client.sendAudio(audioData);
     } catch (error) {
       console.error(`[STT][${roomId}] Error sending audio:`, error);
@@ -290,8 +292,6 @@ export class STTManager {
         clearTimeout(timer);
         this.bufferTimers.delete(roomId);
       }
-
-      console.log(`[STT] Client removed for room ${roomId}`);
     }
   }
 
@@ -317,8 +317,6 @@ export class STTManager {
     const client = this.clients.get(roomId);
     if (client && client instanceof OpenAIRealtimeClient) {
       client.setPromptTemplate(templateName);
-    } else {
-      console.warn(`[STT] Cannot update prompt: Client for room ${roomId} is not OpenAI Realtime`);
     }
   }
 

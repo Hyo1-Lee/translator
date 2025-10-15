@@ -1,5 +1,17 @@
 import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcrypt';
+
+export interface CreateRoomOptions {
+  speakerName: string;
+  speakerId: string;
+  userId?: string;
+  password?: string;
+  promptTemplate?: string;
+  customPrompt?: string;
+  targetLanguages?: string[];
+  maxListeners?: number;
+}
 
 export class RoomService {
   constructor(private prisma: PrismaClient) {}
@@ -15,7 +27,7 @@ export class RoomService {
   }
 
   // Create a new room
-  async createRoom(speakerName: string, speakerId: string): Promise<any> {
+  async createRoom(options: CreateRoomOptions): Promise<any> {
     let roomCode: string;
     let attempts = 0;
 
@@ -33,19 +45,32 @@ export class RoomService {
       throw new Error('Failed to generate unique room code');
     }
 
+    // Hash password if provided
+    let hashedPassword: string | undefined;
+    if (options.password) {
+      hashedPassword = await bcrypt.hash(options.password, 10);
+    }
+
+    // Prepare target languages (comma-separated string)
+    const targetLanguages = options.targetLanguages?.join(',') || 'en';
+
     // Create room with settings
     const room = await this.prisma.room.create({
       data: {
         roomCode,
-        speakerName,
-        speakerId,
+        speakerName: options.speakerName,
+        speakerId: options.speakerId,
+        userId: options.userId,
+        password: hashedPassword,
         status: 'ACTIVE',
         roomSettings: {
           create: {
-            targetLanguage: 'en',
+            targetLanguages,
+            promptTemplate: options.promptTemplate || 'general',
+            customPrompt: options.customPrompt,
             enableTranslation: true,
             enableAutoScroll: true,
-            maxListeners: 100
+            maxListeners: options.maxListeners || 100
           }
         }
       },
@@ -54,7 +79,7 @@ export class RoomService {
       }
     });
 
-    console.log(`[Room] Created: ${roomCode} for ${speakerName}`);
+    console.log(`[Room] Created: ${roomCode} for ${options.speakerName}`);
     return room;
   }
 
@@ -69,6 +94,36 @@ export class RoomService {
         }
       }
     });
+  }
+
+  // Verify room password
+  async verifyRoomPassword(roomCode: string, password: string): Promise<boolean> {
+    const room = await this.prisma.room.findUnique({
+      where: { roomCode },
+      select: { password: true }
+    });
+
+    if (!room) {
+      throw new Error('Room not found');
+    }
+
+    // If room has no password, allow access
+    if (!room.password) {
+      return true;
+    }
+
+    // Compare password
+    return await bcrypt.compare(password, room.password);
+  }
+
+  // Check if room requires password
+  async isPasswordProtected(roomCode: string): Promise<boolean> {
+    const room = await this.prisma.room.findUnique({
+      where: { roomCode },
+      select: { password: true }
+    });
+
+    return room?.password ? true : false;
   }
 
   // Get room by speaker ID
@@ -99,17 +154,26 @@ export class RoomService {
 
   // Add listener to room
   async addListener(roomCode: string, socketId: string, name?: string): Promise<any> {
-    // Check if listener already exists
+    // Get room to connect
+    const room = await this.prisma.room.findUnique({
+      where: { roomCode }
+    });
+
+    if (!room) {
+      throw new Error('Room not found');
+    }
+
+    // Check if listener already exists with this socket ID
     const existing = await this.prisma.listener.findUnique({
       where: { socketId }
     });
 
     if (existing) {
-      // Update existing listener
+      // Update existing listener - rejoin room
       return await this.prisma.listener.update({
         where: { socketId },
         data: {
-          roomId: roomCode,
+          roomId: room.id,
           name: name || existing.name,
           leftAt: null
         }
@@ -121,9 +185,7 @@ export class RoomService {
       data: {
         socketId,
         name: name || 'Guest',
-        room: {
-          connect: { roomCode }
-        }
+        roomId: room.id
       }
     });
   }
@@ -205,6 +267,68 @@ export class RoomService {
           }
         }
       }
+    });
+  }
+
+  // Update room settings
+  async updateRoomSettings(
+    roomCode: string,
+    settings: {
+      promptTemplate?: string;
+      customPrompt?: string;
+      targetLanguages?: string[];
+      maxListeners?: number;
+      enableTranslation?: boolean;
+      enableAutoScroll?: boolean;
+    }
+  ): Promise<any> {
+    const room = await this.prisma.room.findUnique({
+      where: { roomCode },
+      include: { roomSettings: true }
+    });
+
+    if (!room || !room.roomSettings) {
+      throw new Error('Room or settings not found');
+    }
+
+    const updateData: any = {};
+
+    if (settings.promptTemplate !== undefined) {
+      updateData.promptTemplate = settings.promptTemplate;
+    }
+    if (settings.customPrompt !== undefined) {
+      updateData.customPrompt = settings.customPrompt;
+    }
+    if (settings.targetLanguages !== undefined) {
+      updateData.targetLanguages = settings.targetLanguages.join(',');
+    }
+    if (settings.maxListeners !== undefined) {
+      updateData.maxListeners = settings.maxListeners;
+    }
+    if (settings.enableTranslation !== undefined) {
+      updateData.enableTranslation = settings.enableTranslation;
+    }
+    if (settings.enableAutoScroll !== undefined) {
+      updateData.enableAutoScroll = settings.enableAutoScroll;
+    }
+
+    return await this.prisma.roomSettings.update({
+      where: { id: room.roomSettings.id },
+      data: updateData
+    });
+  }
+
+  // Update room password
+  async updateRoomPassword(roomCode: string, password: string | null): Promise<void> {
+    let hashedPassword: string | null = null;
+
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, 10);
+    }
+
+    await this.prisma.room.update({
+      where: { roomCode },
+      data: { password: hashedPassword }
     });
   }
 

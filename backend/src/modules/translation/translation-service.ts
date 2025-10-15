@@ -54,8 +54,7 @@ Specific terminology:
             content: prompt
           }
         ],
-        temperature: 0.3,
-        max_tokens: 500
+        max_completion_tokens: 3000
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
@@ -142,11 +141,11 @@ IMPORTANT:
             content: `Translate this current segment (use context for clarity but translate ONLY this text):\n\n${correctedText}`
           }
         ],
-        temperature: 0.3,
-        max_tokens: 500
+        max_completion_tokens: 3000
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
+      console.log('[Translation] Context translation completed:', translation ? 'Success' : 'Failed');
       return translation || null;
     } catch (error) {
       console.error('[Translation] Context translation error:', error);
@@ -175,8 +174,7 @@ Keep the summary:
             content: `${previousSummary ? `Previous summary: ${previousSummary}\n\n` : ''}Recent conversation:\n${recentText}\n\nCreate an updated summary:`
           }
         ],
-        temperature: 0.5,
-        max_tokens: 150
+        max_completion_tokens: 3000
       });
 
       return response.choices[0]?.message?.content?.trim() || null;
@@ -319,8 +317,7 @@ DO NOT:
             content: `Correct this religious speech STT output:\n${basicCorrected}`
           }
         ],
-        temperature: 0.2,
-        max_tokens: 300
+        max_completion_tokens: 3000
       });
 
       return response.choices[0]?.message?.content?.trim() || basicCorrected;

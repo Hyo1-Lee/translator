@@ -20,7 +20,9 @@
       "Bash(tree:*)",
       "Bash(npx npm-check-updates:*)",
       "Bash(cmd /c:*)",
-      "WebFetch(domain:platform.openai.com)"
+      "WebFetch(domain:platform.openai.com)",
+      "Read(//c/Users/gydnj/Desktop/side_projects/PARALLAX/**)",
+      "WebFetch(domain:community.openai.com)"
     ],
     "deny": []
   }

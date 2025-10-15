@@ -113,7 +113,8 @@ export class OpenAIRealtimeClient extends STTProvider {
   constructor(
     roomId: string,
     config: OpenAIRealtimeConfig,
-    promptTemplateName: string = 'church'
+    promptTemplateName: string = 'general',
+    customPrompt?: string
   ) {
     super(roomId);
 
@@ -135,7 +136,17 @@ export class OpenAIRealtimeClient extends STTProvider {
       encoding: 'pcm16'
     };
 
-    this.promptTemplate = getPromptTemplate(promptTemplateName);
+    // Use custom prompt if provided, otherwise use template
+    if (customPrompt) {
+      this.promptTemplate = {
+        name: 'custom',
+        instructions: customPrompt,
+        description: 'Custom prompt',
+        transcriptionGuidance: 'Custom transcription guidance'
+      };
+    } else {
+      this.promptTemplate = getPromptTemplate(promptTemplateName);
+    }
   }
 
   /**
@@ -158,10 +169,10 @@ export class OpenAIRealtimeClient extends STTProvider {
 
       const url = 'wss://api.openai.com/v1/realtime?model=' + this.config.model;
       console.log(`[STT][OpenAI][${this.roomId}] 🌐 URL: ${url}`);
-
+      console.log(' ##########3 apikey: ', this.config.apiKey);
       this.ws = new WebSocket(url, {
         headers: {
-          'Authorization': `Bearer ${this.config.apiKey.substring(0, 10)}...`,
+          'Authorization': `Bearer ${this.config.apiKey}`,
           'OpenAI-Beta': 'realtime=v1'
         }
       });
@@ -272,6 +283,11 @@ export class OpenAIRealtimeClient extends STTProvider {
           this.handleTranscriptionCompleted(message);
           break;
 
+        case 'conversation.item.input_audio_transcription.delta':
+          // Partial transcription - can emit interim results if needed
+          console.log(`[STT][OpenAI][${this.roomId}] 📝 Partial transcription: ${message.delta}`);
+          break;
+
         case 'input_audio_buffer.speech_started':
           this.handleSpeechStarted(message);
           break;
@@ -287,7 +303,8 @@ export class OpenAIRealtimeClient extends STTProvider {
         case 'response.done':
         case 'response.audio.delta':
         case 'response.audio_transcript.delta':
-          // Handle response events if needed
+        case 'response.output_item.done':
+          // Handle response events if needed (these are for AI responses, not transcription)
           console.log(`[STT][OpenAI][${this.roomId}] 📢 Response event: ${message.type}`);
           break;
 

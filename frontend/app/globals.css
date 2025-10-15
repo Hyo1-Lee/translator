@@ -39,7 +39,9 @@ a {
 button {
   font-family: inherit;
   cursor: pointer;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s ease;
+  border: none;
+  background: none;
 }
 
 

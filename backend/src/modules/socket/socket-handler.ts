@@ -29,8 +29,6 @@ export class SocketHandler {
 
   private initialize(): void {
     this.io.on('connection', (socket: Socket) => {
-      console.log(`[Socket] Client connected: ${socket.id}`);
-
       // Create or rejoin room (Speaker)
       socket.on('create-room', async (data) => {
         await this.handleCreateRoom(socket, data);
@@ -71,7 +69,16 @@ export class SocketHandler {
   // Create new room or rejoin existing
   private async handleCreateRoom(socket: Socket, data: any): Promise<void> {
     try {
-      const { name = 'Speaker', existingRoomCode } = data;
+      const {
+        name = 'Speaker',
+        userId,
+        password,
+        promptTemplate = 'general',
+        customPrompt,
+        targetLanguages = ['en'],
+        maxListeners = 100,
+        existingRoomCode
+      } = data;
 
       let room;
 
@@ -81,18 +88,26 @@ export class SocketHandler {
         if (room && room.status !== 'ENDED') {
           // Update speaker socket ID
           room = await this.roomService.reconnectSpeaker(room.speakerId, socket.id);
-          console.log(`[Room] Speaker rejoined: ${existingRoomCode}`);
         }
       }
 
       // Create new room if needed
       if (!room) {
-        room = await this.roomService.createRoom(name, socket.id);
+        room = await this.roomService.createRoom({
+          speakerName: name,
+          speakerId: socket.id,
+          userId,
+          password,
+          promptTemplate,
+          customPrompt,
+          targetLanguages,
+          maxListeners
+        });
       }
 
       socket.join(room.roomCode);
 
-      // Create STT client for this room
+      // Create STT client for this room with custom prompt
       await this.sttManager.createClient(
         room.roomCode,
         // STT callback
@@ -127,7 +142,10 @@ export class SocketHandler {
             english: translationData.english,
             timestamp: translationData.timestamp.getTime()
           });
-        }
+        },
+        // Use custom prompt template
+        room.roomSettings?.promptTemplate || 'general',
+        room.roomSettings?.customPrompt
       );
 
       // Send room info to speaker
@@ -219,12 +237,28 @@ export class SocketHandler {
   // Join room as listener
   private async handleJoinRoom(socket: Socket, data: any): Promise<void> {
     try {
-      const { roomId, name = 'Guest' } = data;
+      const { roomId, name = 'Guest', password } = data;
 
       const room = await this.roomService.getRoom(roomId);
       if (!room) {
         socket.emit('error', { message: 'Room not found' });
         return;
+      }
+
+      // Check if room is password protected
+      const isProtected = await this.roomService.isPasswordProtected(roomId);
+      if (isProtected) {
+        if (!password) {
+          socket.emit('password-required', { roomId });
+          return;
+        }
+
+        // Verify password
+        const isValid = await this.roomService.verifyRoomPassword(roomId, password);
+        if (!isValid) {
+          socket.emit('error', { message: 'Incorrect password' });
+          return;
+        }
       }
 
       await this.roomService.addListener(roomId, socket.id, name);
@@ -256,15 +290,16 @@ export class SocketHandler {
 
       // Verify speaker
       const room = await this.roomService.getRoom(roomId);
-      if (!room || room.speakerId !== socket.id) {
-        console.warn(`[Audio] Unauthorized audio stream attempt for room ${roomId}`);
+      if (!room) {
+        return;
+      }
+
+      if (room.speakerId !== socket.id) {
         return;
       }
 
       // Convert base64 to buffer
       const audioBuffer = Buffer.from(audio, 'base64');
-
-      console.log(`[Audio][${roomId}] Received ${audioBuffer.length} bytes from speaker`);
 
       // Send to STT
       this.sttManager.sendAudio(roomId, audioBuffer);
@@ -296,8 +331,6 @@ export class SocketHandler {
         });
       });
 
-      console.log(`[History] Sent ${translations.length} translation batches for room ${roomId}`);
-
     } catch (error) {
       console.error('[History] Error loading transcripts:', error);
     }
@@ -316,10 +349,60 @@ export class SocketHandler {
       }
 
       // Update settings in database
-      // Implementation depends on your needs
+      const updatedSettings = await this.roomService.updateRoomSettings(roomId, {
+        promptTemplate: settings.promptTemplate,
+        customPrompt: settings.customPrompt,
+        targetLanguages: settings.targetLanguages,
+        maxListeners: settings.maxListeners,
+        enableTranslation: settings.enableTranslation,
+        enableAutoScroll: settings.enableAutoScroll
+      });
+
+      // Update password if provided
+      if (settings.password !== undefined) {
+        await this.roomService.updateRoomPassword(roomId, settings.password);
+      }
+
+      // If prompt template changed, restart STT client with new template
+      if (settings.promptTemplate || settings.customPrompt) {
+        // Close existing client
+        this.sttManager.closeClient(roomId);
+
+        // Recreate with new prompt
+        await this.sttManager.createClient(
+          roomId,
+          async (transcriptData) => {
+            await this.transcriptService.saveSttText(
+              transcriptData.roomId,
+              transcriptData.text,
+              transcriptData.confidence
+            );
+            this.io.to(transcriptData.roomId).emit('stt-text', {
+              text: transcriptData.text,
+              timestamp: transcriptData.timestamp.getTime()
+            });
+          },
+          async (translationData) => {
+            await this.transcriptService.saveTranslation(
+              translationData.roomId,
+              translationData.korean,
+              translationData.english,
+              translationData.batchId
+            );
+            this.io.to(translationData.roomId).emit('translation-batch', {
+              batchId: translationData.batchId,
+              korean: translationData.korean,
+              english: translationData.english,
+              timestamp: translationData.timestamp.getTime()
+            });
+          },
+          settings.promptTemplate || updatedSettings.promptTemplate,
+          settings.customPrompt || updatedSettings.customPrompt
+        );
+      }
 
       // Broadcast to room
-      this.io.to(roomId).emit('settings-updated', settings);
+      this.io.to(roomId).emit('settings-updated', updatedSettings);
 
     } catch (error) {
       console.error('[Settings] Update error:', error);
@@ -331,7 +414,6 @@ export class SocketHandler {
   private async handleDisconnect(socket: Socket): Promise<void> {
     try {
       await this.roomService.handleDisconnect(socket.id);
-      console.log(`[Socket] Client disconnected: ${socket.id}`);
 
       // Check if it was a speaker and clean up STT client
       // Implementation depends on your needs

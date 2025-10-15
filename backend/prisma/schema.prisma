@@ -9,20 +9,81 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============== User & Auth Models ==============
+
+// User Model
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String?   // Nullable for social login users
+  name              String?
+  isEmailVerified   Boolean   @default(false)
+  isActive          Boolean   @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  rooms             Room[]
+  savedTranscripts  SavedTranscript[]
+  refreshTokens     RefreshToken[]
+  verificationCodes VerificationCode[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// Refresh Token for JWT
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// Email Verification Code
+model VerificationCode {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([code])
+  @@map("verification_codes")
+}
+
 // ============== Core Models ==============
 
 // Room Model - Represents a translation session
 model Room {
   id            String    @id @default(uuid())
   roomCode      String    @unique  // 6-character room code
-  speakerId     String    @unique  // Speaker's socket/session ID
+  speakerId     String    // Socket/session ID (not unique anymore - user can have multiple rooms)
   speakerName   String    @default("Speaker")
   status        String    @default("ACTIVE") // ACTIVE | PAUSED | ENDED
+  password      String?   // Optional room password
+  userId        String?   // Owner user ID (nullable for guest speakers)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   endedAt       DateTime?
 
   // Relations
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   listeners     Listener[]
   transcripts   Transcript[]
   sttTexts      SttText[]
@@ -31,6 +92,7 @@ model Room {
   @@index([roomCode])
   @@index([status])
   @@index([speakerId])
+  @@index([userId])
   @@map("rooms")
 }
 
@@ -38,7 +100,9 @@ model Room {
 model RoomSettings {
   id                  String   @id @default(uuid())
   roomId              String   @unique
-  targetLanguage      String   @default("en") // Target translation language
+  targetLanguages     String   @default("en") // Comma-separated language codes (e.g., "en,ja,zh")
+  promptTemplate      String   @default("general") // general, church, lecture, meeting, custom
+  customPrompt        String?  // Custom prompt text if template is "custom"
   enableTranslation   Boolean  @default(true)
   enableAutoScroll    Boolean  @default(true)
   maxListeners        Int      @default(100)
@@ -87,6 +151,7 @@ model Transcript {
   roomId      String
   korean      String   // Original Korean text
   english     String   // Translated English text
+  translations String? // JSON object with additional language translations {"ja": "...", "zh": "..."}
   batchId     String?  // Batch identifier for grouped translations
   timestamp   DateTime @default(now())
 
@@ -96,4 +161,22 @@ model Transcript {
   @@index([roomId, timestamp])
   @@index([batchId])
   @@map("transcripts")
+}
+
+// Saved Transcript - User saved transcripts for later viewing
+model SavedTranscript {
+  id          String   @id @default(uuid())
+  userId      String
+  roomCode    String
+  roomName    String?  // Room title/description
+  transcripts String   // JSON array of transcript objects
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([roomCode])
+  @@map("saved_transcripts")
 }
