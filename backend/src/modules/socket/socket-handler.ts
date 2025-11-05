@@ -107,6 +107,11 @@ export class SocketHandler {
 
       socket.join(room.roomCode);
 
+      // Parse target languages from room settings
+      const targetLanguages = room.roomSettings?.targetLanguages
+        ? room.roomSettings.targetLanguages.split(',')
+        : ['en'];
+
       // Create STT client for this room with custom prompt
       await this.sttManager.createClient(
         room.roomCode,
@@ -127,25 +132,28 @@ export class SocketHandler {
         },
         // Translation callback
         async (translationData) => {
-          // Save to database
+          // Save to database (with all translations)
           await this.transcriptService.saveTranslation(
             translationData.roomId,
             translationData.korean,
             translationData.english,
-            translationData.batchId
+            translationData.batchId,
+            translationData.translations ? JSON.stringify(translationData.translations) : null
           );
 
-          // Broadcast to room
+          // Broadcast to room (with all translations)
           this.io.to(translationData.roomId).emit('translation-batch', {
             batchId: translationData.batchId,
             korean: translationData.korean,
             english: translationData.english,
+            translations: translationData.translations || { en: translationData.english },
             timestamp: translationData.timestamp.getTime()
           });
         },
         // Use custom prompt template
         room.roomSettings?.promptTemplate || 'general',
-        room.roomSettings?.customPrompt
+        room.roomSettings?.customPrompt,
+        targetLanguages
       );
 
       // Send room info to speaker
@@ -189,6 +197,11 @@ export class SocketHandler {
       await this.roomService.reconnectSpeaker(speakerId, socket.id);
       socket.join(roomCode);
 
+      // Parse target languages from room settings
+      const targetLanguages = room.roomSettings?.targetLanguages
+        ? room.roomSettings.targetLanguages.split(',')
+        : ['en'];
+
       // Recreate STT client if needed
       if (!this.sttManager.hasActiveClient(roomCode)) {
         await this.sttManager.createClient(
@@ -209,15 +222,20 @@ export class SocketHandler {
               translationData.roomId,
               translationData.korean,
               translationData.english,
-              translationData.batchId
+              translationData.batchId,
+              translationData.translations ? JSON.stringify(translationData.translations) : null
             );
             this.io.to(translationData.roomId).emit('translation-batch', {
               batchId: translationData.batchId,
               korean: translationData.korean,
               english: translationData.english,
+              translations: translationData.translations || { en: translationData.english },
               timestamp: translationData.timestamp.getTime()
             });
-          }
+          },
+          room.roomSettings?.promptTemplate || 'general',
+          room.roomSettings?.customPrompt,
+          targetLanguages
         );
       }
 
@@ -320,12 +338,23 @@ export class SocketHandler {
       const translations = await this.transcriptService.getRecentTranslations(roomId, 30);
 
       // Send translations only (oldest first)
-      // Each translation batch contains the combined Korean text and English translation
+      // Each translation batch contains the combined Korean text and all translations
       translations.reverse().forEach((translation: any) => {
+        // Parse translations JSON if available
+        let allTranslations = { en: translation.english };
+        if (translation.translations) {
+          try {
+            allTranslations = JSON.parse(translation.translations);
+          } catch (e) {
+            console.error('[History] Failed to parse translations JSON:', e);
+          }
+        }
+
         socket.emit('translation-batch', {
           batchId: translation.batchId || translation.id,
           korean: translation.korean,
           english: translation.english,
+          translations: allTranslations,
           timestamp: translation.timestamp.getTime(),
           isHistory: true
         });
@@ -363,12 +392,16 @@ export class SocketHandler {
         await this.roomService.updateRoomPassword(roomId, settings.password);
       }
 
-      // If prompt template changed, restart STT client with new template
-      if (settings.promptTemplate || settings.customPrompt) {
+      // If prompt template or target languages changed, restart STT client
+      if (settings.promptTemplate || settings.customPrompt || settings.targetLanguages) {
         // Close existing client
         this.sttManager.closeClient(roomId);
 
-        // Recreate with new prompt
+        // Parse target languages
+        const targetLanguages = settings.targetLanguages ||
+          (updatedSettings.targetLanguages ? updatedSettings.targetLanguages.split(',') : ['en']);
+
+        // Recreate with new settings
         await this.sttManager.createClient(
           roomId,
           async (transcriptData) => {
@@ -387,17 +420,20 @@ export class SocketHandler {
               translationData.roomId,
               translationData.korean,
               translationData.english,
-              translationData.batchId
+              translationData.batchId,
+              translationData.translations ? JSON.stringify(translationData.translations) : null
             );
             this.io.to(translationData.roomId).emit('translation-batch', {
               batchId: translationData.batchId,
               korean: translationData.korean,
               english: translationData.english,
+              translations: translationData.translations || { en: translationData.english },
               timestamp: translationData.timestamp.getTime()
             });
           },
           settings.promptTemplate || updatedSettings.promptTemplate,
-          settings.customPrompt || updatedSettings.customPrompt
+          settings.customPrompt || updatedSettings.customPrompt,
+          targetLanguages
         );
       }
 

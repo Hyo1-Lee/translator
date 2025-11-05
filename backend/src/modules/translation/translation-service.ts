@@ -21,37 +21,18 @@ export class TranslationService {
     try {
       // First, correct any STT errors
       const correctedText = await this.correctSttErrors(text);
-      const prompt = this.getTranslationPrompt(correctedText, targetLanguage);
+      const { langName, systemPrompt } = this.getLanguageConfig(targetLanguage);
 
       const response = await this.openai.chat.completions.create({
         model: this.model,
         messages: [
           {
             role: 'system',
-            content: `You are a professional real-time speech translator. Translate the given Korean text to English accurately and naturally.
-
-IMPORTANT CONTEXT: This text comes from real-time speech recognition and may have errors or informal speech patterns.
-
-Translation guidelines:
-- Fix obvious speech recognition errors before translating
-- Handle incomplete sentences gracefully
-- Maintain the speaker's intended meaning even if the Korean text has minor errors
-- Remove filler words (um, uh, 음, 어) unless they convey hesitation
-- Keep the natural flow of spoken language
-
-Specific terminology:
-- "제일회장단" → "First Presidency"
-- "성전" → "temple"
-- "와드" → "ward"
-- "스테이크" → "stake"
-- "감독" → "bishop"
-- "회장" → "president"
-- Maintain proper capitalization for religious and organizational terms
-- Preserve the formal or informal tone of the original speech`
+            content: systemPrompt
           },
           {
             role: 'user',
-            content: prompt
+            content: `Translate the following Korean text to ${langName}:\n\n${correctedText}`
           }
         ],
         max_completion_tokens: 3000
@@ -62,6 +43,30 @@ Specific terminology:
     } catch (error) {
       console.error('[Translation] Error:', error);
       return null;
+    }
+  }
+
+  // Translate to multiple languages at once
+  async translateToMultipleLanguages(text: string, targetLanguages: string[]): Promise<Record<string, string>> {
+    try {
+      const translations = await Promise.all(
+        targetLanguages.map(async (lang) => {
+          const translation = await this.translate(text, lang);
+          return { lang, translation };
+        })
+      );
+
+      const result: Record<string, string> = {};
+      translations.forEach(({ lang, translation }) => {
+        if (translation) {
+          result[lang] = translation;
+        }
+      });
+
+      return result;
+    } catch (error) {
+      console.error('[Translation] Multi-language translation error:', error);
+      return {};
     }
   }
 
@@ -184,19 +189,206 @@ Keep the summary:
     }
   }
 
-  // Get translation prompt
-  private getTranslationPrompt(text: string, targetLanguage: string): string {
-    const langMap: Record<string, string> = {
-      'en': 'English',
-      'ja': 'Japanese',
-      'zh': 'Chinese',
-      'es': 'Spanish',
-      'fr': 'French',
-      'de': 'German'
+  // Get language configuration with system prompt
+  private getLanguageConfig(targetLanguage: string): { langName: string; systemPrompt: string } {
+    const configs: Record<string, { langName: string; systemPrompt: string }> = {
+      'en': {
+        langName: 'English',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to English accurately and naturally.
+
+IMPORTANT CONTEXT: This text comes from real-time speech recognition and may have errors or informal speech patterns.
+
+Translation guidelines:
+- Fix obvious speech recognition errors before translating
+- Handle incomplete sentences gracefully
+- Maintain the speaker's intended meaning even if the Korean text has minor errors
+- Remove filler words (um, uh, 음, 어) unless they convey hesitation
+- Keep the natural flow of spoken language
+
+Specific terminology:
+- "제일회장단" → "First Presidency"
+- "성전" → "temple"
+- "와드" → "ward"
+- "스테이크" → "stake"
+- "감독" → "bishop"
+- "회장" → "president"
+- Maintain proper capitalization for religious and organizational terms
+- Preserve the formal or informal tone of the original speech`
+      },
+      'ja': {
+        langName: 'Japanese',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Japanese accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use appropriate honorifics (敬語) based on the formality of the Korean text
+- Fix obvious speech recognition errors before translating
+- Maintain natural Japanese sentence structure
+- Use kanji appropriately (balance readability with formality)
+- Preserve the speaker's tone and intent`
+      },
+      'zh': {
+        langName: 'Simplified Chinese',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Simplified Chinese (简体中文) accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use Simplified Chinese characters (简体字)
+- Fix obvious speech recognition errors before translating
+- Maintain natural Chinese sentence structure
+- Preserve the formal or informal tone appropriately
+- Use proper measure words and particles`
+      },
+      'zh-TW': {
+        langName: 'Traditional Chinese',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Traditional Chinese (繁體中文) accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use Traditional Chinese characters (繁體字)
+- Fix obvious speech recognition errors before translating
+- Maintain natural Chinese sentence structure
+- Preserve the formal or informal tone appropriately
+- Use proper measure words and particles`
+      },
+      'es': {
+        langName: 'Spanish',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Spanish accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use appropriate formal/informal address (tú/usted) based on context
+- Fix obvious speech recognition errors before translating
+- Maintain natural Spanish sentence flow
+- Use proper gender agreement
+- Preserve the speaker's tone and intent`
+      },
+      'fr': {
+        langName: 'French',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to French accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use appropriate formal/informal address (tu/vous) based on context
+- Fix obvious speech recognition errors before translating
+- Maintain natural French sentence structure
+- Use proper gender and number agreement
+- Preserve the speaker's tone and intent`
+      },
+      'de': {
+        langName: 'German',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to German accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use appropriate formal/informal address (Sie/du) based on context
+- Fix obvious speech recognition errors before translating
+- Maintain proper German case system (Nominativ, Akkusativ, Dativ, Genitiv)
+- Use proper noun capitalization
+- Preserve the speaker's tone and intent`
+      },
+      'ru': {
+        langName: 'Russian',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Russian accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use appropriate formal/informal address (вы/ты) based on context
+- Fix obvious speech recognition errors before translating
+- Maintain proper Russian case system
+- Use proper aspect (perfective/imperfective) for verbs
+- Preserve the speaker's tone and intent`
+      },
+      'ar': {
+        langName: 'Arabic',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Modern Standard Arabic accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use Modern Standard Arabic (الفصحى)
+- Fix obvious speech recognition errors before translating
+- Maintain proper Arabic grammar and syntax
+- Use appropriate formal register
+- Preserve the speaker's tone and intent
+- Use proper diacritics when necessary for clarity`
+      },
+      'pt': {
+        langName: 'Portuguese',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Portuguese (Brazilian) accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use Brazilian Portuguese conventions
+- Use appropriate formal/informal address (você/tu) based on context
+- Fix obvious speech recognition errors before translating
+- Maintain natural Portuguese sentence flow
+- Preserve the speaker's tone and intent`
+      },
+      'vi': {
+        langName: 'Vietnamese',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Vietnamese accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use proper Vietnamese diacritics (dấu)
+- Use appropriate formal/informal address based on context
+- Fix obvious speech recognition errors before translating
+- Maintain natural Vietnamese sentence structure
+- Preserve the speaker's tone and intent`
+      },
+      'th': {
+        langName: 'Thai',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Thai accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use appropriate Thai script and tone marks
+- Use appropriate formal/informal language (ภาษาพูด/ภาษาเขียน) based on context
+- Fix obvious speech recognition errors before translating
+- Maintain natural Thai sentence structure
+- Preserve the speaker's tone and intent`
+      },
+      'id': {
+        langName: 'Indonesian',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Indonesian accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use standard Indonesian (Bahasa Indonesia)
+- Use appropriate formal/informal register based on context
+- Fix obvious speech recognition errors before translating
+- Maintain natural Indonesian sentence structure
+- Preserve the speaker's tone and intent`
+      },
+      'hi': {
+        langName: 'Hindi',
+        systemPrompt: `You are a professional real-time speech translator. Translate the given Korean text to Hindi accurately and naturally.
+
+IMPORTANT: This text comes from real-time speech recognition and may contain errors.
+
+Translation guidelines:
+- Use Devanagari script (देवनागरी)
+- Use appropriate formal/informal address (आप/तुम) based on context
+- Fix obvious speech recognition errors before translating
+- Maintain natural Hindi sentence structure
+- Preserve the speaker's tone and intent
+- Use proper gender agreement`
+      }
     };
 
-    const targetLangName = langMap[targetLanguage] || 'English';
-    return `Translate the following Korean text to ${targetLangName}:\n\n${text}`;
+    return configs[targetLanguage] || configs['en'];
   }
 
   // Correct STT errors in Korean text with religious context

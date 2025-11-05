@@ -161,6 +161,11 @@ export default function Speaker() {
   useEffect(() => {
     socketRef.current = io(BACKEND_URL, {
       transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     socketRef.current.on("connect", () => {
@@ -189,10 +194,46 @@ export default function Speaker() {
       }
     });
 
-    socketRef.current.on("disconnect", () => {
-      console.log("Disconnected from server");
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("Disconnected from server:", reason);
       setIsConnected(false);
       setStatus("연결 끊김");
+
+      // Stop recording on disconnect
+      if (isRecording) {
+        stopRecording();
+      }
+    });
+
+    socketRef.current.on("reconnect", (attemptNumber) => {
+      console.log("Reconnected to server after", attemptNumber, "attempts");
+      setIsConnected(true);
+      setStatus("재연결됨");
+
+      // Try to rejoin room if we have saved room info
+      const savedRoom = loadSavedRoom();
+      if (savedRoom && savedRoom.roomCode && roomId) {
+        const name = savedRoom.speakerName || user?.name || "Speaker";
+        socketRef.current.emit("create-room", {
+          name,
+          userId: user?.id,
+          existingRoomCode: savedRoom.roomCode,
+          promptTemplate: "general",
+          targetLanguages: ["en"],
+          maxListeners: 100
+        });
+      }
+    });
+
+    socketRef.current.on("reconnect_attempt", (attemptNumber) => {
+      console.log("Reconnection attempt:", attemptNumber);
+      setStatus(`재연결 시도 중 (${attemptNumber}/10)`);
+    });
+
+    socketRef.current.on("reconnect_failed", () => {
+      console.log("Reconnection failed");
+      setStatus("재연결 실패");
+      alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
     socketRef.current.on("room-created", (data: any) => {
@@ -285,30 +326,43 @@ export default function Speaker() {
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
-      const bufferSize = 4096;
+      // Optimized buffer size - 2048 for lower latency
+      const bufferSize = 2048;
       processorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
 
       let isProcessing = true;
+      let frameCount = 0;
+      const SEND_EVERY_N_FRAMES = 2; // Send every 2 frames to reduce CPU load
 
       processorRef.current.onaudioprocess = (e: any) => {
         if (!isProcessing || !socketRef.current || !roomId) return;
 
+        // Skip frames to reduce CPU usage
+        frameCount++;
+        if (frameCount % SEND_EVERY_N_FRAMES !== 0) return;
+
         const inputData = e.inputBuffer.getChannelData(0);
 
-        let maxLevel = 0;
+        // Calculate RMS for better noise detection
+        let sum = 0;
         for (let i = 0; i < inputData.length; i++) {
-          maxLevel = Math.max(maxLevel, Math.abs(inputData[i]));
+          sum += inputData[i] * inputData[i];
         }
+        const rms = Math.sqrt(sum / inputData.length);
 
-        if (maxLevel > 0.0005) {
+        // Adaptive threshold: 0.01 for normal speech
+        if (rms > 0.01) {
           const int16Data = new Int16Array(inputData.length);
+
+          // Optimized audio conversion with slight amplification
           for (let i = 0; i < inputData.length; i++) {
             const s = Math.max(-1, Math.min(1, inputData[i]));
-            const amplified = s * 1.2;
+            const amplified = s * 1.5; // Increased from 1.2 for clearer audio
             const clamped = Math.max(-1, Math.min(1, amplified));
             int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
           }
 
+          // Convert to base64 efficiently
           const base64Audio = btoa(String.fromCharCode(...new Uint8Array(int16Data.buffer)));
 
           socketRef.current.emit("audio-stream", {

@@ -4,10 +4,23 @@ import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-change-this';
-const JWT_EXPIRES_IN = '1h';
-const JWT_REFRESH_EXPIRES_IN = '7d';
+// JWT Configuration - MUST be set in environment variables
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+
+// Validate JWT secrets on module load
+if (!JWT_SECRET) {
+  console.error('[Auth] CRITICAL: JWT_SECRET environment variable is not set!');
+  console.error('[Auth] Please set JWT_SECRET in your .env file');
+  console.error('[Auth] Authentication features will not work until this is configured');
+}
+if (!JWT_REFRESH_SECRET) {
+  console.error('[Auth] CRITICAL: JWT_REFRESH_SECRET environment variable is not set!');
+  console.error('[Auth] Please set JWT_REFRESH_SECRET in your .env file');
+  console.error('[Auth] Token refresh features will not work until this is configured');
+}
 
 export interface JWTPayload {
   userId: string;
@@ -21,16 +34,25 @@ export class AuthService {
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
 
-    // Setup email transporter
-    this.transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
+    // Setup email transporter (only if SMTP credentials are available)
+    if (process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+      this.transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD,
+        },
+      });
+    } else {
+      // Create a dummy transporter that will fail gracefully
+      console.warn('[Auth] SMTP credentials not configured. Email verification features will be disabled.');
+      console.warn('[Auth] To enable email verification, set SMTP_USER and SMTP_PASSWORD in your .env file');
+      this.transporter = nodemailer.createTransport({
+        jsonTransport: true
+      });
+    }
   }
 
   // Generate 6-digit verification code
@@ -40,6 +62,11 @@ export class AuthService {
 
   // Send verification email
   async sendVerificationCode(email: string): Promise<void> {
+    // Check if SMTP is configured
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+      throw new Error('Email service is not configured. Please contact the administrator.');
+    }
+
     // Generate code
     const code = this.generateVerificationCode();
     const expiresAt = new Date();
@@ -54,8 +81,9 @@ export class AuthService {
       },
     });
 
-    // Send email
-    await this.transporter.sendMail({
+    try {
+      // Send email
+      await this.transporter.sendMail({
       from: `"ECHO Translation" <${process.env.SMTP_USER}>`,
       to: email,
       subject: 'Your Verification Code - ECHO',
@@ -78,9 +106,13 @@ export class AuthService {
           </p>
         </div>
       `,
-    });
+      });
 
-    console.log(`[Auth] Verification code sent to ${email}: ${code}`);
+      console.log(`[Auth] Verification code sent to ${email}: ${code}`);
+    } catch (error) {
+      console.error('[Auth] Failed to send verification email:', error);
+      throw new Error('Failed to send verification email. Please try again later.');
+    }
   }
 
   // Verify email code
@@ -219,6 +251,10 @@ export class AuthService {
 
   // Generate JWT tokens
   private generateTokens(userId: string, email: string) {
+    if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+      throw new Error('JWT configuration is missing. Please set JWT_SECRET and JWT_REFRESH_SECRET in environment variables.');
+    }
+
     const accessToken = jwt.sign(
       { userId, email } as JWTPayload,
       JWT_SECRET,
@@ -250,6 +286,10 @@ export class AuthService {
 
   // Verify access token
   verifyAccessToken(token: string): JWTPayload {
+    if (!JWT_SECRET) {
+      throw new Error('JWT configuration is missing');
+    }
+
     try {
       return jwt.verify(token, JWT_SECRET) as JWTPayload;
     } catch (error) {
@@ -259,6 +299,10 @@ export class AuthService {
 
   // Refresh access token
   async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string }> {
+    if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+      throw new Error('JWT configuration is missing');
+    }
+
     try {
       // Verify refresh token
       const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JWTPayload;
