@@ -74,6 +74,12 @@ async function bootstrap() {
     await dashboardRoutes(dashboardFastify, prisma);
   }, { prefix: '/api/v1/dashboard' });
 
+  // Recording Routes
+  fastify.register(async (recordingFastify) => {
+    const { recordingRoutes } = await import('./modules/recording/recording.routes');
+    await recordingRoutes(recordingFastify, prisma);
+  }, { prefix: '/api/v1/recordings' });
+
   // API Routes
   fastify.get('/api/v1/rooms/:roomCode', async (request, reply) => {
     const { roomCode } = request.params as { roomCode: string };
