@@ -1,9 +1,13 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
+import { Room, RoomStatus } from '../../models/Room';
+import { RoomSettings } from '../../models/RoomSettings';
+import { Transcript } from '../../models/Transcript';
+import { Listener } from '../../models/Listener';
+import { SavedTranscript } from '../../models/SavedTranscript';
 
-export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaClient) {
-  const authService = new AuthService(prisma);
+export async function dashboardRoutes(fastify: FastifyInstance) {
+  const authService = new AuthService();
 
   // Middleware to verify JWT token
   const verifyAuth = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -34,22 +38,10 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
     try {
       const userId = (request as any).userId;
 
-      const rooms = await prisma.room.findMany({
-        where: {
-          userId,
-        },
-        include: {
-          roomSettings: true,
-          _count: {
-            select: {
-              listeners: true,
-              transcripts: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
+      const rooms = await Room.findAll({
+        where: { userId },
+        include: [RoomSettings],
+        order: [['createdAt', 'DESC']]
       });
 
       return reply.send({
@@ -73,40 +65,35 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
       const userId = (request as any).userId;
 
       // Total rooms
-      const totalRooms = await prisma.room.count({
+      const totalRooms = await Room.count({
         where: { userId },
       });
 
       // Active rooms
-      const activeRooms = await prisma.room.count({
+      const activeRooms = await Room.count({
         where: {
           userId,
-          status: 'ACTIVE',
+          status: RoomStatus.ACTIVE,
         },
       });
 
       // Total transcripts
-      const totalTranscripts = await prisma.transcript.count({
-        where: {
-          room: {
-            userId,
-          },
-        },
+      const totalTranscripts = await Transcript.count({
+        include: [{
+          model: Room,
+          where: { userId },
+          required: true
+        }]
       });
 
-      // Total listeners (unique)
-      const rooms = await prisma.room.findMany({
-        where: { userId },
-        include: {
-          _count: {
-            select: {
-              listeners: true,
-            },
-          },
-        },
+      // Total listeners
+      const totalListeners = await Listener.count({
+        include: [{
+          model: Room,
+          where: { userId },
+          required: true
+        }]
       });
-
-      const totalListeners = rooms.reduce((sum, room) => sum + room._count.listeners, 0);
 
       return reply.send({
         success: true,
@@ -133,11 +120,9 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
     try {
       const userId = (request as any).userId;
 
-      const savedTranscripts = await prisma.savedTranscript.findMany({
+      const savedTranscripts = await SavedTranscript.findAll({
         where: { userId },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        order: [['createdAt', 'DESC']]
       });
 
       return reply.send({
@@ -154,15 +139,15 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
   });
 
   // Delete a room
-  fastify.delete('/rooms/:roomId', {
+  fastify.delete<{ Params: { roomId: string } }>('/rooms/:roomId', {
     preHandler: verifyAuth,
-  }, async (request: FastifyRequest<{ Params: { roomId: string } }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const userId = (request as any).userId;
       const { roomId } = request.params;
 
       // Check if room belongs to user
-      const room = await prisma.room.findFirst({
+      const room = await Room.findOne({
         where: {
           id: roomId,
           userId,
@@ -177,7 +162,7 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
       }
 
       // Delete room (cascade will delete related data)
-      await prisma.room.delete({
+      await Room.destroy({
         where: { id: roomId },
       });
 
@@ -195,20 +180,18 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
   });
 
   // Save a transcript
-  fastify.post('/transcripts', {
+  fastify.post<{ Body: { roomCode: string; title: string; content: string } }>('/transcripts', {
     preHandler: verifyAuth,
-  }, async (request: FastifyRequest<{ Body: { roomCode: string; title: string; content: string } }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const userId = (request as any).userId;
       const { roomCode, title, content } = request.body;
 
-      const savedTranscript = await prisma.savedTranscript.create({
-        data: {
-          userId,
-          roomCode,
-          title,
-          content,
-        },
+      const savedTranscript = await SavedTranscript.create({
+        userId,
+        roomCode,
+        title,
+        content,
       });
 
       return reply.send({
@@ -225,15 +208,15 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
   });
 
   // Delete a saved transcript
-  fastify.delete('/transcripts/:transcriptId', {
+  fastify.delete<{ Params: { transcriptId: string } }>('/transcripts/:transcriptId', {
     preHandler: verifyAuth,
-  }, async (request: FastifyRequest<{ Params: { transcriptId: string } }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const userId = (request as any).userId;
       const { transcriptId } = request.params;
 
       // Check if transcript belongs to user
-      const transcript = await prisma.savedTranscript.findFirst({
+      const transcript = await SavedTranscript.findOne({
         where: {
           id: transcriptId,
           userId,
@@ -248,7 +231,7 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
       }
 
       // Delete transcript
-      await prisma.savedTranscript.delete({
+      await SavedTranscript.destroy({
         where: { id: transcriptId },
       });
 

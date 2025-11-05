@@ -1,11 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import { Op, fn, col } from 'sequelize';
+import { Room } from '../../models/Room';
+import { SttText } from '../../models/SttText';
+import { Transcript } from '../../models/Transcript';
 
 export class TranscriptService {
-  constructor(private prisma: PrismaClient) {}
 
   // Save STT text
   async saveSttText(roomCode: string, text: string, confidence?: number): Promise<any> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode }
     });
 
@@ -13,12 +15,10 @@ export class TranscriptService {
       throw new Error(`Room ${roomCode} not found`);
     }
 
-    return await this.prisma.sttText.create({
-      data: {
-        roomId: room.id,
-        text,
-        confidence
-      }
+    return await SttText.create({
+      roomId: room.id,
+      text,
+      confidence
     });
   }
 
@@ -29,7 +29,7 @@ export class TranscriptService {
     english: string,
     batchId?: string
   ): Promise<any> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode }
     });
 
@@ -37,43 +37,41 @@ export class TranscriptService {
       throw new Error(`Room ${roomCode} not found`);
     }
 
-    return await this.prisma.transcript.create({
-      data: {
-        roomId: room.id,
-        korean,
-        english,
-        batchId
-      }
+    return await Transcript.create({
+      roomId: room.id,
+      korean,
+      english,
+      batchId
     });
   }
 
   // Get recent STT texts
   async getRecentSttTexts(roomCode: string, limit: number = 100): Promise<any[]> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode }
     });
 
     if (!room) return [];
 
-    return await this.prisma.sttText.findMany({
+    return await SttText.findAll({
       where: { roomId: room.id },
-      orderBy: { timestamp: 'desc' },
-      take: limit
+      order: [['timestamp', 'DESC']],
+      limit
     });
   }
 
   // Get recent translations
   async getRecentTranslations(roomCode: string, limit: number = 30): Promise<any[]> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode }
     });
 
     if (!room) return [];
 
-    return await this.prisma.transcript.findMany({
+    return await Transcript.findAll({
       where: { roomId: room.id },
-      orderBy: { timestamp: 'desc' },
-      take: limit
+      order: [['timestamp', 'DESC']],
+      limit
     });
   }
 
@@ -82,16 +80,22 @@ export class TranscriptService {
     sttTexts: any[],
     translations: any[]
   }> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode },
-      include: {
-        sttTexts: {
-          orderBy: { timestamp: 'asc' }
+      include: [
+        {
+          model: SttText,
+          as: 'sttTexts'
         },
-        transcripts: {
-          orderBy: { timestamp: 'asc' }
+        {
+          model: Transcript,
+          as: 'transcripts'
         }
-      }
+      ],
+      order: [
+        [{ model: SttText, as: 'sttTexts' }, 'timestamp', 'ASC'],
+        [{ model: Transcript, as: 'transcripts' }, 'timestamp', 'ASC']
+      ]
     });
 
     if (!room) {
@@ -99,8 +103,8 @@ export class TranscriptService {
     }
 
     return {
-      sttTexts: room.sttTexts,
-      translations: room.transcripts
+      sttTexts: room.sttTexts || [],
+      translations: room.transcripts || []
     };
   }
 
@@ -111,21 +115,21 @@ export class TranscriptService {
   }> {
     const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
 
-    const sttResult = await this.prisma.sttText.deleteMany({
+    const sttResult = await SttText.destroy({
       where: {
-        timestamp: { lt: cutoffDate }
+        timestamp: { [Op.lt]: cutoffDate }
       }
     });
 
-    const translationResult = await this.prisma.transcript.deleteMany({
+    const translationResult = await Transcript.destroy({
       where: {
-        timestamp: { lt: cutoffDate }
+        timestamp: { [Op.lt]: cutoffDate }
       }
     });
 
     return {
-      sttTexts: sttResult.count,
-      translations: translationResult.count
+      sttTexts: sttResult,
+      translations: translationResult
     };
   }
 
@@ -136,7 +140,7 @@ export class TranscriptService {
     totalDuration: number,
     averageConfidence: number
   }> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode }
     });
 
@@ -149,16 +153,17 @@ export class TranscriptService {
       };
     }
 
-    const [sttCount, translationCount, avgConfidence] = await Promise.all([
-      this.prisma.sttText.count({
+    const [sttCount, translationCount, avgResult] = await Promise.all([
+      SttText.count({
         where: { roomId: room.id }
       }),
-      this.prisma.transcript.count({
+      Transcript.count({
         where: { roomId: room.id }
       }),
-      this.prisma.sttText.aggregate({
+      SttText.findOne({
         where: { roomId: room.id },
-        _avg: { confidence: true }
+        attributes: [[fn('AVG', col('confidence')), 'avgConfidence']],
+        raw: true
       })
     ]);
 
@@ -170,7 +175,7 @@ export class TranscriptService {
       totalSttTexts: sttCount,
       totalTranslations: translationCount,
       totalDuration: duration,
-      averageConfidence: avgConfidence._avg.confidence || 0
+      averageConfidence: (avgResult as any)?.avgConfidence || 0
     };
   }
 }

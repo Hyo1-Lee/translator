@@ -1,0 +1,56 @@
+import {
+  Table,
+  Column,
+  Model,
+  DataType,
+  PrimaryKey,
+  Default,
+  ForeignKey,
+  BelongsTo,
+  Unique,
+} from 'sequelize-typescript';
+import { Room } from './Room';
+
+@Table({
+  tableName: 'room_settings',
+  timestamps: false,
+  underscored: true,
+})
+export class RoomSettings extends Model {
+  @PrimaryKey
+  @Default(DataType.UUIDV4)
+  @Column(DataType.UUID)
+  declare id: string;
+
+  @Unique
+  @ForeignKey(() => Room)
+  @Column(DataType.UUID)
+  declare roomId: string;
+
+  @Default('en')
+  @Column(DataType.STRING)
+  declare targetLanguages: string;
+
+  @Default('general')
+  @Column(DataType.STRING)
+  declare promptTemplate: string;
+
+  @Column(DataType.TEXT)
+  declare customPrompt: string | null;
+
+  @Default(true)
+  @Column(DataType.BOOLEAN)
+  declare enableTranslation: boolean;
+
+  @Default(true)
+  @Column(DataType.BOOLEAN)
+  declare enableAutoScroll: boolean;
+
+  @Default(100)
+  @Column(DataType.INTEGER)
+  declare maxListeners: number;
+
+  // Relations
+  @BelongsTo(() => Room)
+  declare room: Room;
+}

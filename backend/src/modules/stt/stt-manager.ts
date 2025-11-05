@@ -2,6 +2,7 @@ import { RTZRClient } from './rtzr-client';
 import { OpenAIRealtimeClient } from './openai-realtime-client';
 import { STTProvider } from './stt-provider.interface';
 import { TranslationService } from '../translation/translation-service';
+import { optimizeCustomPromptWithGPT } from './prompts/prompt-templates';
 
 type STTProviderType = 'rtzr' | 'openai';
 
@@ -81,7 +82,21 @@ export class STTManager {
       }
 
       const template = promptTemplate || this.config.defaultPromptTemplate || 'general';
-      client = new OpenAIRealtimeClient(roomId, this.config.openai, template, customPrompt);
+
+      // If custom prompt is provided and template is 'custom', optimize it with GPT
+      let optimizedPrompt = customPrompt;
+      if (template === 'custom' && customPrompt && this.config.openai.apiKey) {
+        try {
+          console.log(`[STT][${roomId}] Optimizing custom prompt with GPT...`);
+          const optimizedTemplate = await optimizeCustomPromptWithGPT(customPrompt, this.config.openai.apiKey);
+          optimizedPrompt = optimizedTemplate.instructions;
+          console.log(`[STT][${roomId}] Custom prompt optimized successfully`);
+        } catch (error) {
+          console.error(`[STT][${roomId}] Failed to optimize custom prompt, using original:`, error);
+        }
+      }
+
+      client = new OpenAIRealtimeClient(roomId, this.config.openai, template, optimizedPrompt);
     } else {
       if (!this.config.rtzr) {
         throw new Error('RTZR configuration is missing');

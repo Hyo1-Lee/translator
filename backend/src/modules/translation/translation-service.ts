@@ -28,9 +28,12 @@ export class TranslationService {
         messages: [
           {
             role: 'system',
-            content: `You are a professional real-time speech translator. Translate the given Korean text to English accurately and naturally.
+            content: `You are a professional real-time speech translator. Translate the given Korean text to ${targetLanguage === 'en' ? 'English' : targetLanguage} accurately and naturally.
 
 IMPORTANT CONTEXT: This text comes from real-time speech recognition and may have errors or informal speech patterns.
+
+SOURCE LANGUAGE: Korean (한국어)
+TARGET LANGUAGE: ${targetLanguage === 'en' ? 'English' : targetLanguage}
 
 Translation guidelines:
 - Fix obvious speech recognition errors before translating
@@ -38,16 +41,26 @@ Translation guidelines:
 - Maintain the speaker's intended meaning even if the Korean text has minor errors
 - Remove filler words (um, uh, 음, 어) unless they convey hesitation
 - Keep the natural flow of spoken language
+- Preserve the speaker's tone and emotional nuance
+- Maintain appropriate formality level
 
-Specific terminology:
+Specific terminology (LDS Church):
 - "제일회장단" → "First Presidency"
 - "성전" → "temple"
 - "와드" → "ward"
 - "스테이크" → "stake"
 - "감독" → "bishop"
 - "회장" → "president"
+- "몰몬경" → "Book of Mormon"
+- "앨마" → "Alma"
+- "니파이" → "Nephi"
 - Maintain proper capitalization for religious and organizational terms
-- Preserve the formal or informal tone of the original speech`
+- Preserve the formal or informal tone of the original speech
+
+OUTPUT REQUIREMENTS:
+- Return ONLY the translated text
+- Do NOT include explanations, notes, or meta-commentary
+- Ensure the translation reads naturally in the target language`
           },
           {
             role: 'user',
@@ -91,6 +104,9 @@ Specific terminology:
             role: 'system',
             content: `You are a professional translator specializing in religious speeches from The Church of Jesus Christ of Latter-day Saints (LDS/Mormon Church).
 
+SOURCE LANGUAGE: Korean (한국어)
+TARGET LANGUAGE: ${targetLanguage === 'en' ? 'English' : targetLanguage}
+
 CONTEXT: This is a religious discourse/sermon in a formal LDS church setting.
 
 CONTEXT-AWARE TRANSLATION:
@@ -127,14 +143,21 @@ TRANSLATION APPROACH:
 1. AGGRESSIVELY correct STT errors - the text likely contains many misrecognized religious terms
 2. When you see garbled text that sounds like religious terms, correct it boldly
 3. Maintain formal, reverent tone appropriate for religious discourse
-4. If a sentence seems nonsensical, reconstruct it based on religious context
+4. If a sentence seems nonsensical, reconstruct it based on religious context and the provided summary
 5. Preserve scriptural language style and dignity
+6. Use previous context to maintain consistency in terminology and style
 
 IMPORTANT:
 - Fix ALL obvious speech recognition errors
 - Reconstruct damaged religious terminology
 - Maintain the reverent, formal tone of religious speech
-- Use proper capitalization for deity and religious titles`
+- Use proper capitalization for deity and religious titles
+- Ensure smooth flow with previous segments using the context provided
+
+OUTPUT REQUIREMENTS:
+- Return ONLY the translated text
+- Do NOT include explanations, notes, or meta-commentary
+- Ensure the translation reads naturally and maintains continuity with previous segments`
           },
           {
             role: 'user',

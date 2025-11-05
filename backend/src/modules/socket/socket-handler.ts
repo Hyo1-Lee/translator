@@ -84,10 +84,14 @@ export class SocketHandler {
 
       // Check if speaker wants to rejoin existing room
       if (existingRoomCode) {
-        room = await this.roomService.getRoom(existingRoomCode);
-        if (room && room.status !== 'ENDED') {
+        const existingRoom = await this.roomService.getRoom(existingRoomCode);
+        if (existingRoom && existingRoom.status !== 'ENDED') {
           // Update speaker socket ID
-          room = await this.roomService.reconnectSpeaker(room.speakerId, socket.id);
+          room = await this.roomService.reconnectSpeaker(existingRoom.speakerId, socket.id);
+          if (!room) {
+            // If reconnect failed, use existing room
+            room = existingRoom;
+          }
         }
       }
 
@@ -366,7 +370,7 @@ export class SocketHandler {
       // If prompt template changed, restart STT client with new template
       if (settings.promptTemplate || settings.customPrompt) {
         // Close existing client
-        this.sttManager.closeClient(roomId);
+        this.sttManager.removeClient(roomId);
 
         // Recreate with new prompt
         await this.sttManager.createClient(
@@ -413,7 +417,17 @@ export class SocketHandler {
   // Handle disconnect
   private async handleDisconnect(socket: Socket): Promise<void> {
     try {
+      // Get rooms this socket was part of before disconnect
+      const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);
+
       await this.roomService.handleDisconnect(socket.id);
+
+      // Update listener count for affected rooms
+      for (const roomId of rooms) {
+        const listenerCount = await this.roomService.getListenerCount(roomId);
+        this.io.to(roomId).emit('listener-count', { count: listenerCount });
+        console.log(`[Disconnect] Updated listener count for room ${roomId}: ${listenerCount}`);
+      }
 
       // Check if it was a speaker and clean up STT client
       // Implementation depends on your needs

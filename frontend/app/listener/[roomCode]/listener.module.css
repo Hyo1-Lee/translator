@@ -1,0 +1,463 @@
+/* Listener Page - Clean & Modern */
+
+.main {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  padding: 0;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.backBtn {
+  padding: 0.625rem 1.25rem;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.backBtn:hover {
+  background: rgba(148, 163, 184, 0.2);
+  transform: translateX(-2px);
+}
+
+.roomInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.roomLabel {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.roomCode {
+  color: #3b82f6;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  font-size: 1rem;
+}
+
+.speaker {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.statusBadge {
+  padding: 0.5rem 1rem;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 9999px;
+  font-size: 0.875rem;
+}
+
+.connected {
+  color: #4ade80;
+}
+
+.disconnected {
+  color: #94a3b8;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.controlItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.label {
+  color: #94a3b8;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.fontButtons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.fontBtn {
+  padding: 0.5rem 1rem;
+  background: rgba(15, 23, 42, 0.5);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fontBtn:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.fontBtn.active {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  border-color: transparent;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+}
+
+.checkbox span {
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.exportBtn {
+  padding: 0.625rem 1.25rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  margin-left: auto;
+}
+
+.exportBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+/* Transcript Container */
+.transcriptContainer {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 250px);
+}
+
+/* Empty State */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 400px;
+  text-align: center;
+  padding: 2rem;
+}
+
+.emptyIcon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.emptyTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  margin-bottom: 0.5rem;
+}
+
+.emptyText {
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+/* Transcript Card */
+.transcriptCard {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-left: 4px solid #3b82f6;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+  animation: slideIn 0.3s ease-out;
+  transition: all 0.3s ease;
+}
+
+.transcriptCard:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-left-color: #60a5fa;
+  transform: translateX(4px);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.timestamp {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 9999px;
+  font-family: 'Courier New', monospace;
+}
+
+.korean {
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.8;
+  margin-bottom: 0.75rem;
+  word-break: keep-all;
+  word-wrap: break-word;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(148, 163, 184, 0.1);
+  margin: 0.75rem 0;
+}
+
+.english {
+  color: #94a3b8;
+  font-size: 1rem;
+  line-height: 1.7;
+  font-style: italic;
+  word-break: keep-all;
+  word-wrap: break-word;
+}
+
+/* Font Sizes */
+.small .korean {
+  font-size: 1rem;
+}
+
+.small .english {
+  font-size: 0.875rem;
+}
+
+.medium .korean {
+  font-size: 1.125rem;
+}
+
+.medium .english {
+  font-size: 1rem;
+}
+
+.large .korean {
+  font-size: 1.25rem;
+}
+
+.large .english {
+  font-size: 1.125rem;
+}
+
+/* Password Modal */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.modalBox {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1.5rem;
+  padding: 2.5rem;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+}
+
+.modalBox h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 0.75rem;
+}
+
+.modalBox p {
+  color: #94a3b8;
+  font-size: 0.9375rem;
+  margin-bottom: 1.5rem;
+}
+
+.roomCodeBadge {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.roomCodeBadge strong {
+  color: #3b82f6;
+  font-size: 1.125rem;
+  font-family: 'Courier New', monospace;
+  margin-left: 0.5rem;
+}
+
+.input {
+  width: 100%;
+  padding: 0.875rem 1.125rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  color: white;
+  font-size: 0.9375rem;
+  margin-bottom: 1rem;
+  transition: all 0.2s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.error {
+  color: #ef4444;
+  font-size: 0.875rem;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+}
+
+.modalActions {
+  display: flex;
+  gap: 1rem;
+}
+
+.cancelBtn,
+.submitBtn {
+  flex: 1;
+  padding: 0.875rem 1.5rem;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancelBtn {
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.cancelBtn:hover {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.submitBtn {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.submitBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .controlItem {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .exportBtn {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .transcriptContainer {
+    max-height: calc(100vh - 350px);
+  }
+}

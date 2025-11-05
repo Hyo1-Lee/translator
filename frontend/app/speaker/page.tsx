@@ -157,6 +157,19 @@ export default function Speaker() {
     setShowSettingsModal(false);
   }, [user, speakerName, roomSettings]);
 
+  // Update room settings (without changing room code)
+  const updateRoomSettings = useCallback(() => {
+    if (!socketRef.current || !roomId) return;
+
+    socketRef.current.emit("update-settings", {
+      roomId,
+      settings: roomSettings
+    });
+
+    setShowSettingsModal(false);
+    alert("설정이 업데이트되었습니다!");
+  }, [roomId, roomSettings]);
+
   // Initialize socket connection
   useEffect(() => {
     socketRef.current = io(BACKEND_URL, {
@@ -680,7 +693,7 @@ export default function Speaker() {
               <button onClick={() => setShowSettingsModal(false)} className={styles.cancelButton}>
                 {roomId ? '닫기' : '취소'}
               </button>
-              <button onClick={createRoom} className={styles.createButton}>
+              <button onClick={roomId ? updateRoomSettings : createRoom} className={styles.createButton}>
                 {roomId ? '설정 저장' : '방 만들기'}
               </button>
             </div>

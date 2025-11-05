@@ -1,420 +1,118 @@
-/* Listener Page - Modern Design */
+/* Listener Page - Clean & Modern */
 
 .main {
-  min-height: calc(100vh - 73px);
+  min-height: 100vh;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  padding: 2rem 1rem;
+  padding: 0;
 }
 
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-/* Header */
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-.headerLeft {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-
-.backButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.75rem;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  transition: all 0.2s;
-  cursor: pointer;
-}
-
-.backButton:hover {
-  background: rgba(148, 163, 184, 0.15);
-  border-color: rgba(148, 163, 184, 0.3);
-  transform: translateX(-2px);
-}
-
-.roomInfo {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.roomLabel {
-  font-size: 0.875rem;
-  color: #94a3b8;
-}
-
-.roomCodeText {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: white;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 0.1em;
-}
-
-.speakerLabel {
-  font-size: 0.9375rem;
-  color: #cbd5e1;
-}
-
-.connectionStatus {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.connected {
-  color: #4ade80;
-}
-
-.disconnected {
-  color: #94a3b8;
-}
-
-/* Controls */
-.controls {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-  padding: 1.5rem;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 1rem;
-  margin-bottom: 2rem;
-}
-
-.controlGroup {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.controlLabel {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #cbd5e1;
-}
-
-.languageSelector {
-  position: relative;
-}
-
-.languageButton {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.625rem 1.125rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.5rem;
-  color: white;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.languageButton:hover {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(148, 163, 184, 0.3);
-}
-
-.arrow {
-  font-size: 0.625rem;
-  color: #94a3b8;
-}
-
-.languageMenu {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  left: 0;
-  min-width: 200px;
-  max-height: 400px;
-  overflow-y: auto;
-  background: #1e293b;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.75rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  z-index: 100;
-}
-
-.languageOption {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: none;
-  border: none;
-  color: #cbd5e1;
-  font-size: 0.875rem;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.languageOption:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: white;
-}
-
-.languageOption.active {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  font-weight: 600;
-}
-
-.fontSizeButtons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.fontSizeButton {
-  width: 40px;
-  height: 36px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.5rem;
-  color: #cbd5e1;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.fontSizeButton:hover {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(148, 163, 184, 0.3);
-}
-
-.fontSizeButton.active {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border-color: transparent;
-  color: white;
-}
-
-.checkboxLabel {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #cbd5e1;
-  cursor: pointer;
-  user-select: none;
-}
-
-.checkboxLabel input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-}
-
-.actionButtons {
-  display: flex;
-  gap: 0.75rem;
-  margin-left: auto;
-}
-
-.exportButton,
-.saveButton {
-  padding: 0.625rem 1.25rem;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.exportButton {
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.exportButton:hover {
-  background: rgba(148, 163, 184, 0.15);
-  border-color: rgba(148, 163, 184, 0.3);
-}
-
-.saveButton {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.saveButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
-}
-
-/* Transcripts */
-.transcriptContainer {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 1rem;
-  padding: 2rem;
-  min-height: 500px;
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.transcriptItem {
-  padding: 1.25rem 1.5rem;
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.originalText {
-  color: white;
-  font-size: 1.125rem;
-  font-weight: 500;
-  line-height: 1.7;
-  margin-bottom: 0.75rem;
-}
-
-.translatedText {
-  color: #94a3b8;
-  font-size: 1rem;
-  line-height: 1.6;
-  font-style: italic;
-}
-
-/* Font sizes */
-.small .originalText {
-  font-size: 1rem;
-}
-
-.small .translatedText {
-  font-size: 0.875rem;
-}
-
-.medium .originalText {
-  font-size: 1.125rem;
-}
-
-.medium .translatedText {
-  font-size: 1rem;
-}
-
-.large .originalText {
-  font-size: 1.25rem;
-}
-
-.large .translatedText {
-  font-size: 1.125rem;
-}
-
-.emptyState {
+/* Loading State */
+.loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4rem 2rem;
-  text-align: center;
-  color: #94a3b8;
+  min-height: 100vh;
+  color: #cbd5e1;
+  gap: 1rem;
 }
 
-.emptyState p {
-  margin: 0.5rem 0;
-  font-size: 1rem;
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid rgba(59, 130, 246, 0.2);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-/* Password Modal */
-.passwordModal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Join Container */
+.joinContainer {
+  min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
   padding: 2rem;
+  position: relative;
 }
 
-.passwordBox {
-  background: #1e293b;
+.backButton {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  padding: 0.625rem 1.25rem;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.backButton:hover {
+  background: rgba(148, 163, 184, 0.2);
+  transform: translateX(-2px);
+}
+
+.joinBox {
+  background: rgba(30, 41, 59, 0.8);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 1.5rem;
-  padding: 2.5rem;
-  max-width: 450px;
+  padding: 3rem;
+  max-width: 500px;
   width: 100%;
   text-align: center;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
-.passwordBox h2 {
-  font-size: 1.75rem;
+.joinBox h1 {
+  font-size: 2rem;
   font-weight: 700;
   color: white;
-  margin: 0 0 1rem 0;
+  margin-bottom: 0.75rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.passwordBox p {
-  font-size: 1rem;
+.joinBox > p {
   color: #94a3b8;
-  margin: 0 0 2rem 0;
+  font-size: 0.9375rem;
+  margin-bottom: 2rem;
 }
 
-.roomCodeDisplay {
+.connectionStatus {
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 1rem;
-  padding: 1rem 1.5rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 0.75rem;
   margin-bottom: 1.5rem;
-}
-
-.roomCodeDisplay span {
-  font-size: 0.875rem;
-  color: #94a3b8;
-}
-
-.roomCodeDisplay strong {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: white;
-  font-family: 'Courier New', monospace;
-  letter-spacing: 0.1em;
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 0.75rem;
 }
 
 .input {
   width: 100%;
-  padding: 0.875rem 1.125rem;
+  padding: 1rem 1.25rem;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 0.75rem;
   color: white;
-  font-size: 0.9375rem;
+  font-size: 1rem;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1.5rem;
   transition: all 0.2s;
-  box-sizing: border-box;
-  margin-bottom: 1rem;
 }
 
 .input:focus {
@@ -423,122 +121,436 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-.error {
-  color: #f87171;
-  font-size: 0.875rem;
-  margin: -0.5rem 0 1rem 0;
+.input::placeholder {
+  color: #64748b;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
-.passwordActions {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
-
-.cancelButton,
-.submitButton {
-  flex: 1;
-  padding: 0.875rem 1.5rem;
+.joinButton {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
   border: none;
   border-radius: 0.75rem;
   font-size: 1rem;
   font-weight: 600;
-  transition: all 0.2s;
   cursor: pointer;
-}
-
-.cancelButton {
-  background: rgba(148, 163, 184, 0.1);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.cancelButton:hover {
-  background: rgba(148, 163, 184, 0.15);
-  border-color: rgba(148, 163, 184, 0.3);
-}
-
-.submitButton {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: white;
+  transition: all 0.2s;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
-.submitButton:hover {
+.joinButton:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
 }
 
-/* Responsive */
+.joinButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tips {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  text-align: left;
+}
+
+.tips h3 {
+  color: #cbd5e1;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.tips ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tips li {
+  color: #94a3b8;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  padding-left: 1.5rem;
+  position: relative;
+}
+
+.tips li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: #3b82f6;
+}
+
+.container {
+  min-height: 100vh;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 1rem;
+  gap: 1rem;
+}
+
+.leaveButton {
+  padding: 0.625rem 1.25rem;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.leaveButton:hover {
+  background: rgba(148, 163, 184, 0.2);
+  transform: translateX(-2px);
+}
+
+.roomInfo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  justify-content: center;
+}
+
+.speakerName {
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.roomCodeDisplay {
+  color: #3b82f6;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  padding: 0.5rem 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 0.5rem;
+}
+
+.connected {
+  color: #4ade80;
+}
+
+.disconnected {
+  color: #94a3b8;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 1rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.toolbarLeft,
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.toolButton {
+  padding: 0.625rem 1rem;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toolButton:hover {
+  background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.toolButtonActive {
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.fontSizeSelector {
+  padding: 0.625rem 1rem;
+  background: rgba(15, 23, 42, 0.6);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.fontSizeSelector:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.exportButton {
+  padding: 0.625rem 1.25rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.exportButton:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.exportButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Content Area - Two Column Layout */
+.contentArea {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Section Styling */
+.sttSection,
+.translationSection {
+  display: flex;
+  flex-direction: column;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.sectionHeader {
+  padding: 1rem 1.5rem;
+  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sttContainer,
+.translationsContainer {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+  min-height: 400px;
+  max-height: calc(100vh - 280px);
+}
+
+/* Empty State */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: #64748b;
+  gap: 0.5rem;
+}
+
+.emptyState p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.emptyState p:first-child {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+/* Continuous Text Display */
+.continuousText {
+  color: white;
+  line-height: 2;
+  word-break: keep-all;
+  word-wrap: break-word;
+}
+
+.textChunk {
+  display: inline;
+}
+
+.translationChunk {
+  display: inline;
+  color: #cbd5e1;
+  font-style: italic;
+}
+
+.currentText {
+  display: inline;
+  color: #60a5fa;
+  font-weight: 500;
+}
+
+.cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: #3b82f6;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Font Size Variations */
+.fontSize-small {
+  font-size: 0.875rem;
+}
+
+.fontSize-medium {
+  font-size: 1rem;
+}
+
+.fontSize-large {
+  font-size: 1.125rem;
+}
+
+/* Scrollbar Styling */
+.sttContainer::-webkit-scrollbar,
+.translationsContainer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sttContainer::-webkit-scrollbar-track,
+.translationsContainer::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 4px;
+}
+
+.sttContainer::-webkit-scrollbar-thumb,
+.translationsContainer::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+
+.sttContainer::-webkit-scrollbar-thumb:hover,
+.translationsContainer::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Responsive Design */
 @media (max-width: 1024px) {
-  .controls {
-    gap: 1rem;
+  .contentArea {
+    grid-template-columns: 1fr;
   }
 
-  .actionButtons {
-    margin-left: 0;
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolbarLeft,
+  .toolbarRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .exportButton {
     width: 100%;
   }
 }
 
 @media (max-width: 768px) {
-  .main {
+  .container {
     padding: 1rem;
   }
 
   .header {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-
-  .headerLeft {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-    width: 100%;
-  }
-
-  .connectionStatus {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .controls {
-    flex-direction: column;
     align-items: stretch;
   }
 
-  .controlGroup {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .actionButtons {
-    flex-direction: column;
-  }
-
-  .transcriptContainer {
-    max-height: 60vh;
-  }
-
-  .roomCodeDisplay {
+  .roomInfo {
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .joinBox {
+    padding: 2rem;
+  }
+
+  .backButton {
+    top: 1rem;
+    left: 1rem;
+  }
+
+  .sttContainer,
+  .translationsContainer {
+    max-height: calc(100vh - 400px);
   }
 }
 
 @media (max-width: 480px) {
-  .passwordBox {
-    padding: 2rem 1.5rem;
+  .joinBox {
+    padding: 1.5rem;
   }
 
-  .passwordActions {
+  .joinBox h1 {
+    font-size: 1.5rem;
+  }
+
+  .toolbarLeft,
+  .toolbarRight {
     flex-direction: column;
   }
 
-  .fontSizeButtons {
+  .toolButton,
+  .toolButtonActive,
+  .fontSizeSelector {
     width: 100%;
-    justify-content: space-between;
   }
 }

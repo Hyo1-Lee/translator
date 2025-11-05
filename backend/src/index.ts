@@ -1,9 +1,10 @@
+import 'reflect-metadata';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { connectDatabase, closeDatabase } from './infrastructure/database/sequelize';
 
 // Load environment variables
 dotenv.config();
@@ -22,10 +23,10 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
   : [FRONTEND_URL];
 
-// Initialize Prisma
-const prisma = new PrismaClient();
-
 async function bootstrap() {
+  // Connect to database
+  await connectDatabase();
+
   // Create Fastify instance
   const fastify = Fastify({
     logger: {
@@ -65,19 +66,19 @@ async function bootstrap() {
   // Auth Routes
   fastify.register(async (authFastify) => {
     const { authRoutes } = await import('./modules/auth/auth.routes');
-    await authRoutes(authFastify, prisma);
+    await authRoutes(authFastify);
   }, { prefix: '/api/v1/auth' });
 
   // Dashboard Routes
   fastify.register(async (dashboardFastify) => {
     const { dashboardRoutes } = await import('./modules/dashboard/dashboard.routes');
-    await dashboardRoutes(dashboardFastify, prisma);
+    await dashboardRoutes(dashboardFastify);
   }, { prefix: '/api/v1/dashboard' });
 
   // API Routes
   fastify.get('/api/v1/rooms/:roomCode', async (request, reply) => {
     const { roomCode } = request.params as { roomCode: string };
-    const roomService = new RoomService(prisma);
+    const roomService = new RoomService();
     const room = await roomService.getRoom(roomCode);
 
     if (!room) {
@@ -90,14 +91,14 @@ async function bootstrap() {
 
   fastify.get('/api/v1/rooms/:roomCode/stats', async (request, reply) => {
     const { roomCode } = request.params as { roomCode: string };
-    const transcriptService = new TranscriptService(prisma);
+    const transcriptService = new TranscriptService();
     const stats = await transcriptService.getStats(roomCode);
     return stats;
   });
 
   fastify.get('/api/v1/rooms/:roomCode/export', async (request, reply) => {
     const { roomCode } = request.params as { roomCode: string };
-    const transcriptService = new TranscriptService(prisma);
+    const transcriptService = new TranscriptService();
     const transcripts = await transcriptService.getAllTranscripts(roomCode);
     return transcripts;
   });
@@ -112,8 +113,8 @@ async function bootstrap() {
   });
 
   // Initialize services
-  const roomService = new RoomService(prisma);
-  const transcriptService = new TranscriptService(prisma);
+  const roomService = new RoomService();
+  const transcriptService = new TranscriptService();
   const translationService = new TranslationService({
     apiKey: process.env.OPENAI_API_KEY || ''
   });
@@ -196,13 +197,13 @@ async function bootstrap() {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
-  await prisma.$disconnect();
+  await closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
-  await prisma.$disconnect();
+  await closeDatabase();
   process.exit(0);
 });
 

@@ -1,6 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
+import { Op } from 'sequelize';
+import { Room, RoomStatus } from '../../models/Room';
+import { RoomSettings } from '../../models/RoomSettings';
+import { Listener } from '../../models/Listener';
 
 export interface CreateRoomOptions {
   speakerName: string;
@@ -14,7 +17,6 @@ export interface CreateRoomOptions {
 }
 
 export class RoomService {
-  constructor(private prisma: PrismaClient) {}
 
   // Generate unique room code
   private generateRoomCode(): string {
@@ -34,7 +36,7 @@ export class RoomService {
     // Generate unique room code
     do {
       roomCode = this.generateRoomCode();
-      const existing = await this.prisma.room.findUnique({
+      const existing = await Room.findOne({
         where: { roomCode }
       });
       if (!existing) break;
@@ -54,53 +56,56 @@ export class RoomService {
     // Prepare target languages (comma-separated string)
     const targetLanguages = options.targetLanguages?.join(',') || 'en';
 
-    // Create room with settings
-    const room = await this.prisma.room.create({
-      data: {
-        roomCode,
-        speakerName: options.speakerName,
-        speakerId: options.speakerId,
-        userId: options.userId,
-        password: hashedPassword,
-        status: 'ACTIVE',
-        roomSettings: {
-          create: {
-            targetLanguages,
-            promptTemplate: options.promptTemplate || 'general',
-            customPrompt: options.customPrompt,
-            enableTranslation: true,
-            enableAutoScroll: true,
-            maxListeners: options.maxListeners || 100
-          }
-        }
-      },
-      include: {
-        roomSettings: true
-      }
+    // Create room
+    const room = await Room.create({
+      roomCode,
+      speakerName: options.speakerName,
+      speakerId: options.speakerId,
+      userId: options.userId,
+      password: hashedPassword,
+      status: RoomStatus.ACTIVE,
+    });
+
+    // Create room settings
+    await RoomSettings.create({
+      roomId: room.id,
+      targetLanguages,
+      promptTemplate: options.promptTemplate || 'general',
+      customPrompt: options.customPrompt,
+      enableTranslation: true,
+      enableAutoScroll: true,
+      maxListeners: options.maxListeners || 100
+    });
+
+    // Fetch room with settings
+    const roomWithSettings = await Room.findByPk(room.id, {
+      include: [RoomSettings]
     });
 
     console.log(`[Room] Created: ${roomCode} for ${options.speakerName}`);
-    return room;
+    return roomWithSettings;
   }
 
   // Get room by code
   async getRoom(roomCode: string): Promise<any> {
-    return await this.prisma.room.findUnique({
+    return await Room.findOne({
       where: { roomCode },
-      include: {
-        roomSettings: true,
-        listeners: {
-          where: { leftAt: null }
+      include: [
+        RoomSettings,
+        {
+          model: Listener,
+          where: { leftAt: null },
+          required: false
         }
-      }
+      ]
     });
   }
 
   // Verify room password
   async verifyRoomPassword(roomCode: string, password: string): Promise<boolean> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode },
-      select: { password: true }
+      attributes: ['password']
     });
 
     if (!room) {
@@ -118,9 +123,9 @@ export class RoomService {
 
   // Check if room requires password
   async isPasswordProtected(roomCode: string): Promise<boolean> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode },
-      select: { password: true }
+      attributes: ['password']
     });
 
     return room?.password ? true : false;
@@ -128,14 +133,12 @@ export class RoomService {
 
   // Get room by speaker ID
   async getRoomBySpeakerId(speakerId: string): Promise<any> {
-    return await this.prisma.room.findFirst({
+    return await Room.findOne({
       where: {
         speakerId,
-        status: 'ACTIVE'
+        status: RoomStatus.ACTIVE
       },
-      include: {
-        roomSettings: true
-      }
+      include: [RoomSettings]
     });
   }
 
@@ -146,16 +149,17 @@ export class RoomService {
       updateData.endedAt = new Date();
     }
 
-    return await this.prisma.room.update({
-      where: { roomCode },
-      data: updateData
+    await Room.update(updateData, {
+      where: { roomCode }
     });
+
+    return await Room.findOne({ where: { roomCode } });
   }
 
   // Add listener to room
   async addListener(roomCode: string, socketId: string, name?: string): Promise<any> {
     // Get room to connect
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode }
     });
 
@@ -164,47 +168,46 @@ export class RoomService {
     }
 
     // Check if listener already exists with this socket ID
-    const existing = await this.prisma.listener.findUnique({
+    const existing = await Listener.findOne({
       where: { socketId }
     });
 
     if (existing) {
       // Update existing listener - rejoin room
-      return await this.prisma.listener.update({
-        where: { socketId },
-        data: {
-          roomId: room.id,
-          name: name || existing.name,
-          leftAt: null
-        }
+      return await existing.update({
+        roomId: room.id,
+        name: name || existing.name,
+        leftAt: null
       });
     }
 
     // Create new listener
-    return await this.prisma.listener.create({
-      data: {
-        socketId,
-        name: name || 'Guest',
-        roomId: room.id
-      }
+    return await Listener.create({
+      socketId,
+      name: name || 'Guest',
+      roomId: room.id
     });
   }
 
   // Remove listener
   async removeListener(socketId: string): Promise<void> {
-    await this.prisma.listener.update({
-      where: { socketId },
-      data: { leftAt: new Date() }
-    }).catch(() => {
+    await Listener.update(
+      { leftAt: new Date() },
+      { where: { socketId } }
+    ).catch(() => {
       // Listener might not exist
     });
   }
 
   // Get active listener count
   async getListenerCount(roomCode: string): Promise<number> {
-    return await this.prisma.listener.count({
+    return await Listener.count({
+      include: [{
+        model: Room,
+        where: { roomCode },
+        required: true
+      }],
       where: {
-        room: { roomCode },
         leftAt: null
       }
     });
@@ -213,10 +216,10 @@ export class RoomService {
   // Handle disconnect (speaker or listener)
   async handleDisconnect(socketId: string): Promise<void> {
     // Check if it's a speaker
-    const room = await this.prisma.room.findFirst({
+    const room = await Room.findOne({
       where: {
         speakerId: socketId,
-        status: 'ACTIVE'
+        status: RoomStatus.ACTIVE
       }
     });
 
@@ -232,21 +235,22 @@ export class RoomService {
 
   // Reconnect speaker
   async reconnectSpeaker(speakerId: string, newSocketId: string): Promise<any> {
-    const room = await this.prisma.room.findFirst({
+    const room = await Room.findOne({
       where: {
         speakerId,
-        status: { in: ['ACTIVE', 'PAUSED'] }
+        status: { [Op.in]: [RoomStatus.ACTIVE, RoomStatus.PAUSED] }
       }
     });
 
     if (room) {
       // Update speaker socket ID and reactivate room
-      return await this.prisma.room.update({
-        where: { id: room.id },
-        data: {
-          speakerId: newSocketId,
-          status: 'ACTIVE'
-        }
+      await room.update({
+        speakerId: newSocketId,
+        status: RoomStatus.ACTIVE
+      });
+
+      return await Room.findByPk(room.id, {
+        include: [RoomSettings]
       });
     }
 
@@ -255,18 +259,10 @@ export class RoomService {
 
   // Get recent rooms
   async getRecentRooms(limit: number = 10): Promise<any[]> {
-    return await this.prisma.room.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      include: {
-        roomSettings: true,
-        _count: {
-          select: {
-            listeners: true,
-            transcripts: true
-          }
-        }
-      }
+    return await Room.findAll({
+      order: [['createdAt', 'DESC']],
+      limit,
+      include: [RoomSettings]
     });
   }
 
@@ -282,9 +278,9 @@ export class RoomService {
       enableAutoScroll?: boolean;
     }
   ): Promise<any> {
-    const room = await this.prisma.room.findUnique({
+    const room = await Room.findOne({
       where: { roomCode },
-      include: { roomSettings: true }
+      include: [RoomSettings]
     });
 
     if (!room || !room.roomSettings) {
@@ -312,10 +308,7 @@ export class RoomService {
       updateData.enableAutoScroll = settings.enableAutoScroll;
     }
 
-    return await this.prisma.roomSettings.update({
-      where: { id: room.roomSettings.id },
-      data: updateData
-    });
+    return await room.roomSettings.update(updateData);
   }
 
   // Update room password
@@ -326,27 +319,29 @@ export class RoomService {
       hashedPassword = await bcrypt.hash(password, 10);
     }
 
-    await this.prisma.room.update({
-      where: { roomCode },
-      data: { password: hashedPassword }
-    });
+    await Room.update(
+      { password: hashedPassword },
+      { where: { roomCode } }
+    );
   }
 
   // Clean up old rooms
   async cleanupOldRooms(hoursOld: number = 24): Promise<number> {
     const cutoffDate = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
 
-    const result = await this.prisma.room.updateMany({
-      where: {
-        createdAt: { lt: cutoffDate },
-        status: { not: 'ENDED' }
-      },
-      data: {
-        status: 'ENDED',
+    const [affectedCount] = await Room.update(
+      {
+        status: RoomStatus.ENDED,
         endedAt: new Date()
+      },
+      {
+        where: {
+          createdAt: { [Op.lt]: cutoffDate },
+          status: { [Op.ne]: RoomStatus.ENDED }
+        }
       }
-    });
+    );
 
-    return result.count;
+    return affectedCount;
   }
 }

@@ -1,8 +1,11 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import { Op } from 'sequelize';
+import { User } from '../../models/User';
+import { VerificationCode } from '../../models/VerificationCode';
+import { RefreshToken } from '../../models/RefreshToken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-change-this';
@@ -15,12 +18,9 @@ export interface JWTPayload {
 }
 
 export class AuthService {
-  private prisma: PrismaClient;
   private transporter: nodemailer.Transporter;
 
-  constructor(prisma: PrismaClient) {
-    this.prisma = prisma;
-
+  constructor() {
     // Setup email transporter
     this.transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
@@ -46,12 +46,10 @@ export class AuthService {
     expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 minutes expiry
 
     // Save to database
-    await this.prisma.verificationCode.create({
-      data: {
-        email,
-        code,
-        expiresAt,
-      },
+    await VerificationCode.create({
+      email,
+      code,
+      expiresAt,
     });
 
     // Send email
@@ -85,17 +83,15 @@ export class AuthService {
 
   // Verify email code
   async verifyCode(code: string): Promise<string> {
-    const verification = await this.prisma.verificationCode.findFirst({
+    const verification = await VerificationCode.findOne({
       where: {
         code,
         isUsed: false,
         expiresAt: {
-          gte: new Date(),
+          [Op.gte]: new Date(),
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      order: [['createdAt', 'DESC']],
     });
 
     if (!verification) {
@@ -103,17 +99,14 @@ export class AuthService {
     }
 
     // Mark as used
-    await this.prisma.verificationCode.update({
-      where: { id: verification.id },
-      data: { isUsed: true },
-    });
+    await verification.update({ isUsed: true });
 
     return verification.email;
   }
 
   // Check if email exists
   async checkEmail(email: string): Promise<{ exists: boolean; hasPassword: boolean }> {
-    const user = await this.prisma.user.findUnique({
+    const user = await User.findOne({
       where: { email },
     });
 
@@ -126,7 +119,7 @@ export class AuthService {
   // Register new user
   async register(email: string, password: string, name?: string): Promise<{ user: any; tokens: any }> {
     // Check if user already exists
-    const existing = await this.prisma.user.findUnique({
+    const existing = await User.findOne({
       where: { email },
     });
 
@@ -139,23 +132,18 @@ export class AuthService {
 
     // Create or update user
     const user = existing
-      ? await this.prisma.user.update({
-          where: { email },
-          data: {
-            password: hashedPassword,
-            name: name || existing.name,
-            isEmailVerified: true,
-            lastLoginAt: new Date(),
-          },
+      ? await existing.update({
+          password: hashedPassword,
+          name: name || existing.name,
+          isEmailVerified: true,
+          lastLoginAt: new Date(),
         })
-      : await this.prisma.user.create({
-          data: {
-            email,
-            password: hashedPassword,
-            name,
-            isEmailVerified: true,
-            lastLoginAt: new Date(),
-          },
+      : await User.create({
+          email,
+          password: hashedPassword,
+          name,
+          isEmailVerified: true,
+          lastLoginAt: new Date(),
         });
 
     // Generate tokens
@@ -177,7 +165,7 @@ export class AuthService {
   // Login existing user
   async login(email: string, password: string): Promise<{ user: any; tokens: any }> {
     // Find user
-    const user = await this.prisma.user.findUnique({
+    const user = await User.findOne({
       where: { email },
     });
 
@@ -196,10 +184,7 @@ export class AuthService {
     }
 
     // Update last login
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    await user.update({ lastLoginAt: new Date() });
 
     // Generate tokens
     const tokens = this.generateTokens(user.id, user.email);
@@ -239,12 +224,10 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
-    await this.prisma.refreshToken.create({
-      data: {
-        token,
-        userId,
-        expiresAt,
-      },
+    await RefreshToken.create({
+      token,
+      userId,
+      expiresAt,
     });
   }
 
@@ -264,12 +247,12 @@ export class AuthService {
       const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as JWTPayload;
 
       // Check if refresh token exists in database
-      const tokenRecord = await this.prisma.refreshToken.findFirst({
+      const tokenRecord = await RefreshToken.findOne({
         where: {
           token: refreshToken,
           userId: payload.userId,
           expiresAt: {
-            gte: new Date(),
+            [Op.gte]: new Date(),
           },
         },
       });
@@ -293,22 +276,16 @@ export class AuthService {
 
   // Logout (invalidate refresh token)
   async logout(refreshToken: string): Promise<void> {
-    await this.prisma.refreshToken.deleteMany({
+    await RefreshToken.destroy({
       where: { token: refreshToken },
     });
   }
 
   // Get user by ID
   async getUserById(userId: string) {
-    return this.prisma.user.findUnique({
+    return User.findOne({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        isEmailVerified: true,
-        createdAt: true,
-      },
+      attributes: ['id', 'email', 'name', 'isEmailVerified', 'createdAt'],
     });
   }
 }
