@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -102,7 +102,7 @@ model RoomSettings {
   roomId              String   @unique
   targetLanguages     String   @default("en") // Comma-separated language codes (e.g., "en,ja,zh")
   promptTemplate      String   @default("general") // general, church, lecture, meeting, custom
-  customPrompt        String?  // Custom prompt text if template is "custom"
+  customPrompt        String?  @db.Text // Custom prompt text if template is "custom"
   enableTranslation   Boolean  @default(true)
   enableAutoScroll    Boolean  @default(true)
   maxListeners        Int      @default(100)
@@ -134,7 +134,7 @@ model Listener {
 model SttText {
   id          String   @id @default(uuid())
   roomId      String
-  text        String
+  text        String   @db.Text
   confidence  Float?   // STT confidence score
   timestamp   DateTime @default(now())
 
@@ -149,9 +149,9 @@ model SttText {
 model Transcript {
   id          String   @id @default(uuid())
   roomId      String
-  korean      String   // Original Korean text
-  english     String   // Translated English text
-  translations String? // JSON object with additional language translations {"ja": "...", "zh": "..."}
+  korean      String   @db.Text // Original Korean text
+  english     String   @db.Text // Translated English text
+  translations String? @db.Text // JSON object with additional language translations {"ja": "...", "zh": "..."}
   batchId     String?  // Batch identifier for grouped translations
   timestamp   DateTime @default(now())
 
@@ -169,7 +169,7 @@ model SavedTranscript {
   userId      String
   roomCode    String
   roomName    String?  // Room title/description
-  transcripts String   // JSON array of transcript objects
+  transcripts String   @db.LongText // JSON array of transcript objects
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
