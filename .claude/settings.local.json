@@ -22,7 +22,8 @@
       "Bash(cmd /c:*)",
       "WebFetch(domain:platform.openai.com)",
       "Read(//c/Users/gydnj/Desktop/side_projects/PARALLAX/**)",
-      "WebFetch(domain:community.openai.com)"
+      "WebFetch(domain:community.openai.com)",
+      "Bash(mysql:*)"
     ],
     "deny": []
   }
