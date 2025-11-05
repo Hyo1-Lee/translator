@@ -116,13 +116,13 @@ export async function recordingRoutes(fastify: FastifyInstance, prisma: PrismaCl
     try {
       const userId = (request as any).user.userId;
       const { recordingId } = request.params as any;
-      const { name } = request.body as any;
+      const { roomName } = request.body as any;
 
-      if (!name) {
+      if (!roomName) {
         return reply.code(400).send({ success: false, message: 'Name is required' });
       }
 
-      const success = await recordingService.updateRecordingName(recordingId, userId, name);
+      const success = await recordingService.updateRecordingName(recordingId, userId, roomName);
 
       if (!success) {
         return reply.code(404).send({ success: false, message: 'Recording not found' });

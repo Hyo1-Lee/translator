@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
 import QRCode from "qrcode";
 import styles from "./speaker.module.css";
@@ -53,8 +54,9 @@ interface RoomSettings {
 }
 
 export default function Speaker() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const router = useRouter();
+  const toast = useToast();
 
   // State management
   const [roomId, setRoomId] = useState("");
@@ -452,6 +454,52 @@ export default function Speaker() {
     }
   };
 
+  // Save recording
+  const saveRecording = async () => {
+    if (!user || !accessToken) {
+      toast.error('로그인이 필요합니다');
+      router.push('/login');
+      return;
+    }
+
+    if (!roomId) {
+      toast.error('저장할 세션이 없습니다');
+      return;
+    }
+
+    if (transcripts.length === 0) {
+      toast.error('저장할 번역 내용이 없습니다');
+      return;
+    }
+
+    const roomName = prompt('세션 이름을 입력하세요', roomSettings.roomTitle || `Session ${roomId}`);
+    if (!roomName) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/v1/recordings/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          roomCode: roomId,
+          roomName
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast.success('세션이 저장되었습니다');
+      } else {
+        toast.error(data.message || '저장에 실패했습니다');
+      }
+    } catch (error) {
+      console.error('Save recording error:', error);
+      toast.error('저장 중 오류가 발생했습니다');
+    }
+  };
+
   // Copy to clipboard
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -535,6 +583,19 @@ export default function Speaker() {
               )}
 
               <div className={styles.actionButtons}>
+                <button
+                  onClick={saveRecording}
+                  className={styles.saveButton}
+                  disabled={!user || transcripts.length === 0}
+                  title={!user ? "로그인이 필요합니다" : transcripts.length === 0 ? "저장할 내용이 없습니다" : "세션 저장"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  세션 저장
+                </button>
                 <button onClick={() => setShowSettingsModal(true)} className={styles.settingsButtonNew}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="3"/>
