@@ -36,7 +36,7 @@ model User {
 // Refresh Token for JWT
 model RefreshToken {
   id        String   @id @default(uuid())
-  token     String   @unique
+  token     String   @unique @db.VarChar(500)
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())

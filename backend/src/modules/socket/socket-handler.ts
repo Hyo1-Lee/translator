@@ -108,7 +108,7 @@ export class SocketHandler {
       socket.join(room.roomCode);
 
       // Parse target languages from room settings
-      const targetLanguages = room.roomSettings?.targetLanguages
+      const roomTargetLanguages = room.roomSettings?.targetLanguages
         ? room.roomSettings.targetLanguages.split(',')
         : ['en'];
 
@@ -153,7 +153,7 @@ export class SocketHandler {
         // Use custom prompt template
         room.roomSettings?.promptTemplate || 'general',
         room.roomSettings?.customPrompt,
-        targetLanguages
+        roomTargetLanguages
       );
 
       // Send room info to speaker
@@ -198,7 +198,7 @@ export class SocketHandler {
       socket.join(roomCode);
 
       // Parse target languages from room settings
-      const targetLanguages = room.roomSettings?.targetLanguages
+      const roomTargetLanguages = room.roomSettings?.targetLanguages
         ? room.roomSettings.targetLanguages.split(',')
         : ['en'];
 
@@ -235,7 +235,7 @@ export class SocketHandler {
           },
           room.roomSettings?.promptTemplate || 'general',
           room.roomSettings?.customPrompt,
-          targetLanguages
+          roomTargetLanguages
         );
       }
 
