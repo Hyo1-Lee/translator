@@ -337,11 +337,26 @@ export class SocketHandler {
       // Send translations only (oldest first)
       // Each translation batch contains the combined Korean text and English translation
       translations.reverse().forEach((translation: any) => {
+        // Handle null or invalid timestamps
+        let timestampValue: number;
+        if (translation.timestamp && translation.timestamp instanceof Date) {
+          timestampValue = translation.timestamp.getTime();
+        } else if (translation.timestamp) {
+          // Try to parse if it's a string or number
+          timestampValue = new Date(translation.timestamp).getTime();
+        } else if (translation.createdAt) {
+          // Fallback to createdAt
+          timestampValue = new Date(translation.createdAt).getTime();
+        } else {
+          // Last resort: use current time
+          timestampValue = Date.now();
+        }
+
         socket.emit('translation-batch', {
           batchId: translation.batchId || translation.id,
           korean: translation.korean,
           english: translation.english,
-          timestamp: translation.timestamp.getTime(),
+          timestamp: timestampValue,
           isHistory: true
         });
       });
