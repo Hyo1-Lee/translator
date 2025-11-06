@@ -261,30 +261,40 @@ export default function Speaker() {
 
     // Listen for transcripts
     socketRef.current.on("stt-text", (data: any) => {
-      if (!data.isHistory) {
-        setTranscripts((prev) => [
-          ...prev.slice(-19),
-          {
-            type: "stt",
-            text: data.text,
-            timestamp: data.timestamp,
-          },
-        ]);
-      }
+      setTranscripts((prev) => {
+        const newTranscript = {
+          type: "stt",
+          text: data.text,
+          timestamp: data.timestamp,
+          isHistory: data.isHistory || false,
+        };
+
+        // If it's history, add at the beginning; otherwise add at the end
+        if (data.isHistory) {
+          return [...prev, newTranscript];
+        } else {
+          return [...prev.slice(-19), newTranscript];
+        }
+      });
     });
 
     socketRef.current.on("translation-batch", (data: any) => {
-      if (!data.isHistory) {
-        setTranscripts((prev) => [
-          ...prev.slice(-19),
-          {
-            type: "translation",
-            korean: data.korean,
-            english: data.english,
-            timestamp: data.timestamp,
-          },
-        ]);
-      }
+      setTranscripts((prev) => {
+        const newTranscript = {
+          type: "translation",
+          korean: data.korean,
+          english: data.english,
+          timestamp: data.timestamp,
+          isHistory: data.isHistory || false,
+        };
+
+        // If it's history, add at the beginning; otherwise add at the end
+        if (data.isHistory) {
+          return [...prev, newTranscript];
+        } else {
+          return [...prev.slice(-19), newTranscript];
+        }
+      });
     });
 
     socketRef.current.on("error", (data: any) => {

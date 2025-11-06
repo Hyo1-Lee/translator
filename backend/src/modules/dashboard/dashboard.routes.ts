@@ -204,30 +204,106 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Save a transcript
-  fastify.post<{ Body: { roomCode: string; title: string; content: string } }>('/transcripts', {
+  // Save a session (room with all transcripts)
+  fastify.post<{ Body: { roomId: string; roomName?: string } }>('/sessions/save', {
     preHandler: verifyAuth,
   }, async (request, reply) => {
     try {
       const userId = (request as any).userId;
-      const { roomCode, title, content } = request.body;
+      const { roomId, roomName } = request.body;
+
+      // Get room and verify ownership
+      const room = await Room.findOne({
+        where: {
+          id: roomId,
+          userId,
+        },
+        include: [
+          {
+            model: Transcript,
+            attributes: ['korean', 'english', 'timestamp'],
+            order: [['timestamp', 'ASC']]
+          }
+        ]
+      });
+
+      if (!room) {
+        return reply.code(404).send({
+          success: false,
+          message: 'Room not found or unauthorized',
+        });
+      }
+
+      // Format transcripts as JSON string
+      const transcriptsData = (room as any).transcripts?.map((t: any) => ({
+        korean: t.korean,
+        english: t.english,
+        timestamp: t.timestamp
+      })) || [];
 
       const savedTranscript = await SavedTranscript.create({
         userId,
-        roomCode,
-        title,
-        content,
+        roomCode: room.roomCode,
+        roomName: roomName || room.speakerName || `Session ${room.roomCode}`,
+        transcripts: JSON.stringify(transcriptsData),
       });
 
       return reply.send({
         success: true,
         data: savedTranscript,
+        message: `Session saved with ${transcriptsData.length} transcripts`,
       });
     } catch (error: any) {
-      console.error('[Dashboard] Save transcript error:', error);
+      console.error('[Dashboard] Save session error:', error);
       return reply.code(500).send({
         success: false,
-        message: error.message || 'Failed to save transcript',
+        message: error.message || 'Failed to save session',
+      });
+    }
+  });
+
+  // Get saved transcript detail
+  fastify.get<{ Params: { transcriptId: string } }>('/transcripts/:transcriptId', {
+    preHandler: verifyAuth,
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).userId;
+      const { transcriptId } = request.params;
+
+      const transcript = await SavedTranscript.findOne({
+        where: {
+          id: transcriptId,
+          userId,
+        },
+      });
+
+      if (!transcript) {
+        return reply.code(404).send({
+          success: false,
+          message: 'Transcript not found or unauthorized',
+        });
+      }
+
+      // Parse transcripts JSON
+      let transcriptsData = [];
+      try {
+        transcriptsData = JSON.parse(transcript.transcripts || '[]');
+      } catch (e) {
+        console.error('Failed to parse transcripts:', e);
+      }
+
+      return reply.send({
+        success: true,
+        data: {
+          ...transcript.toJSON(),
+          transcriptsData
+        },
+      });
+    } catch (error: any) {
+      console.error('[Dashboard] Get transcript detail error:', error);
+      return reply.code(500).send({
+        success: false,
+        message: error.message || 'Failed to fetch transcript',
       });
     }
   });

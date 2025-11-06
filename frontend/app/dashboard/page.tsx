@@ -136,6 +136,40 @@ export default function Dashboard() {
     }
   };
 
+  const saveSession = async (roomId: string, roomName: string) => {
+    const customName = prompt('세션 이름을 입력하세요 (선택사항):', roomName);
+
+    // User cancelled
+    if (customName === null) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/v1/dashboard/sessions/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          roomId,
+          roomName: customName || roomName
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(data.message || '세션이 저장되었습니다!');
+        // Refresh saved transcripts list
+        fetchDashboardData();
+      } else {
+        alert(data.message || '세션 저장에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to save session:', error);
+      alert('세션 저장에 실패했습니다.');
+    }
+  };
+
   const deleteTranscript = async (transcriptId: string) => {
     if (!confirm(t('dashboard.confirmDeleteTranscript') || 'Are you sure you want to delete this transcript?')) {
       return;
@@ -386,6 +420,19 @@ export default function Dashboard() {
                                   <polygon points="10 8 16 12 10 16 10 8"/>
                                 </svg>
                                 {room.status === 'ACTIVE' ? t('dashboard.resume') : '재입장'}
+                              </button>
+                            )}
+                            {(room._count?.transcripts ?? 0) > 0 && (
+                              <button
+                                onClick={() => saveSession(room.id, room.speakerName)}
+                                className={styles.actionButton}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                  <polyline points="17 21 17 13 7 13 7 21"/>
+                                  <polyline points="7 3 7 8 15 8"/>
+                                </svg>
+                                저장
                               </button>
                             )}
                             <button
