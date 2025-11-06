@@ -27,6 +27,7 @@ const PROMPT_TEMPLATES = [
 
 // Target languages
 const TARGET_LANGUAGES = [
+  { code: "ko", name: "한국어" },
   { code: "en", name: "English" },
   { code: "ja", name: "日本語" },
   { code: "zh", name: "中文 (简体)" },

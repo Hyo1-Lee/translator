@@ -21,6 +21,12 @@ export class TranslationService {
     try {
       // First, correct any STT errors
       const correctedText = await this.correctSttErrors(text);
+
+      // If target language is Korean, just return the corrected text
+      if (targetLanguage === 'ko') {
+        return correctedText;
+      }
+
       const prompt = this.getTranslationPrompt(correctedText, targetLanguage);
 
       const response = await this.openai.chat.completions.create({
@@ -210,12 +216,21 @@ Keep the summary:
   // Get translation prompt
   private getTranslationPrompt(text: string, targetLanguage: string): string {
     const langMap: Record<string, string> = {
+      'ko': 'Korean',
       'en': 'English',
       'ja': 'Japanese',
       'zh': 'Chinese',
+      'zh-TW': 'Traditional Chinese',
       'es': 'Spanish',
       'fr': 'French',
-      'de': 'German'
+      'de': 'German',
+      'ru': 'Russian',
+      'ar': 'Arabic',
+      'pt': 'Portuguese',
+      'vi': 'Vietnamese',
+      'th': 'Thai',
+      'id': 'Indonesian',
+      'hi': 'Hindi'
     };
 
     const targetLangName = langMap[targetLanguage] || 'English';
