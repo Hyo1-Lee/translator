@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import io from "socket.io-client";
 import QRCode from "qrcode";
@@ -55,6 +55,7 @@ interface RoomSettings {
 export default function Speaker() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // State management
   const [roomId, setRoomId] = useState("");
@@ -181,7 +182,37 @@ export default function Speaker() {
       setIsConnected(true);
       setStatus("연결됨");
 
-      // Check for saved room
+      // Check URL parameters
+      const roomParam = searchParams.get("room");
+      const forceNew = searchParams.get("forceNew");
+
+      // Force new room - clear localStorage and show settings modal
+      if (forceNew === "true") {
+        clearRoomInfo();
+        setShowSettingsModal(true);
+        // Clear URL parameter
+        router.replace("/speaker");
+        return;
+      }
+
+      // Rejoin specific room from URL parameter (from dashboard)
+      if (roomParam) {
+        const name = user?.name || "Speaker";
+        setSpeakerName(name);
+        socketRef.current.emit("create-room", {
+          name,
+          userId: user?.id,
+          existingRoomCode: roomParam,
+          promptTemplate: "general",
+          targetLanguages: ["en"],
+          maxListeners: 100
+        });
+        // Clear URL parameter after processing
+        router.replace("/speaker");
+        return;
+      }
+
+      // Check for saved room in localStorage
       const savedRoom = loadSavedRoom();
       if (savedRoom && savedRoom.roomCode) {
         // Try to rejoin existing room
@@ -191,7 +222,6 @@ export default function Speaker() {
           name,
           userId: user?.id,
           existingRoomCode: savedRoom.roomCode,
-          // Include default settings for rejoin
           promptTemplate: "general",
           targetLanguages: ["en"],
           maxListeners: 100
@@ -421,7 +451,14 @@ export default function Speaker() {
       setRoomId("");
       setTranscripts([]);
       setQrCodeUrl("");
-      setShowSettingsModal(true);
+
+      // Disconnect socket to ensure clean state
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+
+      // Navigate with forceNew parameter
+      router.push("/speaker?forceNew=true");
     }
   };
 

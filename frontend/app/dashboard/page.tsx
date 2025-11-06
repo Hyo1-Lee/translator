@@ -206,7 +206,7 @@ export default function Dashboard() {
               <p className={styles.subtitle}>{t('dashboard.subtitle')}</p>
             </div>
             <button
-              onClick={() => router.push('/speaker')}
+              onClick={() => router.push('/speaker?forceNew=true')}
               className={styles.createButton}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -319,7 +319,7 @@ export default function Dashboard() {
                       <h3>{t('dashboard.noRooms')}</h3>
                       <p>{t('dashboard.noRoomsDesc')}</p>
                       <button
-                        onClick={() => router.push('/speaker')}
+                        onClick={() => router.push('/speaker?forceNew=true')}
                         className={styles.emptyButton}
                       >
                         {t('dashboard.createRoom')}
