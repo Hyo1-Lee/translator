@@ -278,7 +278,7 @@ export default function Speaker() {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
+          sampleRate: 24000,
           sampleSize: 16,
           echoCancellation: true,
           noiseSuppression: true,
@@ -289,8 +289,11 @@ export default function Speaker() {
       streamRef.current = stream;
 
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000,
+        sampleRate: 24000,
       });
+
+      // Log actual sample rate (browsers may not honor requested rate)
+      console.log(`[Audio] Requested: 24000 Hz, Actual: ${audioContextRef.current.sampleRate} Hz`);
 
       const source = audioContextRef.current.createMediaStreamSource(stream);
 
@@ -302,9 +305,15 @@ export default function Speaker() {
       processorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
 
       let isProcessing = true;
+      let audioChunksSent = 0;
 
       processorRef.current.onaudioprocess = (e: any) => {
-        if (!isProcessing || !socketRef.current || !roomId) return;
+        if (!isProcessing || !socketRef.current || !roomId) {
+          if (!roomId && audioChunksSent === 0) {
+            console.warn("[Audio] Cannot send audio: roomId is missing");
+          }
+          return;
+        }
 
         const inputData = e.inputBuffer.getChannelData(0);
 
@@ -328,6 +337,11 @@ export default function Speaker() {
             roomId,
             audio: base64Audio,
           });
+
+          audioChunksSent++;
+          if (audioChunksSent === 1 || audioChunksSent % 100 === 0) {
+            console.log(`[Audio] Sent ${audioChunksSent} chunks to server (roomId: ${roomId})`);
+          }
         }
       };
 

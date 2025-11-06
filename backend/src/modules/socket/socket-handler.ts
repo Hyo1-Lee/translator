@@ -288,6 +288,8 @@ export class SocketHandler {
   }
 
   // Handle audio stream
+  private audioChunksReceived: Map<string, number> = new Map();
+
   private async handleAudioStream(socket: Socket, data: AudioStreamData): Promise<void> {
     try {
       const { roomId, audio } = data;
@@ -295,15 +297,24 @@ export class SocketHandler {
       // Verify speaker
       const room = await this.roomService.getRoom(roomId);
       if (!room) {
+        console.warn(`[Audio] Room not found: ${roomId}`);
         return;
       }
 
       if (room.speakerId !== socket.id) {
+        console.warn(`[Audio] Unauthorized audio stream attempt for room ${roomId}`);
         return;
       }
 
       // Convert base64 to buffer
       const audioBuffer = Buffer.from(audio, 'base64');
+
+      // Log audio reception
+      const count = (this.audioChunksReceived.get(roomId) || 0) + 1;
+      this.audioChunksReceived.set(roomId, count);
+      if (count === 1 || count % 100 === 0) {
+        console.log(`[Audio][${roomId}] Received ${count} audio chunks (${audioBuffer.length} bytes)`);
+      }
 
       // Send to STT
       this.sttManager.sendAudio(roomId, audioBuffer);

@@ -77,7 +77,7 @@ export class RTZRClient extends STTProvider {
 
     // WebSocket connection parameters - using only confirmed parameters
     const params = new URLSearchParams({
-      sample_rate: '16000', // 8000 ~ 48000
+      sample_rate: '24000', // 8000 ~ 48000 (changed to 24000 to match frontend and OpenAI)
       encoding: 'LINEAR16', // LINEAR16, FLAC, MULAW, ALAW, AMR, AMR_WB, OGG_OPUS, OPUS
       model_name: 'sommers_ko', // sommers_ko, whisper
       domain: 'MEETING', // CALL, MEETING

@@ -271,20 +271,32 @@ export class STTManager {
     }
   }
 
+  // Audio chunk counters for debugging
+  private audioChunksSent: Map<string, number> = new Map();
+
   // Send audio to STT
   sendAudio(roomId: string, audioData: Buffer): void {
     try {
       const client = this.clients.get(roomId);
 
       if (!client) {
+        console.warn(`[STT][${roomId}] No client found for room`);
         return;
       }
 
       if (!client.isActive()) {
+        console.warn(`[STT][${roomId}] Client is not active (provider: ${client.getProviderName()})`);
         return;
       }
 
       client.sendAudio(audioData);
+
+      // Log audio forwarding
+      const count = (this.audioChunksSent.get(roomId) || 0) + 1;
+      this.audioChunksSent.set(roomId, count);
+      if (count === 1 || count % 100 === 0) {
+        console.log(`[STT][${roomId}] Forwarded ${count} audio chunks to ${client.getProviderName()} (${audioData.length} bytes)`);
+      }
     } catch (error) {
       console.error(`[STT][${roomId}] Error sending audio:`, error);
       if (error instanceof Error) {
