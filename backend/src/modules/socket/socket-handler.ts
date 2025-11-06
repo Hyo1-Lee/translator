@@ -131,25 +131,27 @@ export class SocketHandler {
         },
         // Translation callback
         async (translationData) => {
-          // Save to database
+          // Save to database (only save primary translation - English for backward compatibility)
           await this.transcriptService.saveTranslation(
             translationData.roomId,
             translationData.korean,
-            translationData.english,
+            translationData.translations.en || translationData.translations[Object.keys(translationData.translations)[0]] || '',
             translationData.batchId
           );
 
-          // Broadcast to room
+          // Broadcast to room with all translations
           this.io.to(translationData.roomId).emit('translation-batch', {
             batchId: translationData.batchId,
             korean: translationData.korean,
-            english: translationData.english,
+            translations: translationData.translations,
             timestamp: translationData.timestamp.getTime()
           });
         },
         // Use custom prompt template
         room.roomSettings?.promptTemplate || 'general',
-        room.roomSettings?.customPrompt
+        room.roomSettings?.customPrompt,
+        // Pass target languages from room settings
+        room.roomSettings?.targetLanguages || ['en']
       );
 
       // Send room info to speaker
@@ -212,16 +214,19 @@ export class SocketHandler {
             await this.transcriptService.saveTranslation(
               translationData.roomId,
               translationData.korean,
-              translationData.english,
+              translationData.translations.en || translationData.translations[Object.keys(translationData.translations)[0]] || '',
               translationData.batchId
             );
             this.io.to(translationData.roomId).emit('translation-batch', {
               batchId: translationData.batchId,
               korean: translationData.korean,
-              english: translationData.english,
+              translations: translationData.translations,
               timestamp: translationData.timestamp.getTime()
             });
-          }
+          },
+          room.roomSettings?.promptTemplate || 'general',
+          room.roomSettings?.customPrompt,
+          room.roomSettings?.targetLanguages || ['en']
         );
       }
 
@@ -393,12 +398,12 @@ export class SocketHandler {
         await this.roomService.updateRoomPassword(roomId, settings.password);
       }
 
-      // If prompt template changed, restart STT client with new template
-      if (settings.promptTemplate || settings.customPrompt) {
+      // If prompt template or target languages changed, restart STT client
+      if (settings.promptTemplate || settings.customPrompt || settings.targetLanguages) {
         // Close existing client
         this.sttManager.removeClient(roomId);
 
-        // Recreate with new prompt
+        // Recreate with new settings
         await this.sttManager.createClient(
           roomId,
           async (transcriptData) => {
@@ -416,18 +421,19 @@ export class SocketHandler {
             await this.transcriptService.saveTranslation(
               translationData.roomId,
               translationData.korean,
-              translationData.english,
+              translationData.translations.en || translationData.translations[Object.keys(translationData.translations)[0]] || '',
               translationData.batchId
             );
             this.io.to(translationData.roomId).emit('translation-batch', {
               batchId: translationData.batchId,
               korean: translationData.korean,
-              english: translationData.english,
+              translations: translationData.translations,
               timestamp: translationData.timestamp.getTime()
             });
           },
           settings.promptTemplate || updatedSettings.promptTemplate,
-          settings.customPrompt || updatedSettings.customPrompt
+          settings.customPrompt || updatedSettings.customPrompt,
+          settings.targetLanguages || updatedSettings.targetLanguages || ['en']
         );
       }
 

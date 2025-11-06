@@ -51,6 +51,7 @@ export class STTManager {
   private textBuffers: Map<string, string[]> = new Map();
   private bufferTimers: Map<string, NodeJS.Timeout> = new Map();
   private roomContexts: Map<string, RoomContext> = new Map();
+  private roomTargetLanguages: Map<string, string[]> = new Map();
 
   constructor(config: STTConfig, translationService: TranslationService) {
     this.config = config;
@@ -63,7 +64,8 @@ export class STTManager {
     onTranscript: (data: TranscriptData) => void,
     onTranslation?: (data: any) => void,
     promptTemplate?: string,
-    customPrompt?: string
+    customPrompt?: string,
+    targetLanguages?: string[]
   ): Promise<void> {
     // Check if client already exists
     if (this.clients.has(roomId)) {
@@ -112,6 +114,8 @@ export class STTManager {
       summary: '',
       lastBatchText: ''
     });
+    // Store target languages for this room (default to English if not provided)
+    this.roomTargetLanguages.set(roomId, targetLanguages && targetLanguages.length > 0 ? targetLanguages : ['en']);
 
     // Handle transcripts
     client.on('transcript', async (result: any) => {
@@ -213,18 +217,31 @@ export class STTManager {
         return;
       }
 
+      // Get target languages for this room
+      const targetLanguages = this.roomTargetLanguages.get(roomId) || ['en'];
+
       // Build contextual prompt with previous translations
       const contextualKorean = this.buildContextualText(korean, context);
 
-      const translation = await this.translationService.translateWithContext(
-        korean,
-        contextualKorean,
-        context.summary,
-        'en'
-      );
+      // Translate to all target languages
+      const translations: Record<string, string> = {};
+      for (const lang of targetLanguages) {
+        const translation = await this.translationService.translateWithContext(
+          korean,
+          contextualKorean,
+          context.summary,
+          lang
+        );
 
-      if (translation) {
-        console.log(`[Translation][${roomId}] English: "${translation}"`);
+        if (translation) {
+          translations[lang] = translation;
+          console.log(`[Translation][${roomId}] ${lang.toUpperCase()}: "${translation}"`);
+        } else {
+          console.error(`[Translation][${roomId}] Translation to ${lang} returned null`);
+        }
+      }
+
+      if (Object.keys(translations).length > 0) {
         // Update context for next translation
         context.previousTranslations.push(korean);
         if (context.previousTranslations.length > 3) {
@@ -240,12 +257,12 @@ export class STTManager {
         onTranslation({
           roomId,
           korean,
-          english: translation,
+          translations,
           batchId: `batch-${Date.now()}`,
           timestamp: new Date()
         });
       } else {
-        console.error(`[Translation][${roomId}] Translation returned null`);
+        console.error(`[Translation][${roomId}] All translations returned null`);
       }
     }
   }
@@ -312,6 +329,9 @@ export class STTManager {
       client.disconnect();
       this.clients.delete(roomId);
       this.textBuffers.delete(roomId);
+      this.roomContexts.delete(roomId);
+      this.roomTargetLanguages.delete(roomId);
+      this.audioChunksSent.delete(roomId);
 
       // Clear timer
       const timer = this.bufferTimers.get(roomId);

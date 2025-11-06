@@ -9,6 +9,24 @@ import styles from "./listener.module.css";
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 const STORAGE_KEY = "listener_preferences";
 
+const LANGUAGE_MAP: Record<string, string> = {
+  ko: "한국어",
+  en: "English",
+  ja: "日本語",
+  zh: "中文",
+  "zh-TW": "繁體中文",
+  es: "Español",
+  fr: "Français",
+  de: "Deutsch",
+  ru: "Русский",
+  ar: "العربية",
+  pt: "Português",
+  vi: "Tiếng Việt",
+  th: "ไทย",
+  id: "Bahasa Indonesia",
+  hi: "हिन्दी",
+};
+
 export default function ListenerRoom() {
   const params = useParams();
   const router = useRouter();
@@ -23,6 +41,8 @@ export default function ListenerRoom() {
   const [isConnected, setIsConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [fontSize, setFontSize] = useState("medium");
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>(['en']);
+  const [selectedLanguage, setSelectedLanguage] = useState('en');
 
   // Password state
   const [needsPassword, setNeedsPassword] = useState(false);
@@ -76,6 +96,12 @@ export default function ListenerRoom() {
       setIsJoined(true);
       setNeedsPassword(false);
       setPasswordError("");
+
+      // Set available languages from room settings
+      if (data.roomSettings?.targetLanguages && data.roomSettings.targetLanguages.length > 0) {
+        setAvailableLanguages(data.roomSettings.targetLanguages);
+        setSelectedLanguage(data.roomSettings.targetLanguages[0]);
+      }
     });
 
     socketRef.current.on("translation-batch", (data: any) => {
@@ -84,7 +110,7 @@ export default function ListenerRoom() {
         {
           type: "translation",
           korean: data.korean,
-          english: data.english,
+          translations: data.translations || { en: data.english },
           timestamp: data.timestamp,
           isHistory: data.isHistory,
         },
@@ -149,7 +175,8 @@ export default function ListenerRoom() {
       if (item.type === "translation") {
         data += `[${formatTime(item.timestamp)}]\n`;
         data += `한국어: ${item.korean}\n`;
-        data += `English: ${item.english}\n\n`;
+        const translation = item.translations?.[selectedLanguage] || item.translations?.en || "";
+        data += `${LANGUAGE_MAP[selectedLanguage] || selectedLanguage}: ${translation}\n\n`;
       }
     });
 
@@ -248,6 +275,23 @@ export default function ListenerRoom() {
             </div>
           </div>
 
+          {availableLanguages.length > 1 && (
+            <div className={styles.controlItem}>
+              <label className={styles.label}>번역 언어</label>
+              <select
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className={styles.languageSelect}
+              >
+                {availableLanguages.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {LANGUAGE_MAP[lang] || lang}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <label className={styles.checkbox}>
             <input type="checkbox" checked={autoScroll} onChange={() => setAutoScroll(!autoScroll)} />
             <span>자동 스크롤</span>
@@ -275,7 +319,9 @@ export default function ListenerRoom() {
                       <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
                       <div className={styles.korean}>{item.korean}</div>
                       <div className={styles.divider}></div>
-                      <div className={styles.english}>{item.english}</div>
+                      <div className={styles.english}>
+                        {item.translations?.[selectedLanguage] || item.translations?.en || ""}
+                      </div>
                     </>
                   )}
                 </div>
