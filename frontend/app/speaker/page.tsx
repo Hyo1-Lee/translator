@@ -698,30 +698,39 @@ export default function Speaker() {
 
             {/* Target Languages */}
             <div className={styles.settingGroup}>
-              <label>번역 언어 (다중 선택)</label>
+              <label>번역 언어 (영어만 지원)</label>
               <div className={styles.languageGrid}>
-                {TARGET_LANGUAGES.map((lang) => (
-                  <label key={lang.code} className={styles.checkbox}>
-                    <input
-                      type="checkbox"
-                      checked={roomSettings.targetLanguages.includes(lang.code)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setRoomSettings({
-                            ...roomSettings,
-                            targetLanguages: [...roomSettings.targetLanguages, lang.code],
-                          });
-                        } else {
-                          setRoomSettings({
-                            ...roomSettings,
-                            targetLanguages: roomSettings.targetLanguages.filter((l) => l !== lang.code),
-                          });
-                        }
-                      }}
-                    />
-                    <span>{lang.name}</span>
-                  </label>
-                ))}
+                {TARGET_LANGUAGES.map((lang) => {
+                  const isEnglish = lang.code === "en";
+                  const isDisabled = !isEnglish;
+                  return (
+                    <label
+                      key={lang.code}
+                      className={`${styles.checkbox} ${isDisabled ? styles.disabled : ''}`}
+                      title={isDisabled ? "현재 영어만 지원됩니다" : ""}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={roomSettings.targetLanguages.includes(lang.code)}
+                        disabled={isDisabled}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setRoomSettings({
+                              ...roomSettings,
+                              targetLanguages: [...roomSettings.targetLanguages, lang.code],
+                            });
+                          } else {
+                            setRoomSettings({
+                              ...roomSettings,
+                              targetLanguages: roomSettings.targetLanguages.filter((l) => l !== lang.code),
+                            });
+                          }
+                        }}
+                      />
+                      <span>{lang.name}</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
