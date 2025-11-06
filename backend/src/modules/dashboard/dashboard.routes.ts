@@ -40,13 +40,38 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
 
       const rooms = await Room.findAll({
         where: { userId },
-        include: [RoomSettings],
+        include: [
+          RoomSettings,
+          {
+            model: Listener,
+            attributes: ['id']
+          },
+          {
+            model: Transcript,
+            attributes: ['id']
+          }
+        ],
         order: [['createdAt', 'DESC']]
+      });
+
+      // Transform the data to include counts
+      const roomsData = rooms.map((room: any) => {
+        const roomJson = room.toJSON();
+        return {
+          ...roomJson,
+          _count: {
+            listeners: roomJson.listeners?.length || 0,
+            transcripts: roomJson.transcripts?.length || 0
+          },
+          // Remove the full arrays to reduce payload size
+          listeners: undefined,
+          transcripts: undefined
+        };
       });
 
       return reply.send({
         success: true,
-        data: rooms,
+        data: roomsData,
       });
     } catch (error: any) {
       console.error('[Dashboard] Get rooms error:', error);

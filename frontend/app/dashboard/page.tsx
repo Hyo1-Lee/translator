@@ -376,7 +376,7 @@ export default function Dashboard() {
                           </div>
 
                           <div className={styles.roomActions}>
-                            {room.status === 'ACTIVE' && (
+                            {(room.status === 'ACTIVE' || room.status === 'PAUSED') && (
                               <button
                                 onClick={() => router.push(`/speaker?room=${room.roomCode}`)}
                                 className={styles.actionButtonPrimary}
@@ -385,7 +385,7 @@ export default function Dashboard() {
                                   <circle cx="12" cy="12" r="10"/>
                                   <polygon points="10 8 16 12 10 16 10 8"/>
                                 </svg>
-                                {t('dashboard.resume')}
+                                {room.status === 'ACTIVE' ? t('dashboard.resume') : '재입장'}
                               </button>
                             )}
                             <button
