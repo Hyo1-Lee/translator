@@ -170,6 +170,52 @@ export default function Dashboard() {
     }
   };
 
+  const downloadTranscript = async (transcriptId: string, roomName: string) => {
+    try {
+      // Fetch transcript details
+      const response = await fetch(`${BACKEND_URL}/api/v1/dashboard/transcripts/${transcriptId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch transcript');
+      }
+
+      const data = await response.json();
+      const transcriptsData = data.data.transcriptsData || [];
+
+      // Format transcript content
+      let content = `${roomName}\n`;
+      content += `Room Code: ${data.data.roomCode}\n`;
+      content += `Saved at: ${formatDate(data.data.createdAt)}\n`;
+      content += `Total Transcripts: ${transcriptsData.length}\n`;
+      content += '='.repeat(80) + '\n\n';
+
+      transcriptsData.forEach((item: any, index: number) => {
+        const timestamp = new Date(item.timestamp).toLocaleString('ko-KR');
+        content += `[${index + 1}] ${timestamp}\n`;
+        content += `KR: ${item.korean}\n`;
+        content += `EN: ${item.english}\n\n`;
+      });
+
+      // Create and download file
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${roomName.replace(/[^a-zA-Z0-9가-힣]/g, '_')}_${data.data.roomCode}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download transcript:', error);
+      alert('다운로드에 실패했습니다.');
+    }
+  };
+
   const deleteTranscript = async (transcriptId: string) => {
     if (!confirm(t('dashboard.confirmDeleteTranscript') || 'Are you sure you want to delete this transcript?')) {
       return;
@@ -488,7 +534,10 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div className={styles.transcriptActions}>
-                            <button className={styles.actionButton}>
+                            <button
+                              onClick={() => downloadTranscript(transcript.id, transcript.roomName || `Room ${transcript.roomCode}`)}
+                              className={styles.actionButton}
+                            >
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="7 10 12 15 17 10"/>
