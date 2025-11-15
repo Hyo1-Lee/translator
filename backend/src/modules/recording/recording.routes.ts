@@ -1,11 +1,10 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { RecordingService } from './recording.service';
-import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
 
-export async function recordingRoutes(fastify: FastifyInstance, prisma: PrismaClient) {
-  const recordingService = new RecordingService(prisma);
-  const authService = new AuthService(prisma);
+export async function recordingRoutes(fastify: FastifyInstance) {
+  const recordingService = new RecordingService();
+  const authService = new AuthService();
 
   // Middleware to verify JWT token
   const authenticate = async (request: FastifyRequest, reply: FastifyReply) => {

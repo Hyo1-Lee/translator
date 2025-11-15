@@ -78,7 +78,7 @@ async function bootstrap() {
   // Recording Routes
   fastify.register(async (recordingFastify) => {
     const { recordingRoutes } = await import('./modules/recording/recording.routes');
-    await recordingRoutes(recordingFastify, prisma);
+    await recordingRoutes(recordingFastify);
   }, { prefix: '/api/v1/recordings' });
 
   // API Routes
