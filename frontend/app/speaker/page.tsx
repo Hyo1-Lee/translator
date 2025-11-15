@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
 import QRCode from "qrcode";
 import styles from "./speaker.module.css";
@@ -54,8 +55,9 @@ interface RoomSettings {
 }
 
 export default function Speaker() {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const router = useRouter();
+  const { addToast } = useToast();
   const searchParams = useSearchParams();
 
   // State management
@@ -176,6 +178,11 @@ export default function Speaker() {
   useEffect(() => {
     socketRef.current = io(BACKEND_URL, {
       transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     socketRef.current.on("connect", () => {
@@ -233,10 +240,46 @@ export default function Speaker() {
       }
     });
 
-    socketRef.current.on("disconnect", () => {
-      console.log("Disconnected from server");
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("Disconnected from server:", reason);
       setIsConnected(false);
       setStatus("연결 끊김");
+
+      // Stop recording on disconnect
+      if (isRecording) {
+        stopRecording();
+      }
+    });
+
+    socketRef.current.on("reconnect", (attemptNumber) => {
+      console.log("Reconnected to server after", attemptNumber, "attempts");
+      setIsConnected(true);
+      setStatus("재연결됨");
+
+      // Try to rejoin room if we have saved room info
+      const savedRoom = loadSavedRoom();
+      if (savedRoom && savedRoom.roomCode && roomId) {
+        const name = savedRoom.speakerName || user?.name || "Speaker";
+        socketRef.current.emit("create-room", {
+          name,
+          userId: user?.id,
+          existingRoomCode: savedRoom.roomCode,
+          promptTemplate: "general",
+          targetLanguages: ["en"],
+          maxListeners: 100
+        });
+      }
+    });
+
+    socketRef.current.on("reconnect_attempt", (attemptNumber) => {
+      console.log("Reconnection attempt:", attemptNumber);
+      setStatus(`재연결 시도 중 (${attemptNumber}/10)`);
+    });
+
+    socketRef.current.on("reconnect_failed", () => {
+      console.log("Reconnection failed");
+      setStatus("재연결 실패");
+      alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
     socketRef.current.on("room-created", (data: any) => {
@@ -342,10 +385,13 @@ export default function Speaker() {
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
 
-      const bufferSize = 4096;
+      // Optimized buffer size - 2048 for lower latency
+      const bufferSize = 2048;
       processorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
 
       let isProcessing = true;
+      let frameCount = 0;
+      const SEND_EVERY_N_FRAMES = 2; // Send every 2 frames to reduce CPU load
       let audioChunksSent = 0;
 
       processorRef.current.onaudioprocess = (e: any) => {
@@ -356,22 +402,32 @@ export default function Speaker() {
           return;
         }
 
+        // Skip frames to reduce CPU usage
+        frameCount++;
+        if (frameCount % SEND_EVERY_N_FRAMES !== 0) return;
+
         const inputData = e.inputBuffer.getChannelData(0);
 
-        let maxLevel = 0;
+        // Calculate RMS for better noise detection
+        let sum = 0;
         for (let i = 0; i < inputData.length; i++) {
-          maxLevel = Math.max(maxLevel, Math.abs(inputData[i]));
+          sum += inputData[i] * inputData[i];
         }
+        const rms = Math.sqrt(sum / inputData.length);
 
-        if (maxLevel > 0.0005) {
+        // Adaptive threshold: 0.01 for normal speech
+        if (rms > 0.01) {
           const int16Data = new Int16Array(inputData.length);
+
+          // Optimized audio conversion with slight amplification
           for (let i = 0; i < inputData.length; i++) {
             const s = Math.max(-1, Math.min(1, inputData[i]));
-            const amplified = s * 1.2;
+            const amplified = s * 1.5; // Increased from 1.2 for clearer audio
             const clamped = Math.max(-1, Math.min(1, amplified));
             int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
           }
 
+          // Convert to base64 efficiently
           const base64Audio = btoa(String.fromCharCode(...new Uint8Array(int16Data.buffer)));
 
           socketRef.current.emit("audio-stream", {
@@ -473,6 +529,52 @@ export default function Speaker() {
     }
   };
 
+  // Save recording
+  const saveRecording = async () => {
+    if (!user || !accessToken) {
+      addToast('로그인이 필요합니다', 'error');
+      router.push('/login');
+      return;
+    }
+
+    if (!roomId) {
+      addToast('저장할 세션이 없습니다', 'error');
+      return;
+    }
+
+    if (transcripts.length === 0) {
+      addToast('저장할 번역 내용이 없습니다', 'error');
+      return;
+    }
+
+    const roomName = prompt('세션 이름을 입력하세요', roomSettings.roomTitle || `Session ${roomId}`);
+    if (!roomName) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/v1/recordings/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          roomCode: roomId,
+          roomName
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        addToast('세션이 저장되었습니다', 'success');
+      } else {
+        addToast(data.message || '저장에 실패했습니다', 'error');
+      }
+    } catch (error) {
+      console.error('Save recording error:', error);
+      addToast('저장 중 오류가 발생했습니다', 'error');
+    }
+  };
+
   // Copy to clipboard
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -556,6 +658,19 @@ export default function Speaker() {
               )}
 
               <div className={styles.actionButtons}>
+                <button
+                  onClick={saveRecording}
+                  className={styles.saveButton}
+                  disabled={!user || transcripts.length === 0}
+                  title={!user ? "로그인이 필요합니다" : transcripts.length === 0 ? "저장할 내용이 없습니다" : "세션 저장"}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                  세션 저장
+                </button>
                 <button onClick={() => setShowSettingsModal(true)} className={styles.settingsButtonNew}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="3"/>

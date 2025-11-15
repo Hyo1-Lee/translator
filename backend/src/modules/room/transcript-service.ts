@@ -27,7 +27,8 @@ export class TranscriptService {
     roomCode: string,
     korean: string,
     english: string,
-    batchId?: string
+    batchId?: string,
+    translations?: string | null
   ): Promise<any> {
     const room = await Room.findOne({
       where: { roomCode }
@@ -41,7 +42,8 @@ export class TranscriptService {
       roomId: room.id,
       korean,
       english,
-      batchId
+      batchId,
+      translations
     });
   }
 

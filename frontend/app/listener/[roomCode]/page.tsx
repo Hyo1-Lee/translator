@@ -73,6 +73,11 @@ export default function ListenerRoom() {
   useEffect(() => {
     socketRef.current = io(BACKEND_URL, {
       transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     socketRef.current.on("connect", () => {
@@ -80,9 +85,32 @@ export default function ListenerRoom() {
       setIsConnected(true);
     });
 
-    socketRef.current.on("disconnect", () => {
-      console.log("Disconnected from server");
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("Disconnected from server:", reason);
       setIsConnected(false);
+    });
+
+    socketRef.current.on("reconnect", (attemptNumber) => {
+      console.log("Reconnected to server after", attemptNumber, "attempts");
+      setIsConnected(true);
+
+      // Rejoin room after reconnection
+      if (isJoined) {
+        const name = listenerName || user?.name || "Guest";
+        socketRef.current.emit("join-room", {
+          roomId: roomCode,
+          name,
+        });
+      }
+    });
+
+    socketRef.current.on("reconnect_attempt", (attemptNumber) => {
+      console.log("Reconnection attempt:", attemptNumber);
+    });
+
+    socketRef.current.on("reconnect_failed", () => {
+      console.log("Reconnection failed");
+      alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
     socketRef.current.on("password-required", () => {
@@ -110,6 +138,7 @@ export default function ListenerRoom() {
         {
           type: "translation",
           korean: data.korean,
+          english: data.english,
           translations: data.translations || { en: data.english },
           timestamp: data.timestamp,
           isHistory: data.isHistory,
@@ -169,14 +198,15 @@ export default function ListenerRoom() {
 
   // Export transcripts
   const exportTranscripts = () => {
-    let data = `Room: ${roomCode}\nSpeaker: ${speakerName}\nDate: ${new Date().toLocaleString()}\n\n`;
+    const langName = LANGUAGE_MAP[selectedLanguage] || selectedLanguage;
+    let data = `Room: ${roomCode}\nSpeaker: ${speakerName}\nLanguage: ${langName}\nDate: ${new Date().toLocaleString()}\n\n`;
 
     transcripts.forEach((item) => {
       if (item.type === "translation") {
         data += `[${formatTime(item.timestamp)}]\n`;
         data += `한국어: ${item.korean}\n`;
-        const translation = item.translations?.[selectedLanguage] || item.translations?.en || "";
-        data += `${LANGUAGE_MAP[selectedLanguage] || selectedLanguage}: ${translation}\n\n`;
+        const translation = item.translations?.[selectedLanguage] || item.translations?.en || item.english || "";
+        data += `${langName}: ${translation}\n\n`;
       }
     });
 
@@ -184,7 +214,7 @@ export default function ListenerRoom() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transcript_${roomCode}_${new Date().toISOString().split("T")[0]}.txt`;
+    a.download = `transcript_${roomCode}_${selectedLanguage}_${new Date().toISOString().split("T")[0]}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -320,7 +350,7 @@ export default function ListenerRoom() {
                       <div className={styles.korean}>{item.korean}</div>
                       <div className={styles.divider}></div>
                       <div className={styles.english}>
-                        {item.translations?.[selectedLanguage] || item.translations?.en || ""}
+                        {item.translations?.[selectedLanguage] || item.translations?.en || item.english || ""}
                       </div>
                     </>
                   )}
