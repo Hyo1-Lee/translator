@@ -1,9 +1,13 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../auth/auth.service';
+import { Room, RoomStatus } from '../../models/Room';
+import { RoomSettings } from '../../models/RoomSettings';
+import { Transcript } from '../../models/Transcript';
+import { Listener } from '../../models/Listener';
+import { SavedTranscript } from '../../models/SavedTranscript';
 
-export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaClient) {
-  const authService = new AuthService(prisma);
+export async function dashboardRoutes(fastify: FastifyInstance) {
+  const authService = new AuthService();
 
   // Middleware to verify JWT token
   const verifyAuth = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -34,27 +38,40 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
     try {
       const userId = (request as any).userId;
 
-      const rooms = await prisma.room.findMany({
-        where: {
-          userId,
-        },
-        include: {
-          roomSettings: true,
-          _count: {
-            select: {
-              listeners: true,
-              transcripts: true,
-            },
+      const rooms = await Room.findAll({
+        where: { userId },
+        include: [
+          RoomSettings,
+          {
+            model: Listener,
+            attributes: ['id']
           },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
+          {
+            model: Transcript,
+            attributes: ['id']
+          }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+
+      // Transform the data to include counts
+      const roomsData = rooms.map((room: any) => {
+        const roomJson = room.toJSON();
+        return {
+          ...roomJson,
+          _count: {
+            listeners: roomJson.listeners?.length || 0,
+            transcripts: roomJson.transcripts?.length || 0
+          },
+          // Remove the full arrays to reduce payload size
+          listeners: undefined,
+          transcripts: undefined
+        };
       });
 
       return reply.send({
         success: true,
-        data: rooms,
+        data: roomsData,
       });
     } catch (error: any) {
       console.error('[Dashboard] Get rooms error:', error);
@@ -73,40 +90,35 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
       const userId = (request as any).userId;
 
       // Total rooms
-      const totalRooms = await prisma.room.count({
+      const totalRooms = await Room.count({
         where: { userId },
       });
 
       // Active rooms
-      const activeRooms = await prisma.room.count({
+      const activeRooms = await Room.count({
         where: {
           userId,
-          status: 'ACTIVE',
+          status: RoomStatus.ACTIVE,
         },
       });
 
       // Total transcripts
-      const totalTranscripts = await prisma.transcript.count({
-        where: {
-          room: {
-            userId,
-          },
-        },
+      const totalTranscripts = await Transcript.count({
+        include: [{
+          model: Room,
+          where: { userId },
+          required: true
+        }]
       });
 
-      // Total listeners (unique)
-      const rooms = await prisma.room.findMany({
-        where: { userId },
-        include: {
-          _count: {
-            select: {
-              listeners: true,
-            },
-          },
-        },
+      // Total listeners
+      const totalListeners = await Listener.count({
+        include: [{
+          model: Room,
+          where: { userId },
+          required: true
+        }]
       });
-
-      const totalListeners = rooms.reduce((sum, room) => sum + room._count.listeners, 0);
 
       return reply.send({
         success: true,
@@ -133,11 +145,9 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
     try {
       const userId = (request as any).userId;
 
-      const savedTranscripts = await prisma.savedTranscript.findMany({
+      const savedTranscripts = await SavedTranscript.findAll({
         where: { userId },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        order: [['createdAt', 'DESC']]
       });
 
       return reply.send({
@@ -154,15 +164,15 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
   });
 
   // Delete a room
-  fastify.delete('/rooms/:roomId', {
+  fastify.delete<{ Params: { roomId: string } }>('/rooms/:roomId', {
     preHandler: verifyAuth,
-  }, async (request: FastifyRequest<{ Params: { roomId: string } }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const userId = (request as any).userId;
       const { roomId } = request.params;
 
       // Check if room belongs to user
-      const room = await prisma.room.findFirst({
+      const room = await Room.findOne({
         where: {
           id: roomId,
           userId,
@@ -177,7 +187,7 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
       }
 
       // Delete room (cascade will delete related data)
-      await prisma.room.delete({
+      await Room.destroy({
         where: { id: roomId },
       });
 
@@ -194,46 +204,120 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
     }
   });
 
-  // Save a transcript
-  fastify.post('/transcripts', {
+  // Save a session (room with all transcripts)
+  fastify.post<{ Body: { roomId: string; roomName?: string } }>('/sessions/save', {
     preHandler: verifyAuth,
-  }, async (request: FastifyRequest<{ Body: { roomCode: string; title: string; content: string } }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const userId = (request as any).userId;
-      const { roomCode, title, content } = request.body;
+      const { roomId, roomName } = request.body;
 
-      const savedTranscript = await prisma.savedTranscript.create({
-        data: {
+      // Get room and verify ownership
+      const room = await Room.findOne({
+        where: {
+          id: roomId,
           userId,
-          roomCode,
-          title,
-          content,
         },
+        include: [
+          {
+            model: Transcript,
+            attributes: ['korean', 'english', 'timestamp'],
+            order: [['timestamp', 'ASC']]
+          }
+        ]
+      });
+
+      if (!room) {
+        return reply.code(404).send({
+          success: false,
+          message: 'Room not found or unauthorized',
+        });
+      }
+
+      // Format transcripts as JSON string
+      const transcriptsData = (room as any).transcripts?.map((t: any) => ({
+        korean: t.korean,
+        english: t.english,
+        timestamp: t.timestamp
+      })) || [];
+
+      const savedTranscript = await SavedTranscript.create({
+        userId,
+        roomCode: room.roomCode,
+        roomName: roomName || room.speakerName || `Session ${room.roomCode}`,
+        transcripts: JSON.stringify(transcriptsData),
       });
 
       return reply.send({
         success: true,
         data: savedTranscript,
+        message: `Session saved with ${transcriptsData.length} transcripts`,
       });
     } catch (error: any) {
-      console.error('[Dashboard] Save transcript error:', error);
+      console.error('[Dashboard] Save session error:', error);
       return reply.code(500).send({
         success: false,
-        message: error.message || 'Failed to save transcript',
+        message: error.message || 'Failed to save session',
+      });
+    }
+  });
+
+  // Get saved transcript detail
+  fastify.get<{ Params: { transcriptId: string } }>('/transcripts/:transcriptId', {
+    preHandler: verifyAuth,
+  }, async (request, reply) => {
+    try {
+      const userId = (request as any).userId;
+      const { transcriptId } = request.params;
+
+      const transcript = await SavedTranscript.findOne({
+        where: {
+          id: transcriptId,
+          userId,
+        },
+      });
+
+      if (!transcript) {
+        return reply.code(404).send({
+          success: false,
+          message: 'Transcript not found or unauthorized',
+        });
+      }
+
+      // Parse transcripts JSON
+      let transcriptsData = [];
+      try {
+        transcriptsData = JSON.parse(transcript.transcripts || '[]');
+      } catch (e) {
+        console.error('Failed to parse transcripts:', e);
+      }
+
+      return reply.send({
+        success: true,
+        data: {
+          ...transcript.toJSON(),
+          transcriptsData
+        },
+      });
+    } catch (error: any) {
+      console.error('[Dashboard] Get transcript detail error:', error);
+      return reply.code(500).send({
+        success: false,
+        message: error.message || 'Failed to fetch transcript',
       });
     }
   });
 
   // Delete a saved transcript
-  fastify.delete('/transcripts/:transcriptId', {
+  fastify.delete<{ Params: { transcriptId: string } }>('/transcripts/:transcriptId', {
     preHandler: verifyAuth,
-  }, async (request: FastifyRequest<{ Params: { transcriptId: string } }>, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const userId = (request as any).userId;
       const { transcriptId } = request.params;
 
       // Check if transcript belongs to user
-      const transcript = await prisma.savedTranscript.findFirst({
+      const transcript = await SavedTranscript.findOne({
         where: {
           id: transcriptId,
           userId,
@@ -248,7 +332,7 @@ export async function dashboardRoutes(fastify: FastifyInstance, prisma: PrismaCl
       }
 
       // Delete transcript
-      await prisma.savedTranscript.delete({
+      await SavedTranscript.destroy({
         where: { id: transcriptId },
       });
 

@@ -21,6 +21,12 @@ export class TranslationService {
     try {
       // First, correct any STT errors
       const correctedText = await this.correctSttErrors(text);
+
+      // If target language is Korean, just return the corrected text
+      if (targetLanguage === 'ko') {
+        return correctedText;
+      }
+
       const { langName, systemPrompt } = this.getLanguageConfig(targetLanguage);
 
       const response = await this.openai.chat.completions.create({
@@ -96,6 +102,9 @@ export class TranslationService {
             role: 'system',
             content: `You are a professional translator specializing in religious speeches from The Church of Jesus Christ of Latter-day Saints (LDS/Mormon Church).
 
+SOURCE LANGUAGE: Korean (한국어)
+TARGET LANGUAGE: ${targetLanguage === 'en' ? 'English' : targetLanguage}
+
 CONTEXT: This is a religious discourse/sermon in a formal LDS church setting.
 
 CONTEXT-AWARE TRANSLATION:
@@ -132,14 +141,21 @@ TRANSLATION APPROACH:
 1. AGGRESSIVELY correct STT errors - the text likely contains many misrecognized religious terms
 2. When you see garbled text that sounds like religious terms, correct it boldly
 3. Maintain formal, reverent tone appropriate for religious discourse
-4. If a sentence seems nonsensical, reconstruct it based on religious context
+4. If a sentence seems nonsensical, reconstruct it based on religious context and the provided summary
 5. Preserve scriptural language style and dignity
+6. Use previous context to maintain consistency in terminology and style
 
 IMPORTANT:
 - Fix ALL obvious speech recognition errors
 - Reconstruct damaged religious terminology
 - Maintain the reverent, formal tone of religious speech
-- Use proper capitalization for deity and religious titles`
+- Use proper capitalization for deity and religious titles
+- Ensure smooth flow with previous segments using the context provided
+
+OUTPUT REQUIREMENTS:
+- Return ONLY the translated text
+- Do NOT include explanations, notes, or meta-commentary
+- Ensure the translation reads naturally and maintains continuity with previous segments`
           },
           {
             role: 'user',

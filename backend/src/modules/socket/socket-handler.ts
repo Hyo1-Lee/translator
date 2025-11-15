@@ -84,10 +84,14 @@ export class SocketHandler {
 
       // Check if speaker wants to rejoin existing room
       if (existingRoomCode) {
-        room = await this.roomService.getRoom(existingRoomCode);
-        if (room && room.status !== 'ENDED') {
+        const existingRoom = await this.roomService.getRoom(existingRoomCode);
+        if (existingRoom && existingRoom.status !== 'ENDED') {
           // Update speaker socket ID
-          room = await this.roomService.reconnectSpeaker(room.speakerId, socket.id);
+          room = await this.roomService.reconnectSpeaker(existingRoom.speakerId, socket.id);
+          if (!room) {
+            // If reconnect failed, use existing room
+            room = existingRoom;
+          }
         }
       }
 
@@ -302,6 +306,8 @@ export class SocketHandler {
   }
 
   // Handle audio stream
+  private audioChunksReceived: Map<string, number> = new Map();
+
   private async handleAudioStream(socket: Socket, data: AudioStreamData): Promise<void> {
     try {
       const { roomId, audio } = data;
@@ -309,15 +315,24 @@ export class SocketHandler {
       // Verify speaker
       const room = await this.roomService.getRoom(roomId);
       if (!room) {
+        console.warn(`[Audio] Room not found: ${roomId}`);
         return;
       }
 
       if (room.speakerId !== socket.id) {
+        console.warn(`[Audio] Unauthorized audio stream attempt for room ${roomId}`);
         return;
       }
 
       // Convert base64 to buffer
       const audioBuffer = Buffer.from(audio, 'base64');
+
+      // Log audio reception
+      const count = (this.audioChunksReceived.get(roomId) || 0) + 1;
+      this.audioChunksReceived.set(roomId, count);
+      if (count === 1 || count % 100 === 0) {
+        console.log(`[Audio][${roomId}] Received ${count} audio chunks (${audioBuffer.length} bytes)`);
+      }
 
       // Send to STT
       this.sttManager.sendAudio(roomId, audioBuffer);
@@ -350,12 +365,27 @@ export class SocketHandler {
           }
         }
 
+        // Handle null or invalid timestamps
+        let timestampValue: number;
+        if (translation.timestamp && translation.timestamp instanceof Date) {
+          timestampValue = translation.timestamp.getTime();
+        } else if (translation.timestamp) {
+          // Try to parse if it's a string or number
+          timestampValue = new Date(translation.timestamp).getTime();
+        } else if (translation.createdAt) {
+          // Fallback to createdAt
+          timestampValue = new Date(translation.createdAt).getTime();
+        } else {
+          // Last resort: use current time
+          timestampValue = Date.now();
+        }
+
         socket.emit('translation-batch', {
           batchId: translation.batchId || translation.id,
           korean: translation.korean,
           english: translation.english,
           translations: allTranslations,
-          timestamp: translation.timestamp.getTime(),
+          timestamp: timestampValue,
           isHistory: true
         });
       });
@@ -395,7 +425,7 @@ export class SocketHandler {
       // If prompt template or target languages changed, restart STT client
       if (settings.promptTemplate || settings.customPrompt || settings.targetLanguages) {
         // Close existing client
-        this.sttManager.closeClient(roomId);
+        this.sttManager.removeClient(roomId);
 
         // Parse target languages
         const targetLanguages = settings.targetLanguages ||
@@ -449,7 +479,17 @@ export class SocketHandler {
   // Handle disconnect
   private async handleDisconnect(socket: Socket): Promise<void> {
     try {
+      // Get rooms this socket was part of before disconnect
+      const rooms = Array.from(socket.rooms).filter(room => room !== socket.id);
+
       await this.roomService.handleDisconnect(socket.id);
+
+      // Update listener count for affected rooms
+      for (const roomId of rooms) {
+        const listenerCount = await this.roomService.getListenerCount(roomId);
+        this.io.to(roomId).emit('listener-count', { count: listenerCount });
+        console.log(`[Disconnect] Updated listener count for room ${roomId}: ${listenerCount}`);
+      }
 
       // Check if it was a speaker and clean up STT client
       // Implementation depends on your needs

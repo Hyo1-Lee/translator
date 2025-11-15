@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
@@ -28,6 +28,7 @@ const PROMPT_TEMPLATES = [
 
 // Target languages
 const TARGET_LANGUAGES = [
+  { code: "ko", name: "한국어" },
   { code: "en", name: "English" },
   { code: "ja", name: "日本語" },
   { code: "zh", name: "中文 (简体)" },
@@ -56,7 +57,8 @@ interface RoomSettings {
 export default function Speaker() {
   const { user, accessToken } = useAuth();
   const router = useRouter();
-  const toast = useToast();
+  const { addToast } = useToast();
+  const searchParams = useSearchParams();
 
   // State management
   const [roomId, setRoomId] = useState("");
@@ -159,6 +161,19 @@ export default function Speaker() {
     setShowSettingsModal(false);
   }, [user, speakerName, roomSettings]);
 
+  // Update room settings (without changing room code)
+  const updateRoomSettings = useCallback(() => {
+    if (!socketRef.current || !roomId) return;
+
+    socketRef.current.emit("update-settings", {
+      roomId,
+      settings: roomSettings
+    });
+
+    setShowSettingsModal(false);
+    alert("설정이 업데이트되었습니다!");
+  }, [roomId, roomSettings]);
+
   // Initialize socket connection
   useEffect(() => {
     socketRef.current = io(BACKEND_URL, {
@@ -175,7 +190,37 @@ export default function Speaker() {
       setIsConnected(true);
       setStatus("연결됨");
 
-      // Check for saved room
+      // Check URL parameters
+      const roomParam = searchParams.get("room");
+      const forceNew = searchParams.get("forceNew");
+
+      // Force new room - clear localStorage and show settings modal
+      if (forceNew === "true") {
+        clearRoomInfo();
+        setShowSettingsModal(true);
+        // Clear URL parameter
+        router.replace("/speaker");
+        return;
+      }
+
+      // Rejoin specific room from URL parameter (from dashboard)
+      if (roomParam) {
+        const name = user?.name || "Speaker";
+        setSpeakerName(name);
+        socketRef.current.emit("create-room", {
+          name,
+          userId: user?.id,
+          existingRoomCode: roomParam,
+          promptTemplate: "general",
+          targetLanguages: ["en"],
+          maxListeners: 100
+        });
+        // Clear URL parameter after processing
+        router.replace("/speaker");
+        return;
+      }
+
+      // Check for saved room in localStorage
       const savedRoom = loadSavedRoom();
       if (savedRoom && savedRoom.roomCode) {
         // Try to rejoin existing room
@@ -185,7 +230,6 @@ export default function Speaker() {
           name,
           userId: user?.id,
           existingRoomCode: savedRoom.roomCode,
-          // Include default settings for rejoin
           promptTemplate: "general",
           targetLanguages: ["en"],
           maxListeners: 100
@@ -261,30 +305,40 @@ export default function Speaker() {
 
     // Listen for transcripts
     socketRef.current.on("stt-text", (data: any) => {
-      if (!data.isHistory) {
-        setTranscripts((prev) => [
-          ...prev.slice(-19),
-          {
-            type: "stt",
-            text: data.text,
-            timestamp: data.timestamp,
-          },
-        ]);
-      }
+      setTranscripts((prev) => {
+        const newTranscript = {
+          type: "stt",
+          text: data.text,
+          timestamp: data.timestamp,
+          isHistory: data.isHistory || false,
+        };
+
+        // If it's history, add at the beginning; otherwise add at the end
+        if (data.isHistory) {
+          return [...prev, newTranscript];
+        } else {
+          return [...prev.slice(-19), newTranscript];
+        }
+      });
     });
 
     socketRef.current.on("translation-batch", (data: any) => {
-      if (!data.isHistory) {
-        setTranscripts((prev) => [
-          ...prev.slice(-19),
-          {
-            type: "translation",
-            korean: data.korean,
-            english: data.english,
-            timestamp: data.timestamp,
-          },
-        ]);
-      }
+      setTranscripts((prev) => {
+        const newTranscript = {
+          type: "translation",
+          korean: data.korean,
+          english: data.english,
+          timestamp: data.timestamp,
+          isHistory: data.isHistory || false,
+        };
+
+        // If it's history, add at the beginning; otherwise add at the end
+        if (data.isHistory) {
+          return [...prev, newTranscript];
+        } else {
+          return [...prev.slice(-19), newTranscript];
+        }
+      });
     });
 
     socketRef.current.on("error", (data: any) => {
@@ -308,7 +362,7 @@ export default function Speaker() {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          sampleRate: 16000,
+          sampleRate: 24000,
           sampleSize: 16,
           echoCancellation: true,
           noiseSuppression: true,
@@ -319,8 +373,11 @@ export default function Speaker() {
       streamRef.current = stream;
 
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000,
+        sampleRate: 24000,
       });
+
+      // Log actual sample rate (browsers may not honor requested rate)
+      console.log(`[Audio] Requested: 24000 Hz, Actual: ${audioContextRef.current.sampleRate} Hz`);
 
       const source = audioContextRef.current.createMediaStreamSource(stream);
 
@@ -335,9 +392,15 @@ export default function Speaker() {
       let isProcessing = true;
       let frameCount = 0;
       const SEND_EVERY_N_FRAMES = 2; // Send every 2 frames to reduce CPU load
+      let audioChunksSent = 0;
 
       processorRef.current.onaudioprocess = (e: any) => {
-        if (!isProcessing || !socketRef.current || !roomId) return;
+        if (!isProcessing || !socketRef.current || !roomId) {
+          if (!roomId && audioChunksSent === 0) {
+            console.warn("[Audio] Cannot send audio: roomId is missing");
+          }
+          return;
+        }
 
         // Skip frames to reduce CPU usage
         frameCount++;
@@ -371,6 +434,11 @@ export default function Speaker() {
             roomId,
             audio: base64Audio,
           });
+
+          audioChunksSent++;
+          if (audioChunksSent === 1 || audioChunksSent % 100 === 0) {
+            console.log(`[Audio] Sent ${audioChunksSent} chunks to server (roomId: ${roomId})`);
+          }
         }
       };
 
@@ -450,25 +518,32 @@ export default function Speaker() {
       setRoomId("");
       setTranscripts([]);
       setQrCodeUrl("");
-      setShowSettingsModal(true);
+
+      // Disconnect socket to ensure clean state
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+
+      // Navigate with forceNew parameter
+      router.push("/speaker?forceNew=true");
     }
   };
 
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      toast.error('로그인이 필요합니다');
+      addToast('로그인이 필요합니다', 'error');
       router.push('/login');
       return;
     }
 
     if (!roomId) {
-      toast.error('저장할 세션이 없습니다');
+      addToast('저장할 세션이 없습니다', 'error');
       return;
     }
 
     if (transcripts.length === 0) {
-      toast.error('저장할 번역 내용이 없습니다');
+      addToast('저장할 번역 내용이 없습니다', 'error');
       return;
     }
 
@@ -490,13 +565,13 @@ export default function Speaker() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success('세션이 저장되었습니다');
+        addToast('세션이 저장되었습니다', 'success');
       } else {
-        toast.error(data.message || '저장에 실패했습니다');
+        addToast(data.message || '저장에 실패했습니다', 'error');
       }
     } catch (error) {
       console.error('Save recording error:', error);
-      toast.error('저장 중 오류가 발생했습니다');
+      addToast('저장 중 오류가 발생했습니다', 'error');
     }
   };
 
@@ -738,30 +813,39 @@ export default function Speaker() {
 
             {/* Target Languages */}
             <div className={styles.settingGroup}>
-              <label>번역 언어 (다중 선택)</label>
+              <label>번역 언어 (영어만 지원)</label>
               <div className={styles.languageGrid}>
-                {TARGET_LANGUAGES.map((lang) => (
-                  <label key={lang.code} className={styles.checkbox}>
-                    <input
-                      type="checkbox"
-                      checked={roomSettings.targetLanguages.includes(lang.code)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setRoomSettings({
-                            ...roomSettings,
-                            targetLanguages: [...roomSettings.targetLanguages, lang.code],
-                          });
-                        } else {
-                          setRoomSettings({
-                            ...roomSettings,
-                            targetLanguages: roomSettings.targetLanguages.filter((l) => l !== lang.code),
-                          });
-                        }
-                      }}
-                    />
-                    <span>{lang.name}</span>
-                  </label>
-                ))}
+                {TARGET_LANGUAGES.map((lang) => {
+                  const isEnglish = lang.code === "en";
+                  const isDisabled = !isEnglish;
+                  return (
+                    <label
+                      key={lang.code}
+                      className={`${styles.checkbox} ${isDisabled ? styles.disabled : ''}`}
+                      title={isDisabled ? "현재 영어만 지원됩니다" : ""}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={roomSettings.targetLanguages.includes(lang.code)}
+                        disabled={isDisabled}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setRoomSettings({
+                              ...roomSettings,
+                              targetLanguages: [...roomSettings.targetLanguages, lang.code],
+                            });
+                          } else {
+                            setRoomSettings({
+                              ...roomSettings,
+                              targetLanguages: roomSettings.targetLanguages.filter((l) => l !== lang.code),
+                            });
+                          }
+                        }}
+                      />
+                      <span>{lang.name}</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -795,7 +879,7 @@ export default function Speaker() {
               <button onClick={() => setShowSettingsModal(false)} className={styles.cancelButton}>
                 {roomId ? '닫기' : '취소'}
               </button>
-              <button onClick={createRoom} className={styles.createButton}>
+              <button onClick={roomId ? updateRoomSettings : createRoom} className={styles.createButton}>
                 {roomId ? '설정 저장' : '방 만들기'}
               </button>
             </div>

@@ -519,6 +519,29 @@
   user-select: none;
 }
 
+.checkbox.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(15, 23, 42, 0.3);
+}
+
+.checkbox.disabled:hover {
+  background: rgba(15, 23, 42, 0.3);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+.checkbox.disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
+.checkbox.disabled input[type="checkbox"]:hover {
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.checkbox.disabled span {
+  color: #64748b;
+}
+
 .modalActions {
   display: flex;
   gap: 1rem;

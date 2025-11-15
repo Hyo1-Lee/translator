@@ -2,6 +2,7 @@ import { RTZRClient } from './rtzr-client';
 import { OpenAIRealtimeClient } from './openai-realtime-client';
 import { STTProvider } from './stt-provider.interface';
 import { TranslationService } from '../translation/translation-service';
+import { optimizeCustomPromptWithGPT } from './prompts/prompt-templates';
 
 type STTProviderType = 'rtzr' | 'openai';
 
@@ -51,6 +52,7 @@ export class STTManager {
   private textBuffers: Map<string, string[]> = new Map();
   private bufferTimers: Map<string, NodeJS.Timeout> = new Map();
   private roomContexts: Map<string, RoomContext> = new Map();
+  private roomTargetLanguages: Map<string, string[]> = new Map();
 
   constructor(config: STTConfig, translationService: TranslationService) {
     this.config = config;
@@ -83,7 +85,21 @@ export class STTManager {
       }
 
       const template = promptTemplate || this.config.defaultPromptTemplate || 'general';
-      client = new OpenAIRealtimeClient(roomId, this.config.openai, template, customPrompt);
+
+      // If custom prompt is provided and template is 'custom', optimize it with GPT
+      let optimizedPrompt = customPrompt;
+      if (template === 'custom' && customPrompt && this.config.openai.apiKey) {
+        try {
+          console.log(`[STT][${roomId}] Optimizing custom prompt with GPT...`);
+          const optimizedTemplate = await optimizeCustomPromptWithGPT(customPrompt, this.config.openai.apiKey);
+          optimizedPrompt = optimizedTemplate.instructions;
+          console.log(`[STT][${roomId}] Custom prompt optimized successfully`);
+        } catch (error) {
+          console.error(`[STT][${roomId}] Failed to optimize custom prompt, using original:`, error);
+        }
+      }
+
+      client = new OpenAIRealtimeClient(roomId, this.config.openai, template, optimizedPrompt);
     } else {
       if (!this.config.rtzr) {
         throw new Error('RTZR configuration is missing');
@@ -100,6 +116,8 @@ export class STTManager {
       lastBatchText: '',
       targetLanguages: targetLanguages || ['en']
     });
+    // Store target languages for this room (default to English if not provided)
+    this.roomTargetLanguages.set(roomId, targetLanguages && targetLanguages.length > 0 ? targetLanguages : ['en']);
 
     // Handle transcripts
     client.on('transcript', async (result: any) => {
@@ -286,20 +304,32 @@ export class STTManager {
     }
   }
 
+  // Audio chunk counters for debugging
+  private audioChunksSent: Map<string, number> = new Map();
+
   // Send audio to STT
   sendAudio(roomId: string, audioData: Buffer): void {
     try {
       const client = this.clients.get(roomId);
 
       if (!client) {
+        console.warn(`[STT][${roomId}] No client found for room`);
         return;
       }
 
       if (!client.isActive()) {
+        console.warn(`[STT][${roomId}] Client is not active (provider: ${client.getProviderName()})`);
         return;
       }
 
       client.sendAudio(audioData);
+
+      // Log audio forwarding
+      const count = (this.audioChunksSent.get(roomId) || 0) + 1;
+      this.audioChunksSent.set(roomId, count);
+      if (count === 1 || count % 100 === 0) {
+        console.log(`[STT][${roomId}] Forwarded ${count} audio chunks to ${client.getProviderName()} (${audioData.length} bytes)`);
+      }
     } catch (error) {
       console.error(`[STT][${roomId}] Error sending audio:`, error);
       if (error instanceof Error) {
@@ -316,6 +346,8 @@ export class STTManager {
       this.clients.delete(roomId);
       this.textBuffers.delete(roomId);
       this.roomContexts.delete(roomId);
+      this.roomTargetLanguages.delete(roomId);
+      this.audioChunksSent.delete(roomId);
 
       // Clear timer
       const timer = this.bufferTimers.get(roomId);

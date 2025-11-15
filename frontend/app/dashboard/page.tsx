@@ -20,7 +20,7 @@ interface Room {
     targetLanguages: string;
     promptTemplate: string;
   } | null;
-  _count: {
+  _count?: {
     listeners: number;
     transcripts: number;
   };
@@ -136,6 +136,86 @@ export default function Dashboard() {
     }
   };
 
+  const saveSession = async (roomId: string, roomName: string) => {
+    const customName = prompt('세션 이름을 입력하세요 (선택사항):', roomName);
+
+    // User cancelled
+    if (customName === null) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/v1/dashboard/sessions/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          roomId,
+          roomName: customName || roomName
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(data.message || '세션이 저장되었습니다!');
+        // Refresh saved transcripts list
+        fetchDashboardData();
+      } else {
+        alert(data.message || '세션 저장에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Failed to save session:', error);
+      alert('세션 저장에 실패했습니다.');
+    }
+  };
+
+  const downloadTranscript = async (transcriptId: string, roomName: string) => {
+    try {
+      // Fetch transcript details
+      const response = await fetch(`${BACKEND_URL}/api/v1/dashboard/transcripts/${transcriptId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch transcript');
+      }
+
+      const data = await response.json();
+      const transcriptsData = data.data.transcriptsData || [];
+
+      // Format transcript content
+      let content = `${roomName}\n`;
+      content += `Room Code: ${data.data.roomCode}\n`;
+      content += `Saved at: ${formatDate(data.data.createdAt)}\n`;
+      content += `Total Transcripts: ${transcriptsData.length}\n`;
+      content += '='.repeat(80) + '\n\n';
+
+      transcriptsData.forEach((item: any, index: number) => {
+        const timestamp = new Date(item.timestamp).toLocaleString('ko-KR');
+        content += `[${index + 1}] ${timestamp}\n`;
+        content += `KR: ${item.korean}\n`;
+        content += `EN: ${item.english}\n\n`;
+      });
+
+      // Create and download file
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${roomName.replace(/[^a-zA-Z0-9가-힣]/g, '_')}_${data.data.roomCode}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download transcript:', error);
+      alert('다운로드에 실패했습니다.');
+    }
+  };
+
   const deleteTranscript = async (transcriptId: string) => {
     if (!confirm(t('dashboard.confirmDeleteTranscript') || 'Are you sure you want to delete this transcript?')) {
       return;
@@ -206,7 +286,7 @@ export default function Dashboard() {
               <p className={styles.subtitle}>{t('dashboard.subtitle')}</p>
             </div>
             <button
-              onClick={() => router.push('/speaker')}
+              onClick={() => router.push('/speaker?forceNew=true')}
               className={styles.createButton}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -319,7 +399,7 @@ export default function Dashboard() {
                       <h3>{t('dashboard.noRooms')}</h3>
                       <p>{t('dashboard.noRoomsDesc')}</p>
                       <button
-                        onClick={() => router.push('/speaker')}
+                        onClick={() => router.push('/speaker?forceNew=true')}
                         className={styles.emptyButton}
                       >
                         {t('dashboard.createRoom')}
@@ -363,20 +443,20 @@ export default function Dashboard() {
                                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                                   <circle cx="9" cy="7" r="4"/>
                                 </svg>
-                                {room._count.listeners} {t('dashboard.listeners')}
+                                {room._count?.listeners ?? 0} {t('dashboard.listeners')}
                               </div>
                               <div className={styles.roomStat}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                   <polyline points="14 2 14 8 20 8"/>
                                 </svg>
-                                {room._count.transcripts} {t('dashboard.transcripts')}
+                                {room._count?.transcripts ?? 0} {t('dashboard.transcripts')}
                               </div>
                             </div>
                           </div>
 
                           <div className={styles.roomActions}>
-                            {room.status === 'ACTIVE' && (
+                            {(room.status === 'ACTIVE' || room.status === 'PAUSED') && (
                               <button
                                 onClick={() => router.push(`/speaker?room=${room.roomCode}`)}
                                 className={styles.actionButtonPrimary}
@@ -385,7 +465,20 @@ export default function Dashboard() {
                                   <circle cx="12" cy="12" r="10"/>
                                   <polygon points="10 8 16 12 10 16 10 8"/>
                                 </svg>
-                                {t('dashboard.resume')}
+                                {room.status === 'ACTIVE' ? t('dashboard.resume') : '재입장'}
+                              </button>
+                            )}
+                            {(room._count?.transcripts ?? 0) > 0 && (
+                              <button
+                                onClick={() => saveSession(room.id, room.speakerName)}
+                                className={styles.actionButton}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                  <polyline points="17 21 17 13 7 13 7 21"/>
+                                  <polyline points="7 3 7 8 15 8"/>
+                                </svg>
+                                저장
                               </button>
                             )}
                             <button
@@ -441,7 +534,10 @@ export default function Dashboard() {
                             </div>
                           </div>
                           <div className={styles.transcriptActions}>
-                            <button className={styles.actionButton}>
+                            <button
+                              onClick={() => downloadTranscript(transcript.id, transcript.roomName || `Room ${transcript.roomCode}`)}
+                              className={styles.actionButton}
+                            >
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="7 10 12 15 17 10"/>

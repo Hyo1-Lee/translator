@@ -19,10 +19,15 @@
     "experimentalDecorators": true,
     "strictNullChecks": true,
     "strictPropertyInitialization": false,
+    "baseUrl": "./src",
     "paths": {
-      "@modules/*": ["./src/modules/*"],
-      "@shared/*": ["./src/shared/*"],
-      "@database/*": ["./src/database/*"]
+      "@/*": ["./*"],
+      "@domains/*": ["domains/*"],
+      "@modules/*": ["modules/*"],
+      "@models/*": ["models/*"],
+      "@infrastructure/*": ["infrastructure/*"],
+      "@shared/*": ["shared/*"],
+      "@config/*": ["config/*"]
     }
   },
   "include": ["src/**/*"],

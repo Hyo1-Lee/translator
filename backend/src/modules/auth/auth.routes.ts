@@ -1,6 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { AuthService } from './auth.service';
-import { PrismaClient } from '@prisma/client';
 
 interface CheckEmailBody {
   email: string;
@@ -29,8 +28,8 @@ interface RefreshTokenBody {
   refreshToken: string;
 }
 
-export async function authRoutes(fastify: FastifyInstance, prisma: PrismaClient) {
-  const authService = new AuthService(prisma);
+export async function authRoutes(fastify: FastifyInstance) {
+  const authService = new AuthService();
 
   // Check if email exists
   fastify.post('/check-email', async (request: FastifyRequest<{ Body: CheckEmailBody }>, reply: FastifyReply) => {
