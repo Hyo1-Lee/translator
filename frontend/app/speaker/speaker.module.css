@@ -93,26 +93,100 @@
 .roomCodeSection {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  margin-top: 2rem;
+  gap: 1rem;
+  margin-top: 1.5rem;
 }
 
-@media (min-width: 768px) {
-  .roomCodeSection {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2rem;
-  }
-}
-
-.roomCode,
-.qrCodeSection {
+/* Compact Room Code */
+.roomCodeCompact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   background: rgba(15, 23, 42, 0.5);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1rem;
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
+  gap: 1rem;
 }
 
+.codeDisplay {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.codeLabel {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.codeValue {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: white;
+  letter-spacing: 0.15em;
+  font-family: 'Courier New', monospace;
+}
+
+@media (max-width: 640px) {
+  .codeValue {
+    font-size: 1.25rem;
+    letter-spacing: 0.1em;
+  }
+
+  .codeLabel {
+    font-size: 0.625rem;
+  }
+
+  .roomCodeCompact {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .codeActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+.codeActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 0.5rem;
+  color: #60a5fa;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px);
+  color: #93c5fd;
+}
+
+.iconButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Old styles kept for backward compatibility */
 .label {
   font-size: 0.75rem;
   color: #94a3b8;
@@ -120,57 +194,6 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-weight: 600;
-}
-
-.codeContainer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.code {
-  font-size: 2.5rem;
-  font-weight: 900;
-  color: white;
-  letter-spacing: 0.2em;
-  font-family: 'Courier New', monospace;
-}
-
-.copyButton,
-.shareButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  color: white;
-  border: none;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  transition: all 0.2s;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.copyButton:hover,
-.shareButton:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
-}
-
-.qrCode {
-  margin: 1rem 0;
-}
-
-.qrCode img {
-  width: 200px;
-  height: 200px;
-  border-radius: 0.75rem;
-  background: white;
-  padding: 0.75rem;
 }
 
 .newRoomButton {
@@ -662,13 +685,13 @@
 /* Action Buttons */
 .actionButtons {
   display: flex;
-  gap: 1rem;
-  margin-top: 1.5rem;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 @media (min-width: 768px) {
   .actionButtons {
-    grid-column: 1 / -1;
+    flex-direction: row;
   }
 }
 

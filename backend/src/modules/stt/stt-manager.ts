@@ -54,6 +54,9 @@ export class STTManager {
   private bufferTimers: Map<string, NodeJS.Timeout> = new Map();
   private roomContexts: Map<string, RoomContext> = new Map();
   private roomTargetLanguages: Map<string, string[]> = new Map();
+  private partialTextTimers: Map<string, NodeJS.Timeout> = new Map();
+  private lastPartialText: Map<string, string> = new Map();
+  private lastTranslatedText: Map<string, string> = new Map(); // Track last translated text to prevent duplicates
 
   constructor(config: STTConfig, translationService: TranslationService) {
     this.config = config;
@@ -135,12 +138,53 @@ export class STTManager {
       // Always emit to frontend for real-time display
       onTranscript(transcriptData);
 
-      // Only buffer for translation if it's a final transcript
+      // Buffer for translation
       if (result.final) {
+        // Clear any pending partial text timer since we got a final result
+        const partialTimer = this.partialTextTimers.get(roomId);
+        if (partialTimer) {
+          clearTimeout(partialTimer);
+          this.partialTextTimers.delete(roomId);
+        }
+        this.lastPartialText.delete(roomId);
+
+        // Check if this final text was already translated as a partial
+        const lastTranslated = this.lastTranslatedText.get(roomId);
+        if (lastTranslated && lastTranslated.trim() === result.text.trim()) {
+          console.log(`[STT][${roomId}] ⏭️  Skipping final transcript - already translated as partial`);
+          return;
+        }
+
         console.log(`[STT][${roomId}] Buffering final transcript for translation`);
         this.bufferTextForTranslation(roomId, result.text, onTranslation);
       } else {
-        console.log(`[STT][${roomId}] Skipping translation buffer for partial transcript`);
+        // For partial transcripts, set a timer to force translation if text doesn't change
+        const currentText = result.text;
+        const previousText = this.lastPartialText.get(roomId);
+
+        // Clear existing timer
+        const existingTimer = this.partialTextTimers.get(roomId);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        // Store current partial text
+        this.lastPartialText.set(roomId, currentText);
+
+        // Set timer to auto-translate after 3 seconds of no new transcripts
+        const timer = setTimeout(() => {
+          const latestText = this.lastPartialText.get(roomId);
+          if (latestText && latestText === currentText) {
+            console.log(`[STT][${roomId}] Auto-translating partial transcript after timeout`);
+            this.bufferTextForTranslation(roomId, currentText, onTranslation);
+            this.lastTranslatedText.set(roomId, currentText); // Track this translation
+            this.lastPartialText.delete(roomId);
+            this.partialTextTimers.delete(roomId);
+          }
+        }, 3000); // 3 seconds timeout
+
+        this.partialTextTimers.set(roomId, timer);
+        console.log(`[STT][${roomId}] Partial transcript timer set (3s)`);
       }
     });
 
@@ -357,12 +401,21 @@ export class STTManager {
       this.roomContexts.delete(roomId);
       this.roomTargetLanguages.delete(roomId);
       this.audioChunksSent.delete(roomId);
+      this.lastPartialText.delete(roomId);
+      this.lastTranslatedText.delete(roomId);
 
-      // Clear timer
+      // Clear buffer timer
       const timer = this.bufferTimers.get(roomId);
       if (timer) {
         clearTimeout(timer);
         this.bufferTimers.delete(roomId);
+      }
+
+      // Clear partial text timer
+      const partialTimer = this.partialTextTimers.get(roomId);
+      if (partialTimer) {
+        clearTimeout(partialTimer);
+        this.partialTextTimers.delete(roomId);
       }
     }
   }

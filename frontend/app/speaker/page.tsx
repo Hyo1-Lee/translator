@@ -109,6 +109,45 @@ export default function Speaker() {
     }
   }, []);
 
+  // Split text into sentences
+  const splitIntoSentences = useCallback((text: string): string[] => {
+    if (!text || text.trim() === '') return [];
+
+    // More sophisticated sentence splitting for Korean and English
+    // Split on sentence-ending punctuation followed by space or end of string
+    const sentences = text.split(/([.!?]+(?:\s+|$))/g);
+
+    const result: string[] = [];
+    let currentSentence = '';
+
+    for (let i = 0; i < sentences.length; i++) {
+      const part = sentences[i];
+
+      // Skip empty parts
+      if (!part || part.trim() === '') continue;
+
+      // If this is punctuation, add to current sentence and finalize
+      if (/^[.!?]+(?:\s+|$)/.test(part)) {
+        currentSentence += part.replace(/\s+$/, ''); // Remove trailing space from punctuation
+        if (currentSentence.trim().length > 0) {
+          result.push(currentSentence.trim());
+        }
+        currentSentence = '';
+      } else {
+        // Regular text - accumulate
+        currentSentence += part;
+      }
+    }
+
+    // Add any remaining text as a sentence
+    if (currentSentence.trim().length > 0) {
+      result.push(currentSentence.trim());
+    }
+
+    // If no sentences found, return the whole text
+    return result.length > 0 ? result : [text.trim()];
+  }, []);
+
   // Load saved room info from localStorage
   const loadSavedRoom = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -385,19 +424,29 @@ export default function Speaker() {
 
     socketRef.current.on("translation-batch", (data: any) => {
       setTranscripts((prev) => {
-        const newTranscript = {
-          type: "translation",
-          korean: data.korean,
-          english: data.english,
-          timestamp: data.timestamp,
-          isHistory: data.isHistory || false,
-        };
+        // Split Korean and English into sentences
+        const koreanSentences = splitIntoSentences(data.korean);
+        const englishSentences = splitIntoSentences(data.english);
+
+        // Create individual transcript entries for each sentence
+        const newTranscripts: any[] = [];
+        const maxSentences = Math.max(koreanSentences.length, englishSentences.length);
+
+        for (let i = 0; i < maxSentences; i++) {
+          newTranscripts.push({
+            type: "translation",
+            korean: koreanSentences[i] || '',
+            english: englishSentences[i] || '',
+            timestamp: data.timestamp,
+            isHistory: data.isHistory || false,
+          });
+        }
 
         // If it's history, add at the beginning; otherwise add at the end
         if (data.isHistory) {
-          return [...prev, newTranscript];
+          return [...prev, ...newTranscripts];
         } else {
-          return [...prev.slice(-19), newTranscript];
+          return [...prev.slice(-19), ...newTranscripts];
         }
       });
     });
@@ -413,7 +462,7 @@ export default function Speaker() {
         socketRef.current.disconnect();
       }
     };
-  }, [user, loadSavedRoom, saveRoomInfo, generateQRCode]);
+  }, [user, loadSavedRoom, saveRoomInfo, generateQRCode, splitIntoSentences]);
 
   // Start recording
   const startRecording = async () => {
@@ -671,53 +720,47 @@ export default function Speaker() {
           </div>
         </div>
 
-        {/* Room Info */}
+        {/* Room Info - Compact Version */}
         <div className={styles.roomInfo}>
           <div className={styles.titleSection}>
             <h2>{roomSettings.roomTitle || speakerName || "Speaker"}</h2>
           </div>
           {roomId && (
             <div className={styles.roomCodeSection}>
-              <div className={styles.roomCode}>
-                <p className={styles.label}>방 코드</p>
-                <div className={styles.codeContainer}>
-                  <p className={styles.code}>{roomId}</p>
-                  <button onClick={() => copyToClipboard(roomId, "방 코드")} className={styles.copyButton}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {/* Compact Room Code */}
+              <div className={styles.roomCodeCompact}>
+                <div className={styles.codeDisplay}>
+                  <span className={styles.codeLabel}>방 코드</span>
+                  <span className={styles.codeValue}>{roomId}</span>
+                </div>
+                <div className={styles.codeActions}>
+                  <button onClick={() => copyToClipboard(roomId, "방 코드")} className={styles.iconButton} title="복사">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                     </svg>
-                    복사
+                  </button>
+                  <button onClick={() => setShowQRModal(true)} className={styles.iconButton} title="QR 코드 보기">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="3" width="7" height="7" rx="1"/>
+                      <rect x="14" y="3" width="7" height="7" rx="1"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1"/>
+                      <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                  </button>
+                  <button onClick={shareRoom} className={styles.iconButton} title="공유">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="18" cy="5" r="3"/>
+                      <circle cx="6" cy="12" r="3"/>
+                      <circle cx="18" cy="19" r="3"/>
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
                   </button>
                 </div>
               </div>
 
-              {/* QR Code */}
-              {qrCodeUrl && (
-                <div className={styles.qrCodeSection}>
-                  <p className={styles.label}>QR 코드로 입장</p>
-                  <div className={styles.qrCode} onClick={() => setShowQRModal(true)} style={{ cursor: 'pointer' }}>
-                    <img src={qrCodeUrl} alt="Room QR Code" />
-                  </div>
-                  <div className={styles.qrButtons}>
-                    <button onClick={() => setShowQRModal(true)} className={styles.fullscreenButton}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-                      </svg>
-                      전체화면
-                    </button>
-                    <button onClick={shareRoom} className={styles.shareButton}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                        <polyline points="16 6 12 2 8 6"/>
-                        <line x1="12" y1="2" x2="12" y2="15"/>
-                      </svg>
-                      공유
-                    </button>
-                  </div>
-                </div>
-              )}
-
+              {/* Action Buttons */}
               <div className={styles.actionButtons}>
                 <button
                   onClick={saveRecording}

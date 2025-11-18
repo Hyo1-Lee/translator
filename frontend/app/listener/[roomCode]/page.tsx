@@ -65,6 +65,45 @@ export default function ListenerRoom() {
     });
   }, []);
 
+  // Split text into sentences
+  const splitIntoSentences = useCallback((text: string): string[] => {
+    if (!text || text.trim() === '') return [];
+
+    // More sophisticated sentence splitting for Korean and English
+    // Split on sentence-ending punctuation followed by space or end of string
+    const sentences = text.split(/([.!?]+(?:\s+|$))/g);
+
+    const result: string[] = [];
+    let currentSentence = '';
+
+    for (let i = 0; i < sentences.length; i++) {
+      const part = sentences[i];
+
+      // Skip empty parts
+      if (!part || part.trim() === '') continue;
+
+      // If this is punctuation, add to current sentence and finalize
+      if (/^[.!?]+(?:\s+|$)/.test(part)) {
+        currentSentence += part.replace(/\s+$/, ''); // Remove trailing space from punctuation
+        if (currentSentence.trim().length > 0) {
+          result.push(currentSentence.trim());
+        }
+        currentSentence = '';
+      } else {
+        // Regular text - accumulate
+        currentSentence += part;
+      }
+    }
+
+    // Add any remaining text as a sentence
+    if (currentSentence.trim().length > 0) {
+      result.push(currentSentence.trim());
+    }
+
+    // If no sentences found, return the whole text
+    return result.length > 0 ? result : [text.trim()];
+  }, []);
+
   // Auto scroll
   useEffect(() => {
     if (autoScroll && transcriptEndRef.current) {
@@ -158,17 +197,40 @@ export default function ListenerRoom() {
     });
 
     socketRef.current.on("translation-batch", (data: any) => {
-      setTranscripts((prev) => [
-        ...prev.slice(-99),
-        {
+      // Split Korean and translations into sentences
+      const koreanSentences = splitIntoSentences(data.korean);
+      const translations = data.translations || { en: data.english };
+
+      // Split each translation language into sentences
+      const translationSentences: Record<string, string[]> = {};
+      Object.keys(translations).forEach(lang => {
+        translationSentences[lang] = splitIntoSentences(translations[lang]);
+      });
+
+      // Create individual transcript entries for each sentence
+      const newTranscripts: any[] = [];
+      const maxSentences = Math.max(
+        koreanSentences.length,
+        ...Object.values(translationSentences).map(arr => arr.length)
+      );
+
+      for (let i = 0; i < maxSentences; i++) {
+        const sentenceTranslations: Record<string, string> = {};
+        Object.keys(translationSentences).forEach(lang => {
+          sentenceTranslations[lang] = translationSentences[lang][i] || '';
+        });
+
+        newTranscripts.push({
           type: "translation",
-          korean: data.korean,
-          english: data.english,
-          translations: data.translations || { en: data.english },
+          korean: koreanSentences[i] || '',
+          english: sentenceTranslations['en'] || '',
+          translations: sentenceTranslations,
           timestamp: data.timestamp,
           isHistory: data.isHistory,
-        },
-      ]);
+        });
+      }
+
+      setTranscripts((prev) => [...prev.slice(-99), ...newTranscripts]);
     });
 
     socketRef.current.on("error", (data: any) => {
@@ -192,7 +254,7 @@ export default function ListenerRoom() {
         socketRef.current.disconnect();
       }
     };
-  }, [roomCode, router]);
+  }, [roomCode, router, splitIntoSentences]);
 
   // Join room
   const joinRoom = useCallback(
