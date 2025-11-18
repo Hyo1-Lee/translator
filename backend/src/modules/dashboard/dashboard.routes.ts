@@ -44,7 +44,9 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
           RoomSettings,
           {
             model: Listener,
-            attributes: ['id']
+            attributes: ['id'],
+            where: { leftAt: null },  // Only count active listeners
+            required: false  // Use LEFT JOIN to still get rooms even with no active listeners
           },
           {
             model: Transcript,
@@ -111,8 +113,9 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         }]
       });
 
-      // Total listeners
+      // Total listeners (only active ones)
       const totalListeners = await Listener.count({
+        where: { leftAt: null },  // Only count active listeners
         include: [{
           model: Room,
           where: { userId },

@@ -152,11 +152,19 @@ export default function Speaker() {
     const name = user?.name || speakerName || "Speaker";
     setSpeakerName(name);
 
-    socketRef.current.emit("create-room", {
+    const dataToSend = {
       name,
       userId: user?.id,
       ...roomSettings
-    });
+    };
+
+    console.log("🏗️ Creating room with settings:");
+    console.log("  - roomTitle:", roomSettings.roomTitle);
+    console.log("  - password:", roomSettings.password ? "***" : "(none)");
+    console.log("  - targetLanguages:", roomSettings.targetLanguages);
+    console.log("  - Full data:", dataToSend);
+
+    socketRef.current.emit("create-room", dataToSend);
 
     setShowSettingsModal(false);
   }, [user, speakerName, roomSettings]);
@@ -164,6 +172,14 @@ export default function Speaker() {
   // Update room settings (without changing room code)
   const updateRoomSettings = useCallback(() => {
     if (!socketRef.current || !roomId) return;
+
+    console.log("⚙️ Updating room settings:", {
+      roomId,
+      roomTitle: roomSettings.roomTitle,
+      hasPassword: !!roomSettings.password,
+      targetLanguages: roomSettings.targetLanguages,
+      fullSettings: roomSettings
+    });
 
     socketRef.current.emit("update-settings", {
       roomId,
@@ -286,6 +302,22 @@ export default function Speaker() {
       setRoomId(data.roomId);
       saveRoomInfo(data.roomId, speakerName);
       generateQRCode(data.roomId);
+
+      // Update roomSettings from server response
+      if (data.roomSettings) {
+        console.log("📋 Received room settings from server:", data.roomSettings);
+        setRoomSettings({
+          roomTitle: data.roomSettings.roomTitle || '',
+          promptTemplate: data.roomSettings.promptTemplate || 'general',
+          customPrompt: data.roomSettings.customPrompt || '',
+          targetLanguages: Array.isArray(data.roomSettings.targetLanguages)
+            ? data.roomSettings.targetLanguages
+            : ['en'],
+          password: '', // Don't set password for security
+          maxListeners: data.roomSettings.maxListeners || 100
+        });
+      }
+
       if (data.isRejoined) {
         setStatus("방 재입장");
       } else {
@@ -296,6 +328,22 @@ export default function Speaker() {
     socketRef.current.on("room-rejoined", (data: any) => {
       setRoomId(data.roomId);
       generateQRCode(data.roomId);
+
+      // Update roomSettings from server response
+      if (data.roomSettings) {
+        console.log("📋 Received room settings from server (rejoined):", data.roomSettings);
+        setRoomSettings({
+          roomTitle: data.roomSettings.roomTitle || '',
+          promptTemplate: data.roomSettings.promptTemplate || 'general',
+          customPrompt: data.roomSettings.customPrompt || '',
+          targetLanguages: Array.isArray(data.roomSettings.targetLanguages)
+            ? data.roomSettings.targetLanguages
+            : ['en'],
+          password: '', // Don't set password for security
+          maxListeners: data.roomSettings.maxListeners || 100
+        });
+      }
+
       setStatus("방 재연결됨");
     });
 
@@ -311,14 +359,27 @@ export default function Speaker() {
           text: data.text,
           timestamp: data.timestamp,
           isHistory: data.isHistory || false,
+          isFinal: data.isFinal !== false, // Default to true for backwards compatibility
         };
 
-        // If it's history, add at the beginning; otherwise add at the end
+        // If it's history, add at the beginning
         if (data.isHistory) {
           return [...prev, newTranscript];
-        } else {
-          return [...prev.slice(-19), newTranscript];
         }
+
+        // For real-time transcripts
+        // If this is a partial transcript and the last item is also a partial STT transcript,
+        // update it instead of adding a new one
+        if (!newTranscript.isFinal && prev.length > 0) {
+          const lastItem = prev[prev.length - 1];
+          if (lastItem.type === "stt" && !lastItem.isFinal) {
+            // Update the last partial transcript
+            return [...prev.slice(0, -1), newTranscript];
+          }
+        }
+
+        // Otherwise add as new transcript (keep last 20)
+        return [...prev.slice(-19), newTranscript];
       });
     });
 
@@ -749,7 +810,10 @@ export default function Speaker() {
               {transcripts.slice(-5).map((item, index) => (
                 <div key={index} className={styles.transcriptItem}>
                   {item.type === "stt" ? (
-                    <p className={styles.sttText}>{item.text}</p>
+                    <p className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
+                      {item.text}
+                      {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
+                    </p>
                   ) : (
                     <>
                       <p className={styles.koreanText}>{item.korean}</p>
@@ -765,8 +829,8 @@ export default function Speaker() {
 
       {/* Settings Modal */}
       {showSettingsModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowSettingsModal(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
             <h2>{roomId ? '방 설정 변경' : '방 설정'}</h2>
 
             {/* Room Title */}
@@ -851,14 +915,26 @@ export default function Speaker() {
 
             {/* Password */}
             <div className={styles.settingGroup}>
-              <label>비밀번호 (선택)</label>
+              <label>
+                비밀번호 (선택)
+                {roomSettings.password && (
+                  <span style={{ marginLeft: '0.5rem', color: '#4ade80', fontSize: '0.875rem' }}>
+                    ✓ 설정됨
+                  </span>
+                )}
+              </label>
               <input
                 type="password"
                 value={roomSettings.password}
                 onChange={(e) => setRoomSettings({ ...roomSettings, password: e.target.value })}
                 className={styles.input}
-                placeholder="비밀번호를 설정하지 않으면 누구나 입장 가능"
+                placeholder={roomId ? "비밀번호 변경 (공백으로 두면 제거)" : "비밀번호를 설정하지 않으면 누구나 입장 가능"}
               />
+              {roomSettings.password && (
+                <p style={{ fontSize: '0.8125rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+                  💡 청취자는 방 입장 시 이 비밀번호를 입력해야 합니다
+                </p>
+              )}
             </div>
 
             {/* Max Listeners */}
@@ -889,8 +965,8 @@ export default function Speaker() {
 
       {/* QR Code Fullscreen Modal */}
       {showQRModal && (
-        <div className={styles.qrModalOverlay} onClick={() => setShowQRModal(false)}>
-          <div className={styles.qrModalContent} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.qrModalOverlay}>
+          <div className={styles.qrModalContent}>
             <button onClick={() => setShowQRModal(false)} className={styles.closeButton}>
               ✕
             </button>

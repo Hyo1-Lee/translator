@@ -20,6 +20,7 @@ export class RTZRClient extends STTProvider {
   private pendingAudioBuffer: Buffer[] = [];
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
+  private isManualDisconnect: boolean = false;
 
   constructor(roomId: string, config: RTZRConfig) {
     super(roomId);
@@ -70,6 +71,9 @@ export class RTZRClient extends STTProvider {
 
   // Connect to WebSocket
   async connect(): Promise<void> {
+    // Reset manual disconnect flag when reconnecting
+    this.isManualDisconnect = false;
+
     const token = await this.getToken();
     if (!token) {
       throw new Error('Failed to obtain access token');
@@ -111,9 +115,11 @@ export class RTZRClient extends STTProvider {
     this.ws.on('message', (data: WebSocket.Data) => {
       try {
         const message = JSON.parse(data.toString());
+        console.log(`[STT][${this.roomId}] 📨 Received message from VITO:`, JSON.stringify(message));
         this.handleMessage(message);
       } catch (error) {
         console.error(`[STT][${this.roomId}] Failed to parse message:`, error);
+        console.error(`[STT][${this.roomId}] Raw message:`, data.toString());
       }
     });
 
@@ -128,11 +134,13 @@ export class RTZRClient extends STTProvider {
       this.ws = null;
       this.emit('disconnected');
 
-      // Auto-reconnect logic
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      // Auto-reconnect logic (only if not manually disconnected)
+      if (!this.isManualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
         this.reconnectAttempts++;
         console.log(`[STT][${this.roomId}] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         setTimeout(() => this.connect(), 2000);
+      } else if (this.isManualDisconnect) {
+        console.log(`[STT][${this.roomId}] Manual disconnect - not reconnecting`);
       }
     });
   }
@@ -141,7 +149,7 @@ export class RTZRClient extends STTProvider {
   private handleMessage(message: any): void {
     // Check for error
     if (message.error) {
-      console.error(`[STT][${this.roomId}] Error from server:`, message.error);
+      console.error(`[STT][${this.roomId}] ❌ Error from server:`, message.error);
       this.emit('error', message.error);
       return;
     }
@@ -151,6 +159,12 @@ export class RTZRClient extends STTProvider {
       const alternative = message.alternatives[0];
       const text = alternative.text?.trim();
 
+      console.log(`[STT][${this.roomId}] 📝 Transcript received:`, {
+        text,
+        confidence: alternative.confidence,
+        final: message.final || false
+      });
+
       if (text) {
         const result: TranscriptResult = {
           text,
@@ -158,11 +172,16 @@ export class RTZRClient extends STTProvider {
           final: message.final || false
         };
 
-        // Emit only final transcripts
+        // Emit both partial and final transcripts for real-time display
         if (result.final) {
-          this.emit('transcript', result);
+          console.log(`[STT][${this.roomId}] ✅ Emitting FINAL transcript: "${text}"`);
+        } else {
+          console.log(`[STT][${this.roomId}] ⏳ Emitting PARTIAL transcript: "${text}"`);
         }
+        this.emit('transcript', result);
       }
+    } else {
+      console.log(`[STT][${this.roomId}] 🤔 Message has no alternatives:`, message);
     }
   }
 
@@ -170,8 +189,15 @@ export class RTZRClient extends STTProvider {
   sendAudio(audioData: Buffer): void {
     if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(audioData);
+      // Log first few audio sends for debugging
+      const sendCount = (this as any)._audioSendCount || 0;
+      (this as any)._audioSendCount = sendCount + 1;
+      if (sendCount < 3) {
+        console.log(`[STT][${this.roomId}] 🎤 Sent audio chunk #${sendCount + 1} (${audioData.length} bytes)`);
+      }
     } else {
       // Buffer audio if not connected
+      console.warn(`[STT][${this.roomId}] ⚠️  WebSocket not ready, buffering audio (state: ${this.ws?.readyState})`);
       this.pendingAudioBuffer.push(audioData);
 
       // Limit buffer size to prevent memory issues
@@ -205,12 +231,28 @@ export class RTZRClient extends STTProvider {
 
   // Disconnect
   disconnect(): void {
+    console.log(`[STT][${this.roomId}] Disconnecting client...`);
+    this.isManualDisconnect = true;
+
     if (this.ws) {
-      this.endStream();
-      this.ws.close();
+      // Remove all event listeners to prevent any reconnection attempts
+      this.ws.removeAllListeners();
+
+      // Close the connection
+      try {
+        this.endStream();
+        this.ws.close();
+      } catch (error) {
+        console.error(`[STT][${this.roomId}] Error closing WebSocket:`, error);
+      }
+
       this.ws = null;
       this.isConnected = false;
     }
+
+    // Clear pending audio buffer
+    this.pendingAudioBuffer = [];
+    this.reconnectAttempts = 0;
   }
 
   // Check connection status

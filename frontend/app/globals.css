@@ -21,6 +21,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
   font-size: 16px;
+  /* 모바일 터치 스크롤 최적화 */
+  -webkit-overflow-scrolling: touch;
+  /* 모바일 탭 하이라이트 비활성화 */
+  -webkit-tap-highlight-color: transparent;
 }
 
 * {
@@ -76,4 +80,43 @@ h1, h2, h3, h4, h5, h6 {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(120, 119, 198, 0.5);
+}
+
+/* 모바일 최적화 */
+@media (max-width: 768px) {
+  body {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 14px;
+  }
+
+  /* 모바일에서 스크롤바 숨기기 */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
+
+/* 터치 디바이스 최적화 */
+@media (hover: none) and (pointer: coarse) {
+  /* 터치 디바이스에서 버튼과 링크의 최소 터치 영역 보장 */
+  button, a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* 다크모드 지원을 위한 미디어 쿼리 (선택적) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 30, 30, 46;
+    --background-end-rgb: 45, 45, 68;
+  }
 }

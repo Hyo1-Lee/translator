@@ -36,6 +36,7 @@ interface TranscriptData {
   text: string;
   timestamp: Date;
   confidence?: number;
+  isFinal?: boolean;
 }
 
 interface RoomContext {
@@ -125,14 +126,22 @@ export class STTManager {
         roomId,
         text: result.text,
         timestamp: new Date(),
-        confidence: result.confidence
+        confidence: result.confidence,
+        isFinal: result.final
       };
 
-      // Emit STT result
+      console.log(`[STT][${roomId}] Processing transcript (final: ${result.final}):`, result.text);
+
+      // Always emit to frontend for real-time display
       onTranscript(transcriptData);
 
-      // Buffer text for translation
-      this.bufferTextForTranslation(roomId, result.text, onTranslation);
+      // Only buffer for translation if it's a final transcript
+      if (result.final) {
+        console.log(`[STT][${roomId}] Buffering final transcript for translation`);
+        this.bufferTextForTranslation(roomId, result.text, onTranslation);
+      } else {
+        console.log(`[STT][${roomId}] Skipping translation buffer for partial transcript`);
+      }
     });
 
     // Handle errors
@@ -372,6 +381,24 @@ export class STTManager {
   hasActiveClient(roomId: string): boolean {
     const client = this.clients.get(roomId);
     return client ? client.isActive() : false;
+  }
+
+  // Get all active room IDs
+  getActiveRoomIds(): string[] {
+    return Array.from(this.clients.keys());
+  }
+
+  // Clean up orphaned clients (clients for rooms that no longer exist)
+  cleanupOrphanedClients(activeRoomCodes: string[]): void {
+    const activeSet = new Set(activeRoomCodes);
+    const clientRoomIds = Array.from(this.clients.keys());
+
+    for (const roomId of clientRoomIds) {
+      if (!activeSet.has(roomId)) {
+        console.log(`[STT] Removing orphaned client for room ${roomId}`);
+        this.removeClient(roomId);
+      }
+    }
   }
 
   // Get current provider for a room

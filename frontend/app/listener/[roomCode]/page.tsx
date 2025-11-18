@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
 import styles from "./listener.module.css";
 
@@ -31,12 +32,14 @@ export default function ListenerRoom() {
   const params = useParams();
   const router = useRouter();
   const { user, accessToken } = useAuth();
+  const { addToast } = useToast();
 
   const roomCode = (params.roomCode as string)?.toUpperCase();
 
   // State
   const [isJoined, setIsJoined] = useState(false);
   const [speakerName, setSpeakerName] = useState("");
+  const [sessionTitle, setSessionTitle] = useState("");
   const [transcripts, setTranscripts] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -113,22 +116,44 @@ export default function ListenerRoom() {
       alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
-    socketRef.current.on("password-required", () => {
-      console.log("Password required");
+    socketRef.current.on("password-required", (data: any) => {
+      console.log("Password required for room:", data?.roomId || roomCode);
       setNeedsPassword(true);
+      setPasswordError(""); // Clear any previous errors
     });
 
     socketRef.current.on("room-joined", (data: any) => {
-      console.log("Room joined:", data);
+      console.log("✅ Room joined successfully:", data);
       setSpeakerName(data.speakerName);
+
+      // Set session title (use roomTitle if available, otherwise use speakerName)
+      const title = data.roomSettings?.roomTitle || `${data.speakerName}의 세션`;
+      setSessionTitle(title);
+
       setIsJoined(true);
       setNeedsPassword(false);
       setPasswordError("");
+      setPassword(""); // Clear password after successful join
 
       // Set available languages from room settings
-      if (data.roomSettings?.targetLanguages && data.roomSettings.targetLanguages.length > 0) {
-        setAvailableLanguages(data.roomSettings.targetLanguages);
-        setSelectedLanguage(data.roomSettings.targetLanguages[0]);
+      if (data.roomSettings?.targetLanguages) {
+        // targetLanguages might be a comma-separated string or an array
+        let languages: string[];
+        if (typeof data.roomSettings.targetLanguages === 'string') {
+          languages = data.roomSettings.targetLanguages.split(',').map((lang: string) => lang.trim());
+          console.log("📋 Parsed languages from string:", languages);
+        } else if (Array.isArray(data.roomSettings.targetLanguages)) {
+          languages = data.roomSettings.targetLanguages;
+          console.log("📋 Using languages array:", languages);
+        } else {
+          languages = ['en'];
+          console.warn("⚠️ Invalid targetLanguages format, defaulting to ['en']");
+        }
+
+        if (languages.length > 0) {
+          setAvailableLanguages(languages);
+          setSelectedLanguage(languages[0]);
+        }
       }
     });
 
@@ -147,13 +172,17 @@ export default function ListenerRoom() {
     });
 
     socketRef.current.on("error", (data: any) => {
-      console.error("Socket error:", data);
+      console.error("❌ Socket error:", data);
       if (data.message === "Incorrect password") {
+        console.log("🔒 Incorrect password entered");
         setPasswordError("비밀번호가 올바르지 않습니다.");
+        setNeedsPassword(true); // Show password modal again
       } else if (data.message === "Room not found") {
+        console.log("⚠️ Room not found:", roomCode);
         alert("방을 찾을 수 없습니다.");
         router.push("/");
       } else {
+        console.log("⚠️ Other error:", data.message);
         alert(data.message);
       }
     });
@@ -169,11 +198,18 @@ export default function ListenerRoom() {
   const joinRoom = useCallback(
     (pwd?: string) => {
       const name = user?.name || "Guest";
+      const finalPassword = pwd !== undefined ? pwd : password;
+
+      console.log("🔑 Attempting to join room:", {
+        roomCode,
+        name,
+        hasPassword: !!finalPassword
+      });
 
       socketRef.current.emit("join-room", {
         roomId: roomCode,
         name,
-        password: pwd || password,
+        password: finalPassword,
       });
     },
     [roomCode, user, password]
@@ -187,19 +223,78 @@ export default function ListenerRoom() {
   }, [isConnected, isJoined, needsPassword, joinRoom]);
 
   // Handle password submit
-  const handlePasswordSubmit = () => {
+  const handlePasswordSubmit = (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    console.log("🔐 handlePasswordSubmit called");
+    console.log("🔐 Password value:", password ? "***" : "(empty)");
+    console.log("🔐 Socket connected:", !!socketRef.current);
+    console.log("🔐 isConnected:", isConnected);
+
     if (!password.trim()) {
+      console.log("❌ Password is empty");
       setPasswordError("비밀번호를 입력해주세요.");
       return;
     }
+
+    console.log("🔐 Submitting password for room:", roomCode);
     setPasswordError("");
     joinRoom(password);
+  };
+
+  // Save recording
+  const saveRecording = async () => {
+    if (!user || !accessToken) {
+      addToast('로그인이 필요합니다', 'error');
+      router.push('/login');
+      return;
+    }
+
+    if (!roomCode) {
+      addToast('저장할 세션이 없습니다', 'error');
+      return;
+    }
+
+    if (transcripts.length === 0) {
+      addToast('저장할 번역 내용이 없습니다', 'error');
+      return;
+    }
+
+    const roomName = prompt('세션 이름을 입력하세요', sessionTitle || `Session ${roomCode}`);
+    if (!roomName) return;
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/v1/recordings/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          roomCode: roomCode,
+          roomName
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        addToast('세션이 저장되었습니다', 'success');
+      } else {
+        addToast(data.message || '저장에 실패했습니다', 'error');
+      }
+    } catch (error) {
+      console.error('Save recording error:', error);
+      addToast('저장 중 오류가 발생했습니다', 'error');
+    }
   };
 
   // Export transcripts
   const exportTranscripts = () => {
     const langName = LANGUAGE_MAP[selectedLanguage] || selectedLanguage;
-    let data = `Room: ${roomCode}\nSpeaker: ${speakerName}\nLanguage: ${langName}\nDate: ${new Date().toLocaleString()}\n\n`;
+    let data = `Session: ${sessionTitle || speakerName}\nRoom: ${roomCode}\nSpeaker: ${speakerName}\nLanguage: ${langName}\nDate: ${new Date().toLocaleString()}\n\n`;
 
     transcripts.forEach((item) => {
       if (item.type === "translation") {
@@ -221,35 +316,64 @@ export default function ListenerRoom() {
 
   // Password modal
   if (needsPassword && !isJoined) {
+    console.log("🔒 Rendering password modal for room:", roomCode);
+    console.log("🔒 Current password state:", password ? "***" : "(empty)");
+    console.log("🔒 Socket connected:", !!socketRef.current, "isConnected:", isConnected);
+
     return (
       <main className={styles.main}>
-        <div className={styles.modalOverlay}>
-          <div className={styles.modalBox}>
+        <div className={styles.modalOverlay} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
             <h2>🔒 비밀번호 필요</h2>
             <p>이 방은 비밀번호로 보호되어 있습니다</p>
             <div className={styles.roomCodeBadge}>
               방 코드: <strong>{roomCode}</strong>
             </div>
-            <input
-              type="password"
-              placeholder="비밀번호 입력"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setPasswordError("");
-              }}
-              onKeyPress={(e) => e.key === "Enter" && handlePasswordSubmit()}
-              className={styles.input}
-            />
-            {passwordError && <p className={styles.error}>{passwordError}</p>}
-            <div className={styles.modalActions}>
-              <button onClick={() => router.push("/")} className={styles.cancelBtn}>
-                취소
-              </button>
-              <button onClick={handlePasswordSubmit} className={styles.submitBtn}>
-                입장
-              </button>
-            </div>
+            <form onSubmit={handlePasswordSubmit}>
+              <input
+                type="password"
+                placeholder="비밀번호 입력"
+                value={password}
+                onChange={(e) => {
+                  console.log("🔐 Password input changed");
+                  setPassword(e.target.value);
+                  setPasswordError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    console.log("🔐 Enter key pressed");
+                    e.preventDefault();
+                    handlePasswordSubmit(e);
+                  }
+                }}
+                className={styles.input}
+                autoFocus
+              />
+              {passwordError && <p className={styles.error}>{passwordError}</p>}
+              <div className={styles.modalActions}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    console.log("❌ Cancel button clicked");
+                    e.preventDefault();
+                    router.push("/");
+                  }}
+                  className={styles.cancelBtn}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  onClick={(e) => {
+                    console.log("✅ Submit button clicked");
+                    handlePasswordSubmit(e);
+                  }}
+                  className={styles.submitBtn}
+                >
+                  입장
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       </main>
@@ -266,16 +390,23 @@ export default function ListenerRoom() {
             <button onClick={() => router.push("/")} className={styles.backBtn}>
               ← 나가기
             </button>
-            <div className={styles.roomInfo}>
-              <span className={styles.roomLabel}>방:</span>
-              <span className={styles.roomCode}>{roomCode}</span>
-              {speakerName && <span className={styles.speaker}>| {speakerName}</span>}
+            <div className={styles.sessionInfo}>
+              {sessionTitle && (
+                <h1 className={styles.sessionTitle}>{sessionTitle}</h1>
+              )}
+              <div className={styles.roomInfo}>
+                <span className={styles.roomLabel}>방:</span>
+                <span className={styles.roomCode}>{roomCode}</span>
+                {speakerName && <span className={styles.speaker}>| {speakerName}</span>}
+              </div>
             </div>
           </div>
-          <div className={styles.statusBadge}>
-            <span className={isConnected ? styles.connected : styles.disconnected}>
-              {isConnected ? "● 연결됨" : "○ 연결 끊김"}
-            </span>
+          <div className={styles.headerRight}>
+            <div className={styles.statusBadge}>
+              <span className={isConnected ? styles.connected : styles.disconnected}>
+                {isConnected ? "● 연결됨" : "○ 연결 끊김"}
+              </span>
+            </div>
           </div>
         </header>
 
@@ -327,8 +458,29 @@ export default function ListenerRoom() {
             <span>자동 스크롤</span>
           </label>
 
+          {user && (
+            <button
+              onClick={saveRecording}
+              className={styles.saveBtn}
+              disabled={transcripts.length === 0}
+              title={transcripts.length === 0 ? "저장할 내용이 없습니다" : "세션 저장"}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+              </svg>
+              저장
+            </button>
+          )}
+
           <button onClick={exportTranscripts} className={styles.exportBtn}>
-            📥 내보내기
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            내보내기
           </button>
         </div>
 

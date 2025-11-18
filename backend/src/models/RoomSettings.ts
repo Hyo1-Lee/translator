@@ -27,6 +27,9 @@ export class RoomSettings extends Model {
   @Column(DataType.UUID)
   declare roomId: string;
 
+  @Column(DataType.STRING)
+  declare roomTitle: string | null;
+
   @Default('en')
   @Column(DataType.STRING)
   declare targetLanguages: string;

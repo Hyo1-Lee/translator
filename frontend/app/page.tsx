@@ -17,7 +17,9 @@ export default function Home() {
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (roomId.trim()) {
-      router.push(`/listener?room=${roomId.trim().toUpperCase()}`);
+      const code = roomId.trim().toUpperCase();
+      console.log("🚪 Joining room with code:", code);
+      router.push(`/listener/${code}`);
     }
   };
 

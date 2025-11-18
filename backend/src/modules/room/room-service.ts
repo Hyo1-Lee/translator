@@ -9,6 +9,7 @@ export interface CreateRoomOptions {
   speakerName: string;
   speakerId: string;
   userId?: string;
+  roomTitle?: string;
   password?: string;
   promptTemplate?: string;
   customPrompt?: string;
@@ -69,6 +70,7 @@ export class RoomService {
     // Create room settings
     await RoomSettings.create({
       roomId: room.id,
+      roomTitle: options.roomTitle || null,
       targetLanguages,
       promptTemplate: options.promptTemplate || 'general',
       customPrompt: options.customPrompt,
@@ -270,6 +272,7 @@ export class RoomService {
   async updateRoomSettings(
     roomCode: string,
     settings: {
+      roomTitle?: string;
       promptTemplate?: string;
       customPrompt?: string;
       targetLanguages?: string[];
@@ -289,6 +292,9 @@ export class RoomService {
 
     const updateData: any = {};
 
+    if (settings.roomTitle !== undefined) {
+      updateData.roomTitle = settings.roomTitle;
+    }
     if (settings.promptTemplate !== undefined) {
       updateData.promptTemplate = settings.promptTemplate;
     }
