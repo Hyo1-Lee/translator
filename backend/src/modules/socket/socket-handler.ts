@@ -149,28 +149,18 @@ export class SocketHandler {
       // Create STT client for this room with custom prompt
       await this.sttManager.createClient(
         room.roomCode,
-        // STT callback
+        // STT callback - FAST PATH
         async (transcriptData) => {
-          console.log(`[STT][${room.roomCode}] 🎯 Transcript callback triggered:`, {
-            text: transcriptData.text,
-            confidence: transcriptData.confidence,
-            isFinal: transcriptData.isFinal
-          });
-
-          // Only save final transcripts to database
+          // Save final transcripts to database
           if (transcriptData.isFinal) {
-            console.log(`[STT][${room.roomCode}] 💾 Saving FINAL transcript to database`);
             await this.transcriptService.saveSttText(
               transcriptData.roomId,
               transcriptData.text,
               transcriptData.confidence
             );
-          } else {
-            console.log(`[STT][${room.roomCode}] ⏭️  Skipping database save for partial transcript`);
           }
 
-          // Broadcast to room (both partial and final for real-time display)
-          console.log(`[STT][${room.roomCode}] 📡 Broadcasting stt-text to room (final: ${transcriptData.isFinal})`);
+          // Broadcast to room immediately
           this.io.to(transcriptData.roomId).emit('stt-text', {
             text: transcriptData.text,
             timestamp: transcriptData.timestamp.getTime(),
@@ -394,33 +384,62 @@ export class SocketHandler {
     try {
       const { roomId, audio } = data;
 
+      if (!roomId) {
+        console.error(`[Audio] ❌ No roomId provided in audio stream`);
+        return;
+      }
+
+      if (!audio) {
+        console.error(`[Audio][${roomId}] ❌ No audio data provided`);
+        return;
+      }
+
       // Verify speaker
       const room = await this.roomService.getRoom(roomId);
       if (!room) {
-        console.warn(`[Audio] Room not found: ${roomId}`);
+        console.warn(`[Audio][${roomId}] ❌ Room not found`);
         return;
       }
 
       if (room.speakerId !== socket.id) {
-        console.warn(`[Audio] Unauthorized audio stream attempt for room ${roomId}`);
+        console.warn(`[Audio][${roomId}] ❌ Unauthorized audio stream attempt (expected: ${room.speakerId}, got: ${socket.id})`);
         return;
       }
 
       // Convert base64 to buffer
       const audioBuffer = Buffer.from(audio, 'base64');
 
+      // Validate audio buffer
+      if (audioBuffer.length === 0) {
+        console.warn(`[Audio][${roomId}] ⚠️  Empty audio buffer received`);
+        return;
+      }
+
       // Log audio reception
       const count = (this.audioChunksReceived.get(roomId) || 0) + 1;
       this.audioChunksReceived.set(roomId, count);
       if (count === 1 || count % 100 === 0) {
-        console.log(`[Audio][${roomId}] Received ${count} audio chunks (${audioBuffer.length} bytes)`);
+        console.log(`[Audio][${roomId}] ✅ Received ${count} audio chunks (${audioBuffer.length} bytes)`);
+      }
+
+      // Check if STT client exists
+      if (!this.sttManager.hasActiveClient(roomId)) {
+        if (count === 1) {
+          console.error(`[Audio][${roomId}] ❌ No active STT client found! Active clients: [${this.sttManager.getActiveRoomIds().join(', ')}]`);
+        }
+        return;
       }
 
       // Send to STT
       this.sttManager.sendAudio(roomId, audioBuffer);
 
+      // Log successful send for first few chunks
+      if (count <= 3) {
+        console.log(`[Audio][${roomId}] 🎤 Sent audio chunk #${count} to STT (${audioBuffer.length} bytes)`);
+      }
+
     } catch (error) {
-      console.error(`[Audio] Stream error:`, error);
+      console.error(`[Audio] ❌ Stream error:`, error);
       if (error instanceof Error) {
         console.error(`[Audio] Error details: ${error.message}`);
         console.error(`[Audio] Stack trace:`, error.stack);

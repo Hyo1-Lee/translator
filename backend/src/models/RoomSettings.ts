@@ -22,9 +22,11 @@ export class RoomSettings extends Model {
   @Column(DataType.UUID)
   declare id: string;
 
-  @Unique
   @ForeignKey(() => Room)
-  @Column(DataType.UUID)
+  @Column({
+    type: DataType.UUID,
+    unique: 'roomId_unique'
+  })
   declare roomId: string;
 
   @Column(DataType.STRING)

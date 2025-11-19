@@ -196,24 +196,17 @@ export default function ListenerRoom() {
       }
     });
 
-    // Listen for STT text (for immediate display before translation)
+    // Listen for STT text - ULTRA SIMPLE
     socketRef.current.on("stt-text", (data: any) => {
-      console.log("[STT] Received stt-text:", data.text, "isFinal:", data.isFinal);
       setTranscripts((prev) => {
         const newTranscript = {
           type: "stt",
           text: data.text,
           timestamp: data.timestamp,
-          isHistory: data.isHistory || false,
           isFinal: data.isFinal !== false,
         };
 
-        // If it's history, add at the end
-        if (data.isHistory) {
-          return [...prev, newTranscript];
-        }
-
-        // For real-time: if partial and last item is also partial STT, update it
+        // Partial: update last item if it's also partial
         if (!newTranscript.isFinal && prev.length > 0) {
           const lastItem = prev[prev.length - 1];
           if (lastItem.type === "stt" && !lastItem.isFinal) {
@@ -221,8 +214,16 @@ export default function ListenerRoom() {
           }
         }
 
-        // Otherwise add as new (keep last 20)
-        return [...prev.slice(-19), newTranscript];
+        // Final: replace last partial if exists, otherwise add new
+        if (newTranscript.isFinal && prev.length > 0) {
+          const lastItem = prev[prev.length - 1];
+          if (lastItem.type === "stt" && !lastItem.isFinal) {
+            return [...prev.slice(0, -1), newTranscript];
+          }
+        }
+
+        // Add new transcript
+        return [...prev, newTranscript];
       });
     });
 
@@ -570,7 +571,7 @@ export default function ListenerRoom() {
                     <>
                       <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
                       <div className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
-                        🎤 {item.text}
+                        {item.text}
                         {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
                       </div>
                     </>

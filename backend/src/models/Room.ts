@@ -36,8 +36,10 @@ export class Room extends Model {
   @Column(DataType.UUID)
   declare id: string;
 
-  @Unique
-  @Column(DataType.STRING)
+  @Column({
+    type: DataType.STRING,
+    unique: 'roomCode_unique'
+  })
   declare roomCode: string;
 
   @Column(DataType.STRING)

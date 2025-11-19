@@ -23,8 +23,10 @@ export class RefreshToken extends Model {
   @Column(DataType.UUID)
   declare id: string;
 
-  @Unique
-  @Column(DataType.STRING)
+  @Column({
+    type: DataType.STRING,
+    unique: 'token_unique'
+  })
   declare token: string;
 
   @ForeignKey(() => User)

@@ -23,8 +23,10 @@ export class Listener extends Model {
   @Column(DataType.UUID)
   declare id: string;
 
-  @Unique
-  @Column(DataType.STRING)
+  @Column({
+    type: DataType.STRING,
+    unique: 'socketId_unique'
+  })
   declare socketId: string;
 
   @ForeignKey(() => Room)

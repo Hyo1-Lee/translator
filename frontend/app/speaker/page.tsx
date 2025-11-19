@@ -90,6 +90,8 @@ export default function Speaker() {
   const streamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationRef = useRef<number | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   // Generate QR code
   const generateQRCode = useCallback(async (roomCode: string) => {
@@ -391,36 +393,34 @@ export default function Speaker() {
       setListenerCount(data.count);
     });
 
-    // Listen for transcripts
+    // Listen for transcripts - ULTRA SIMPLE
     socketRef.current.on("stt-text", (data: any) => {
-      console.log("[STT] Received stt-text:", data.text, "isFinal:", data.isFinal);
       setTranscripts((prev) => {
         const newTranscript = {
           type: "stt",
           text: data.text,
           timestamp: data.timestamp,
-          isHistory: data.isHistory || false,
-          isFinal: data.isFinal !== false, // Default to true for backwards compatibility
+          isFinal: data.isFinal !== false,
         };
 
-        // If it's history, add at the beginning
-        if (data.isHistory) {
-          return [...prev, newTranscript];
-        }
-
-        // For real-time transcripts
-        // If this is a partial transcript and the last item is also a partial STT transcript,
-        // update it instead of adding a new one
+        // Partial: update last item if it's also partial
         if (!newTranscript.isFinal && prev.length > 0) {
           const lastItem = prev[prev.length - 1];
           if (lastItem.type === "stt" && !lastItem.isFinal) {
-            // Update the last partial transcript
             return [...prev.slice(0, -1), newTranscript];
           }
         }
 
-        // Otherwise add as new transcript (keep last 20)
-        return [...prev.slice(-19), newTranscript];
+        // Final: replace last partial if exists, otherwise add new
+        if (newTranscript.isFinal && prev.length > 0) {
+          const lastItem = prev[prev.length - 1];
+          if (lastItem.type === "stt" && !lastItem.isFinal) {
+            return [...prev.slice(0, -1), newTranscript];
+          }
+        }
+
+        // Add new transcript
+        return [...prev, newTranscript];
       });
     });
 
@@ -462,54 +462,161 @@ export default function Speaker() {
   // Start recording
   const startRecording = async () => {
     try {
-      console.log("[Recording] Starting recording, roomId:", roomId);
+      console.log("[Recording] 🎤 Starting recording...");
+      console.log("[Recording] RoomId:", roomId);
+      console.log("[Recording] Socket connected:", socketRef.current?.connected);
+      console.log("[Recording] Socket ID:", socketRef.current?.id);
+
       setStatus("마이크 요청 중...");
 
+      // Test microphone access first
+      console.log("[Recording] Requesting microphone access...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 24000,
           sampleSize: 16,
           echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          noiseSuppression: false,  // Disable for higher sensitivity
+          autoGainControl: false,    // Disable to control gain manually
         },
       });
 
+      console.log("[Recording] ✅ Microphone access granted!");
+      console.log("[Recording] Stream info:", {
+        active: stream.active,
+        tracks: stream.getTracks().length,
+        audioTracks: stream.getAudioTracks().map(t => ({
+          kind: t.kind,
+          label: t.label,
+          enabled: t.enabled,
+          muted: t.muted,
+          readyState: t.readyState,
+          settings: t.getSettings()
+        }))
+      });
+
       streamRef.current = stream;
+
+      // Start MediaRecorder for local recording
+      // Check supported mime types
+      const mimeTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4'
+      ];
+
+      let selectedMimeType = '';
+      for (const mimeType of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+          selectedMimeType = mimeType;
+          console.log(`[Recording] Using mime type: ${mimeType}`);
+          break;
+        }
+      }
+
+      if (!selectedMimeType) {
+        console.error("[Recording] No supported mime type found!");
+        selectedMimeType = 'audio/webm'; // Fallback
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: selectedMimeType,
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+          console.log(`[Recording] Chunk received: ${event.data.size} bytes (total chunks: ${recordedChunksRef.current.length})`);
+        }
+      };
+
+      mediaRecorder.onerror = (event) => {
+        console.error("[Recording] MediaRecorder error:", event);
+      };
+
+      mediaRecorder.onstart = () => {
+        console.log("[Recording] ✅ MediaRecorder started successfully");
+        recordedChunksRef.current = []; // Clear previous recordings
+      };
+
+      mediaRecorder.onstop = () => {
+        console.log(`[Recording] ✅ MediaRecorder stopped (total chunks: ${recordedChunksRef.current.length})`);
+
+        // Calculate total recording duration
+        const totalSize = recordedChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+        console.log(`[Recording] Total size: ${totalSize} bytes`);
+      };
+
+      try {
+        // Use timeslice to continuously record chunks
+        mediaRecorder.start(100); // Record in 100ms chunks for smoother recording
+        mediaRecorderRef.current = mediaRecorder;
+        console.log(`[Recording] MediaRecorder state: ${mediaRecorder.state}`);
+      } catch (error) {
+        console.error("[Recording] Failed to start MediaRecorder:", error);
+      }
 
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
         sampleRate: 24000,
       });
 
       // Log actual sample rate (browsers may not honor requested rate)
+      console.log(`[Audio] 🔧 AudioContext created`);
       console.log(`[Audio] Requested: 24000 Hz, Actual: ${audioContextRef.current.sampleRate} Hz`);
+      console.log(`[Audio] State: ${audioContextRef.current.state}`);
 
       const source = audioContextRef.current.createMediaStreamSource(stream);
+      console.log(`[Audio] ✅ Media stream source created`);
 
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       source.connect(analyserRef.current);
+      console.log(`[Audio] ✅ Analyser connected`);
 
       // Optimized buffer size - 2048 for lower latency
       const bufferSize = 2048;
       processorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
+      console.log(`[Audio] ✅ ScriptProcessor created (buffer size: ${bufferSize})`);
 
       let isProcessing = true;
       let frameCount = 0;
       const SEND_EVERY_N_FRAMES = 2; // Send every 2 frames to reduce CPU load
       let audioChunksSent = 0;
+      let audioProcessCallCount = 0;
 
       processorRef.current.onaudioprocess = (e: any) => {
-        if (!isProcessing || !socketRef.current || !roomId) {
-          if (!roomId && audioChunksSent === 0) {
-            console.warn("[Audio] Cannot send audio: roomId is missing");
+        audioProcessCallCount++;
+
+        // Log first few calls to confirm the processor is running
+        if (audioProcessCallCount <= 5) {
+          console.log(`[Audio] 📢 onaudioprocess called #${audioProcessCallCount}`);
+        }
+
+        // Comprehensive validation with detailed logging
+        if (!isProcessing) {
+          if (audioChunksSent === 0) {
+            console.warn("[Audio] ❌ Cannot send audio: not processing");
           }
-          if (!socketRef.current && audioChunksSent === 0) {
-            console.warn("[Audio] Cannot send audio: socket is not connected");
+          return;
+        }
+
+        if (!socketRef.current || !socketRef.current.connected) {
+          if (audioChunksSent === 0) {
+            console.error("[Audio] ❌ Cannot send audio: socket not connected");
+            console.log("[Audio] Socket state:", {
+              exists: !!socketRef.current,
+              connected: socketRef.current?.connected,
+              disconnected: socketRef.current?.disconnected
+            });
           }
-          if (!isProcessing && audioChunksSent === 0) {
-            console.warn("[Audio] Cannot send audio: not processing");
+          return;
+        }
+
+        if (!roomId) {
+          if (audioChunksSent === 0) {
+            console.error("[Audio] ❌ Cannot send audio: roomId is missing");
           }
           return;
         }
@@ -522,19 +629,26 @@ export default function Speaker() {
 
         // Calculate RMS for better noise detection
         let sum = 0;
+        let maxSample = 0;
         for (let i = 0; i < inputData.length; i++) {
           sum += inputData[i] * inputData[i];
+          maxSample = Math.max(maxSample, Math.abs(inputData[i]));
         }
         const rms = Math.sqrt(sum / inputData.length);
 
-        // Adaptive threshold: 0.01 for normal speech
-        if (rms > 0.01) {
+        // Detailed logging for first few chunks
+        if (audioChunksSent < 10) {
+          console.log(`[Audio] 🔊 Frame #${frameCount}: RMS=${rms.toFixed(6)}, Max=${maxSample.toFixed(6)}, threshold=0.002`);
+        }
+
+        // Lower threshold for higher sensitivity - SEND EVERYTHING for debugging
+        if (rms > 0.001) {  // Very low threshold for testing
           const int16Data = new Int16Array(inputData.length);
 
-          // Optimized audio conversion with slight amplification
+          // High amplification for better sensitivity
           for (let i = 0; i < inputData.length; i++) {
             const s = Math.max(-1, Math.min(1, inputData[i]));
-            const amplified = s * 1.5; // Increased from 1.2 for clearer audio
+            const amplified = s * 3.5; // Increased from 3.0 to 3.5 for higher gain
             const clamped = Math.max(-1, Math.min(1, amplified));
             int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
           }
@@ -548,9 +662,11 @@ export default function Speaker() {
           });
 
           audioChunksSent++;
-          if (audioChunksSent === 1 || audioChunksSent % 100 === 0) {
-            console.log(`[Audio] Sent ${audioChunksSent} chunks to server (roomId: ${roomId})`);
+          if (audioChunksSent <= 5 || audioChunksSent % 50 === 0) {
+            console.log(`[Audio] ✅ Sent chunk #${audioChunksSent} to server (roomId: ${roomId}, size: ${int16Data.length * 2} bytes, RMS: ${rms.toFixed(6)})`);
           }
+        } else if (audioChunksSent < 10) {
+          console.log(`[Audio] 🔇 Audio too quiet, skipping (RMS=${rms.toFixed(6)})`);
         }
       };
 
@@ -558,6 +674,7 @@ export default function Speaker() {
 
       analyserRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
+      console.log(`[Audio] ✅ Audio chain connected: Source -> Analyser -> Processor -> Destination`);
 
       const updateAudioLevel = () => {
         if (!analyserRef.current) return;
@@ -571,7 +688,7 @@ export default function Speaker() {
           sum += normalized * normalized;
         }
         const rms = Math.sqrt(sum / dataArray.length);
-        const level = Math.min(100, Math.round(rms * 300));
+        const level = Math.min(100, Math.round(rms * 500)); // Increased from 300 to 500 for more sensitive meter
         setAudioLevel(level);
 
         animationRef.current = requestAnimationFrame(updateAudioLevel);
@@ -580,8 +697,21 @@ export default function Speaker() {
 
       setIsRecording(true);
       setStatus("녹음 중");
+
+      console.log(`[Recording] ✅ Recording started successfully!`);
+      console.log(`[Recording] Summary:`, {
+        roomId,
+        socketConnected: socketRef.current?.connected,
+        streamActive: stream.active,
+        audioContextState: audioContextRef.current.state,
+        mediaRecorderState: mediaRecorderRef.current?.state
+      });
     } catch (error) {
-      console.error("Recording error:", error);
+      console.error("[Recording] ❌ Recording error:", error);
+      if (error instanceof Error) {
+        console.error("[Recording] Error details:", error.message);
+        console.error("[Recording] Stack trace:", error.stack);
+      }
       setStatus("마이크 오류");
       alert("마이크 접근 권한이 필요합니다.");
     }
@@ -589,6 +719,7 @@ export default function Speaker() {
 
   // Stop recording
   const stopRecording = () => {
+    console.log("[Recording] Stopping recording...");
     setIsRecording(false);
     setStatus("정지");
     setAudioLevel(0);
@@ -598,27 +729,90 @@ export default function Speaker() {
       animationRef.current = null;
     }
 
-    if (processorRef.current) {
-      if (processorRef.current.isProcessing !== undefined) {
-        processorRef.current.isProcessing = false;
+    // Stop MediaRecorder with proper error handling
+    if (mediaRecorderRef.current) {
+      try {
+        if (mediaRecorderRef.current.state !== 'inactive') {
+          console.log(`[Recording] Stopping MediaRecorder (state: ${mediaRecorderRef.current.state})`);
+          mediaRecorderRef.current.stop();
+        }
+      } catch (error) {
+        console.error("[Recording] Error stopping MediaRecorder:", error);
       }
-      processorRef.current.disconnect();
+      mediaRecorderRef.current = null;
+    }
+
+    if (processorRef.current) {
+      try {
+        if (processorRef.current.isProcessing !== undefined) {
+          processorRef.current.isProcessing = false;
+        }
+        processorRef.current.disconnect();
+      } catch (error) {
+        console.error("[Recording] Error disconnecting processor:", error);
+      }
       processorRef.current = null;
     }
 
     if (analyserRef.current) {
-      analyserRef.current.disconnect();
+      try {
+        analyserRef.current.disconnect();
+      } catch (error) {
+        console.error("[Recording] Error disconnecting analyser:", error);
+      }
       analyserRef.current = null;
     }
 
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      try {
+        audioContextRef.current.close();
+      } catch (error) {
+        console.error("[Recording] Error closing audio context:", error);
+      }
       audioContextRef.current = null;
     }
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      try {
+        streamRef.current.getTracks().forEach((track) => {
+          console.log(`[Recording] Stopping track: ${track.kind} (${track.label})`);
+          track.stop();
+        });
+      } catch (error) {
+        console.error("[Recording] Error stopping tracks:", error);
+      }
       streamRef.current = null;
+    }
+
+    console.log(`[Recording] ✅ Recording stopped. Total chunks recorded: ${recordedChunksRef.current.length}`);
+  };
+
+  // Download recording
+  const downloadRecording = () => {
+    if (recordedChunksRef.current.length === 0) {
+      alert("녹음된 내용이 없습니다.");
+      return;
+    }
+
+    console.log(`[Recording] Creating download blob from ${recordedChunksRef.current.length} chunks`);
+
+    // Calculate total size
+    const totalSize = recordedChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+    console.log(`[Recording] Total recording size: ${totalSize} bytes`);
+
+    const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recording_${roomId}_${new Date().toISOString().replace(/:/g, '-')}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log(`[Recording] ✅ Download initiated`);
+    if (addToast) {
+      addToast('녹음 파일이 다운로드되었습니다', 'success');
     }
   };
 
@@ -644,18 +838,18 @@ export default function Speaker() {
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      addToast('로그인이 필요합니다', 'error');
+      alert('로그인이 필요합니다');
       router.push('/login');
       return;
     }
 
     if (!roomId) {
-      addToast('저장할 세션이 없습니다', 'error');
+      alert('저장할 세션이 없습니다');
       return;
     }
 
     if (transcripts.length === 0) {
-      addToast('저장할 번역 내용이 없습니다', 'error');
+      alert('저장할 번역 내용이 없습니다');
       return;
     }
 
@@ -677,13 +871,13 @@ export default function Speaker() {
 
       const data = await response.json();
       if (data.success) {
-        addToast('세션이 저장되었습니다', 'success');
+        alert('세션이 저장되었습니다');
       } else {
-        addToast(data.message || '저장에 실패했습니다', 'error');
+        alert(data.message || '저장에 실패했습니다');
       }
     } catch (error) {
       console.error('Save recording error:', error);
-      addToast('저장 중 오류가 발생했습니다', 'error');
+      alert('저장 중 오류가 발생했습니다');
     }
   };
 
@@ -764,6 +958,19 @@ export default function Speaker() {
 
               {/* Action Buttons */}
               <div className={styles.actionButtons}>
+                <button
+                  onClick={downloadRecording}
+                  className={styles.saveButton}
+                  disabled={recordedChunksRef.current.length === 0}
+                  title="녹음 파일 다운로드"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  녹음 다운로드
+                </button>
                 <button
                   onClick={saveRecording}
                   className={styles.saveButton}
@@ -855,13 +1062,10 @@ export default function Speaker() {
               {transcripts.slice(-10).map((item, index) => (
                 <div key={index} className={styles.transcriptItem}>
                   {item.type === "stt" ? (
-                    <div className={styles.sttContainer}>
-                      <span className={styles.sttLabel}>🎤 음성인식</span>
-                      <p className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
-                        {item.text}
-                        {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
-                      </p>
-                    </div>
+                    <p className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
+                      {item.text}
+                      {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
+                    </p>
                   ) : (
                     <div className={styles.translationContainer}>
                       <span className={styles.translationLabel}>🌐 번역</span>

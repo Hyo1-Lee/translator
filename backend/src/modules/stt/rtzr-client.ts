@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import axios from "axios";
-import { STTProvider, TranscriptResult } from "./stt-provider.interface";
+import { STTProvider } from "./stt-provider.interface";
 
 interface RTZRConfig {
   clientId: string;
@@ -23,6 +23,8 @@ export class RTZRClient extends STTProvider {
   private isManualDisconnect: boolean = false;
   private lastAudioTime: number = 0;
   private keepAliveInterval: NodeJS.Timeout | null = null;
+  private firstAudioSentTime: number = 0;
+  private audioChunkCount: number = 0;
 
   constructor(roomId: string, config: RTZRConfig) {
     super(roomId);
@@ -81,17 +83,16 @@ export class RTZRClient extends STTProvider {
       throw new Error("Failed to obtain access token");
     }
 
-    // WebSocket connection parameters - optimized for Korean transcription quality
+    // WebSocket connection parameters - WHISPER for better accuracy
     const params = new URLSearchParams({
-      sample_rate: "24000", // 8000 ~ 48000 (24000 for optimal quality)
-      encoding: "LINEAR16", // LINEAR16, FLAC, MULAW, ALAW, AMR, AMR_WB, OGG_OPUS, OPUS
-      model_name: "whisper", // Whisper model for better Korean accuracy
-      language: "ko", // Korean language (required for whisper model)
-      use_itn: "true", // 영어/숫자/단위 변환
-      use_disfluency_filter: "true", // 반복, 망설임 제거
-      use_profanity_filter: "false", // 욕설 필터 비활성화
-      use_punctuation: "true", // 구두점 자동 추가
-      use_word_level_timestamp: "false", // 단어별 타임스탬프 비활성화
+      sample_rate: "24000",
+      encoding: "LINEAR16",
+      // model_name: "whisper",
+      language: "ko",
+      use_itn: "true",
+      use_disfluency_filter: "true",
+      use_profanity_filter: "false",
+      use_punctuation: "true",
     });
 
     const wsUrl = `wss://openapi.vito.ai/v1/transcribe:streaming?${params.toString()}`;
@@ -105,31 +106,19 @@ export class RTZRClient extends STTProvider {
 
     // WebSocket event handlers
     this.ws.on("open", () => {
-      console.log(`[STT][${this.roomId}] WebSocket connected`);
       this.isConnected = true;
       this.reconnectAttempts = 0;
       this.lastAudioTime = Date.now();
       this.emit("connected");
-
-      // Process pending audio
       this.processPendingAudio();
-
-      // Start keep-alive timer to prevent timeout
-      // Send silent audio if no real audio for 3 seconds
       this.startKeepAlive();
     });
 
     this.ws.on("message", (data: WebSocket.Data) => {
       try {
-        const message = JSON.parse(data.toString());
-        console.log(
-          `[STT][${this.roomId}] 📨 Received message from VITO:`,
-          JSON.stringify(message)
-        );
-        this.handleMessage(message);
+        this.handleMessage(JSON.parse(data.toString()));
       } catch (error) {
-        console.error(`[STT][${this.roomId}] Failed to parse message:`, error);
-        console.error(`[STT][${this.roomId}] Raw message:`, data.toString());
+        console.error(`[STT][${this.roomId}] Parse error:`, error);
       }
     });
 
@@ -139,136 +128,101 @@ export class RTZRClient extends STTProvider {
     });
 
     this.ws.on("close", (code, reason) => {
-      console.log(
-        `[STT][${this.roomId}] WebSocket closed: ${code} - ${reason}`
-      );
+      console.log(`[STT][${this.roomId}] WS closed: ${code} - ${reason}`);
       this.isConnected = false;
       this.ws = null;
       this.emit("disconnected");
-
-      // Stop keep-alive
       this.stopKeepAlive();
 
-      // Auto-reconnect logic (only if not manually disconnected)
+      // Auto-reconnect
       if (
         !this.isManualDisconnect &&
         this.reconnectAttempts < this.maxReconnectAttempts
       ) {
         this.reconnectAttempts++;
-        console.log(
-          `[STT][${this.roomId}] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
-        );
         setTimeout(() => this.connect(), 2000);
-      } else if (this.isManualDisconnect) {
-        console.log(
-          `[STT][${this.roomId}] Manual disconnect - not reconnecting`
-        );
       }
     });
   }
 
-  // Handle incoming messages
+  // Handle incoming messages - OPTIMIZED with latency tracking
   private handleMessage(message: any): void {
-    // Check for error
     if (message.error) {
-      console.error(
-        `[STT][${this.roomId}] ❌ Error from server:`,
-        message.error
-      );
+      console.error(`[STT][${this.roomId}] Error:`, message.error);
       this.emit("error", message.error);
       return;
     }
 
-    // Process transcript
     if (message.alternatives && message.alternatives.length > 0) {
-      const alternative = message.alternatives[0];
-      const text = alternative.text?.trim();
-
-      console.log(`[STT][${this.roomId}] 📝 Transcript received:`, {
-        text,
-        confidence: alternative.confidence,
-        final: message.final || false,
-      });
-
+      const text = message.alternatives[0].text?.trim();
       if (text) {
-        const result: TranscriptResult = {
-          text,
-          confidence: alternative.confidence,
-          final: message.final || false,
-        };
+        // Calculate latency from first audio to first result
+        if (this.firstAudioSentTime > 0) {
+          const latency = Date.now() - this.firstAudioSentTime;
+          const isFinal = message.final || false;
+          console.log(
+            `[STT][${this.roomId}] ⚡ Latency: ${latency}ms | ` +
+              `Type: ${isFinal ? "FINAL" : "PARTIAL"} | ` +
+              `AudioChunks: ${this.audioChunkCount} | ` +
+              `Text: "${text.substring(0, 30)}${text.length > 30 ? "..." : ""}"`
+          );
 
-        // Emit both partial and final transcripts for real-time display
-        if (result.final) {
-          console.log(
-            `[STT][${this.roomId}] ✅ Emitting FINAL transcript: "${text}"`
-          );
-        } else {
-          console.log(
-            `[STT][${this.roomId}] ⏳ Emitting PARTIAL transcript: "${text}"`
-          );
+          // Reset after final result
+          if (isFinal) {
+            this.firstAudioSentTime = 0;
+            this.audioChunkCount = 0;
+          }
         }
-        this.emit("transcript", result);
+
+        this.emit("transcript", {
+          text,
+          confidence: message.alternatives[0].confidence,
+          final: message.final || false,
+        });
       }
-    } else {
-      console.log(
-        `[STT][${this.roomId}] 🤔 Message has no alternatives:`,
-        message
-      );
     }
   }
 
-  // Send audio data
+  // Send audio data - FAST PATH with timing
   sendAudio(audioData: Buffer): void {
     if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        this.ws.send(audioData);
-        this.lastAudioTime = Date.now(); // Update last audio time
+      this.ws.send(audioData);
+      this.lastAudioTime = Date.now();
 
-        // Log first few audio sends for debugging
-        const sendCount = (this as any)._audioSendCount || 0;
-        (this as any)._audioSendCount = sendCount + 1;
-        if (sendCount < 3 || sendCount % 50 === 0) {
-          console.log(
-            `[STT][${this.roomId}] 🎤 Sent audio chunk #${sendCount + 1} (${
-              audioData.length
-            } bytes)`
-          );
-        }
-      } catch (error) {
-        console.error(`[STT][${this.roomId}] Error sending audio:`, error);
-        this.pendingAudioBuffer.push(audioData);
+      // Track first audio sent for latency measurement
+      this.audioChunkCount++;
+      if (this.audioChunkCount === 1) {
+        this.firstAudioSentTime = Date.now();
+        console.log(
+          `[STT][${this.roomId}] ⏱️  First audio sent to RTZR WebSocket (${audioData.length} bytes)`
+        );
+      } else if (this.audioChunkCount <= 3 || this.audioChunkCount % 100 === 0) {
+        console.log(
+          `[STT][${this.roomId}] 📡 Sent audio chunk #${this.audioChunkCount} to RTZR (${audioData.length} bytes)`
+        );
       }
     } else {
-      // Buffer audio if not connected
-      console.warn(
-        `[STT][${this.roomId}] ⚠️  WebSocket not ready, buffering audio (state: ${this.ws?.readyState})`
-      );
+      if (this.pendingAudioBuffer.length === 0) {
+        console.warn(
+          `[STT][${this.roomId}] ⚠️  WebSocket not ready, buffering audio. ` +
+          `Connected: ${this.isConnected}, WS state: ${this.ws?.readyState}`
+        );
+      }
       this.pendingAudioBuffer.push(audioData);
-
-      // Limit buffer size to prevent memory issues
       if (this.pendingAudioBuffer.length > 100) {
-        this.pendingAudioBuffer.shift(); // Remove oldest
+        this.pendingAudioBuffer.shift();
       }
     }
   }
 
   // Start keep-alive to prevent stream timeout
   private startKeepAlive(): void {
-    // Clear any existing interval
     this.stopKeepAlive();
-
-    // Check every 2 seconds if we need to send keep-alive audio
     this.keepAliveInterval = setInterval(() => {
-      const timeSinceLastAudio = Date.now() - this.lastAudioTime;
-
-      // If no audio for 3 seconds, send silent audio to keep stream alive
-      if (timeSinceLastAudio > 3000) {
+      if (Date.now() - this.lastAudioTime > 3000) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          // Send silent audio chunk (2048 samples of silence for 24kHz)
-          const silentAudio = Buffer.alloc(4096, 0);
-          this.ws.send(silentAudio);
+          this.ws.send(Buffer.alloc(4096, 0));
           this.lastAudioTime = Date.now();
-          console.log(`[STT][${this.roomId}] 🔇 Sent keep-alive silent audio`);
         }
       }
     }, 2000);
@@ -285,16 +239,11 @@ export class RTZRClient extends STTProvider {
   // Process pending audio buffer
   private processPendingAudio(): void {
     if (this.pendingAudioBuffer.length > 0) {
-      console.log(
-        `[STT][${this.roomId}] Processing ${this.pendingAudioBuffer.length} pending audio chunks`
-      );
-
       for (const audio of this.pendingAudioBuffer) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(audio);
         }
       }
-
       this.pendingAudioBuffer = [];
     }
   }
@@ -308,29 +257,21 @@ export class RTZRClient extends STTProvider {
 
   // Disconnect
   disconnect(): void {
-    console.log(`[STT][${this.roomId}] Disconnecting client...`);
     this.isManualDisconnect = true;
-
-    // Stop keep-alive first
     this.stopKeepAlive();
 
     if (this.ws) {
-      // Remove all event listeners to prevent any reconnection attempts
       this.ws.removeAllListeners();
-
-      // Close the connection
       try {
         this.endStream();
         this.ws.close();
       } catch (error) {
-        console.error(`[STT][${this.roomId}] Error closing WebSocket:`, error);
+        console.error(`[STT][${this.roomId}] Close error:`, error);
       }
-
       this.ws = null;
       this.isConnected = false;
     }
 
-    // Clear pending audio buffer
     this.pendingAudioBuffer = [];
     this.reconnectAttempts = 0;
   }

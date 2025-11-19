@@ -26,8 +26,10 @@ export class User extends Model {
   @Column(DataType.UUID)
   declare id: string;
 
-  @Unique
-  @Column(DataType.STRING)
+  @Column({
+    type: DataType.STRING,
+    unique: 'email_unique'
+  })
   declare email: string;
 
   @Column(DataType.STRING)
