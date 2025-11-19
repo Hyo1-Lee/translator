@@ -338,6 +338,7 @@ export default function Speaker() {
     });
 
     socketRef.current.on("room-created", (data: any) => {
+      console.log("[Room] Room created:", data.roomId);
       setRoomId(data.roomId);
       saveRoomInfo(data.roomId, speakerName);
       generateQRCode(data.roomId);
@@ -392,6 +393,7 @@ export default function Speaker() {
 
     // Listen for transcripts
     socketRef.current.on("stt-text", (data: any) => {
+      console.log("[STT] Received stt-text:", data.text, "isFinal:", data.isFinal);
       setTranscripts((prev) => {
         const newTranscript = {
           type: "stt",
@@ -424,29 +426,22 @@ export default function Speaker() {
 
     socketRef.current.on("translation-batch", (data: any) => {
       setTranscripts((prev) => {
-        // Split Korean and English into sentences
-        const koreanSentences = splitIntoSentences(data.korean);
-        const englishSentences = splitIntoSentences(data.english);
+        // Don't split into sentences - keep as a single batch for better readability
+        const newTranscript = {
+          type: "translation",
+          korean: data.korean,
+          english: data.english,
+          translations: data.translations || { en: data.english },
+          timestamp: data.timestamp,
+          isHistory: data.isHistory || false,
+          batchId: data.batchId
+        };
 
-        // Create individual transcript entries for each sentence
-        const newTranscripts: any[] = [];
-        const maxSentences = Math.max(koreanSentences.length, englishSentences.length);
-
-        for (let i = 0; i < maxSentences; i++) {
-          newTranscripts.push({
-            type: "translation",
-            korean: koreanSentences[i] || '',
-            english: englishSentences[i] || '',
-            timestamp: data.timestamp,
-            isHistory: data.isHistory || false,
-          });
-        }
-
-        // If it's history, add at the beginning; otherwise add at the end
+        // If it's history, add at the end; otherwise add at the end (keep last 50)
         if (data.isHistory) {
-          return [...prev, ...newTranscripts];
+          return [...prev, newTranscript];
         } else {
-          return [...prev.slice(-19), ...newTranscripts];
+          return [...prev.slice(-49), newTranscript];
         }
       });
     });
@@ -467,6 +462,7 @@ export default function Speaker() {
   // Start recording
   const startRecording = async () => {
     try {
+      console.log("[Recording] Starting recording, roomId:", roomId);
       setStatus("마이크 요청 중...");
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -508,6 +504,12 @@ export default function Speaker() {
         if (!isProcessing || !socketRef.current || !roomId) {
           if (!roomId && audioChunksSent === 0) {
             console.warn("[Audio] Cannot send audio: roomId is missing");
+          }
+          if (!socketRef.current && audioChunksSent === 0) {
+            console.warn("[Audio] Cannot send audio: socket is not connected");
+          }
+          if (!isProcessing && audioChunksSent === 0) {
+            console.warn("[Audio] Cannot send audio: not processing");
           }
           return;
         }
@@ -848,20 +850,24 @@ export default function Speaker() {
         {/* Recent transcripts preview */}
         {transcripts.length > 0 && (
           <div className={styles.transcriptPreview}>
-            <h3>최근 변환 내역</h3>
+            <h3>실시간 음성 인식</h3>
             <div className={styles.transcriptList}>
-              {transcripts.slice(-5).map((item, index) => (
+              {transcripts.slice(-10).map((item, index) => (
                 <div key={index} className={styles.transcriptItem}>
                   {item.type === "stt" ? (
-                    <p className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
-                      {item.text}
-                      {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
-                    </p>
+                    <div className={styles.sttContainer}>
+                      <span className={styles.sttLabel}>🎤 음성인식</span>
+                      <p className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
+                        {item.text}
+                        {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
+                      </p>
+                    </div>
                   ) : (
-                    <>
+                    <div className={styles.translationContainer}>
+                      <span className={styles.translationLabel}>🌐 번역</span>
                       <p className={styles.koreanText}>{item.korean}</p>
                       <p className={styles.englishText}>{item.english}</p>
-                    </>
+                    </div>
                   )}
                 </div>
               ))}

@@ -44,6 +44,8 @@ interface RoomContext {
   summary: string;                  // Running summary of the conversation
   lastBatchText: string;           // Last batch's Korean text
   targetLanguages: string[];       // Target languages for translation
+  sentenceBuffer: string[];        // Buffer for accumulating sentences
+  pendingPartialText: string;      // Current partial text (for context hint)
 }
 
 export class STTManager {
@@ -74,8 +76,11 @@ export class STTManager {
   ): Promise<void> {
     // Check if client already exists
     if (this.clients.has(roomId)) {
+      console.log(`[STT][${roomId}] Client already exists, skipping creation`);
       return;
     }
+
+    console.log(`[STT][${roomId}] Creating new STT client with provider: ${this.config.provider}`);
 
     // Determine which provider to use
     const provider = this.config.provider;
@@ -118,7 +123,9 @@ export class STTManager {
       previousTranslations: [],
       summary: '',
       lastBatchText: '',
-      targetLanguages: targetLanguages || ['en']
+      targetLanguages: targetLanguages || ['en'],
+      sentenceBuffer: [],
+      pendingPartialText: ''
     });
     // Store target languages for this room (default to English if not provided)
     this.roomTargetLanguages.set(roomId, targetLanguages && targetLanguages.length > 0 ? targetLanguages : ['en']);
@@ -135,10 +142,10 @@ export class STTManager {
 
       console.log(`[STT][${roomId}] Processing transcript (final: ${result.final}):`, result.text);
 
-      // Always emit to frontend for real-time display
+      // Always emit to frontend for IMMEDIATE display (no waiting!)
       onTranscript(transcriptData);
 
-      // Buffer for translation
+      // Only translate FINAL transcripts (skip partials to reduce load)
       if (result.final) {
         // Clear any pending partial text timer since we got a final result
         const partialTimer = this.partialTextTimers.get(roomId);
@@ -148,19 +155,25 @@ export class STTManager {
         }
         this.lastPartialText.delete(roomId);
 
-        // Check if this final text was already translated as a partial
+        // Check if this final text was already translated
         const lastTranslated = this.lastTranslatedText.get(roomId);
         if (lastTranslated && lastTranslated.trim() === result.text.trim()) {
-          console.log(`[STT][${roomId}] ⏭️  Skipping final transcript - already translated as partial`);
+          console.log(`[STT][${roomId}] ⏭️  Skipping translation - already processed`);
           return;
         }
 
-        console.log(`[STT][${roomId}] Buffering final transcript for translation`);
+        console.log(`[STT][${roomId}] 🚀 FINAL transcript - immediate translation`);
+        // Mark as translated
+        this.lastTranslatedText.set(roomId, result.text);
+        // Immediately start translation (no buffering delay)
         this.bufferTextForTranslation(roomId, result.text, onTranslation);
       } else {
-        // For partial transcripts, set a timer to force translation if text doesn't change
+        // For partial transcripts, update context and set ultra-short timer
         const currentText = result.text;
-        const previousText = this.lastPartialText.get(roomId);
+        const context = this.roomContexts.get(roomId);
+        if (context) {
+          context.pendingPartialText = currentText;
+        }
 
         // Clear existing timer
         const existingTimer = this.partialTextTimers.get(roomId);
@@ -171,20 +184,20 @@ export class STTManager {
         // Store current partial text
         this.lastPartialText.set(roomId, currentText);
 
-        // Set timer to auto-translate after 3 seconds of no new transcripts
+        // Set ultra-short timer (800ms) to trigger translation if text stabilizes
         const timer = setTimeout(() => {
           const latestText = this.lastPartialText.get(roomId);
           if (latestText && latestText === currentText) {
-            console.log(`[STT][${roomId}] Auto-translating partial transcript after timeout`);
+            console.log(`[STT][${roomId}] ⚡ Translating stabilized partial transcript (800ms)`);
             this.bufferTextForTranslation(roomId, currentText, onTranslation);
-            this.lastTranslatedText.set(roomId, currentText); // Track this translation
+            this.lastTranslatedText.set(roomId, currentText);
             this.lastPartialText.delete(roomId);
             this.partialTextTimers.delete(roomId);
           }
-        }, 3000); // 3 seconds timeout
+        }, 800); // Ultra-fast 800ms for partials
 
         this.partialTextTimers.set(roomId, timer);
-        console.log(`[STT][${roomId}] Partial transcript timer set (3s)`);
+        console.log(`[STT][${roomId}] ⏱️  Partial transcript timer set (800ms)`);
       }
     });
 
@@ -217,7 +230,7 @@ export class STTManager {
       clearTimeout(existingTimer);
     }
 
-    // Check if buffer is ready for translation
+    // For immediate response, flush buffer as soon as we have any content
     const fullText = buffer.join(' ');
 
     // Improved sentence detection for Korean text
@@ -226,18 +239,21 @@ export class STTManager {
     const wordCount = fullText.split(/\s+/).filter(word => word.length > 0).length;
     const textLength = fullText.length;
 
-    // Flush conditions:
-    // 1. 2+ sentences (lowered for faster response)
-    // 2. 20+ words (for long single sentences)
-    // 3. 100+ characters (for continuous speech without clear sentence endings)
-    if (sentenceCount >= 2 || wordCount >= 20 || textLength >= 100) {
-      // Flush buffer immediately when we have enough content
+    // HYPER-AGGRESSIVE translation trigger for instant response
+    // 1. 1+ complete sentence (IMMEDIATE)
+    // 2. 3+ words (IMMEDIATE) - reduced from 5
+    // 3. 15+ characters (IMMEDIATE) - reduced from 20
+    // 4. Anything else: 100ms delay (reduced from 500ms)
+    if (sentenceCount >= 1 || wordCount >= 3 || textLength >= 15) {
+      // Flush buffer IMMEDIATELY - no delay!
+      console.log(`[Translation][${roomId}] 🚀 INSTANT flush: ${sentenceCount} sentences, ${wordCount} words, ${textLength} chars`);
       await this.flushBuffer(roomId, onTranslation);
     } else if (buffer.length > 0) {
-      // Set timer to flush buffer after 2 seconds (reduced for faster response)
+      // Ultra-short timer for minimal content (100ms)
       const timer = setTimeout(async () => {
+        console.log(`[Translation][${roomId}] ⚡ Flushing buffer by timer (100ms)`);
         await this.flushBuffer(roomId, onTranslation);
-      }, 2000); // Reduced from 3000ms for faster response
+      }, 100); // HYPER-FAST 100ms response
       this.bufferTimers.set(roomId, timer);
     }
   }
@@ -336,10 +352,28 @@ export class STTManager {
     }
   }
 
-  // Build contextual text with sliding window
+  // Build contextual text with enhanced sliding window
+  // Includes: [previous 2 translations] + [current text] + [hint from pending partial]
   private buildContextualText(currentText: string, context: RoomContext): string {
+    const parts: string[] = [];
+
+    // Add previous 2 translations for context
     const previousContext = context.previousTranslations.slice(-2).join(' ');
-    return previousContext ? `${previousContext} ${currentText}` : currentText;
+    if (previousContext) {
+      parts.push(previousContext);
+    }
+
+    // Add current text (main content to translate)
+    parts.push(currentText);
+
+    // Add pending partial text as a hint for better flow (optional)
+    if (context.pendingPartialText && context.pendingPartialText !== currentText) {
+      // Only add if it's different from current text and not too long
+      const partialHint = context.pendingPartialText.substring(0, 100);
+      parts.push(`[다음: ${partialHint}...]`);
+    }
+
+    return parts.join(' ');
   }
 
   // Update conversation summary

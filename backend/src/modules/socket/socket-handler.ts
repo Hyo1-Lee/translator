@@ -144,6 +144,8 @@ export class SocketHandler {
         ? room.roomSettings.targetLanguages.split(',')
         : ['en'];
 
+      console.log(`[Room] Creating STT client for room: ${room.roomCode}`);
+
       // Create STT client for this room with custom prompt
       await this.sttManager.createClient(
         room.roomCode,

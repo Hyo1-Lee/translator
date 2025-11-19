@@ -196,41 +196,49 @@ export default function ListenerRoom() {
       }
     });
 
-    socketRef.current.on("translation-batch", (data: any) => {
-      // Split Korean and translations into sentences
-      const koreanSentences = splitIntoSentences(data.korean);
-      const translations = data.translations || { en: data.english };
-
-      // Split each translation language into sentences
-      const translationSentences: Record<string, string[]> = {};
-      Object.keys(translations).forEach(lang => {
-        translationSentences[lang] = splitIntoSentences(translations[lang]);
-      });
-
-      // Create individual transcript entries for each sentence
-      const newTranscripts: any[] = [];
-      const maxSentences = Math.max(
-        koreanSentences.length,
-        ...Object.values(translationSentences).map(arr => arr.length)
-      );
-
-      for (let i = 0; i < maxSentences; i++) {
-        const sentenceTranslations: Record<string, string> = {};
-        Object.keys(translationSentences).forEach(lang => {
-          sentenceTranslations[lang] = translationSentences[lang][i] || '';
-        });
-
-        newTranscripts.push({
-          type: "translation",
-          korean: koreanSentences[i] || '',
-          english: sentenceTranslations['en'] || '',
-          translations: sentenceTranslations,
+    // Listen for STT text (for immediate display before translation)
+    socketRef.current.on("stt-text", (data: any) => {
+      console.log("[STT] Received stt-text:", data.text, "isFinal:", data.isFinal);
+      setTranscripts((prev) => {
+        const newTranscript = {
+          type: "stt",
+          text: data.text,
           timestamp: data.timestamp,
-          isHistory: data.isHistory,
-        });
-      }
+          isHistory: data.isHistory || false,
+          isFinal: data.isFinal !== false,
+        };
 
-      setTranscripts((prev) => [...prev.slice(-99), ...newTranscripts]);
+        // If it's history, add at the end
+        if (data.isHistory) {
+          return [...prev, newTranscript];
+        }
+
+        // For real-time: if partial and last item is also partial STT, update it
+        if (!newTranscript.isFinal && prev.length > 0) {
+          const lastItem = prev[prev.length - 1];
+          if (lastItem.type === "stt" && !lastItem.isFinal) {
+            return [...prev.slice(0, -1), newTranscript];
+          }
+        }
+
+        // Otherwise add as new (keep last 20)
+        return [...prev.slice(-19), newTranscript];
+      });
+    });
+
+    socketRef.current.on("translation-batch", (data: any) => {
+      // Don't split into sentences - keep as a single batch for better readability
+      const newTranscript = {
+        type: "translation",
+        korean: data.korean,
+        english: data.english,
+        translations: data.translations || { en: data.english },
+        timestamp: data.timestamp,
+        isHistory: data.isHistory || false,
+        batchId: data.batchId
+      };
+
+      setTranscripts((prev) => [...prev.slice(-99), newTranscript]);
     });
 
     socketRef.current.on("error", (data: any) => {
@@ -558,7 +566,15 @@ export default function ListenerRoom() {
             <>
               {transcripts.map((item, index) => (
                 <div key={index} className={styles.transcriptCard}>
-                  {item.type === "translation" && (
+                  {item.type === "stt" ? (
+                    <>
+                      <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
+                      <div className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
+                        🎤 {item.text}
+                        {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
+                      </div>
+                    </>
+                  ) : item.type === "translation" ? (
                     <>
                       <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
                       <div className={styles.korean}>{item.korean}</div>
@@ -567,7 +583,7 @@ export default function ListenerRoom() {
                         {item.translations?.[selectedLanguage] || item.translations?.en || item.english || ""}
                       </div>
                     </>
-                  )}
+                  ) : null}
                 </div>
               ))}
               <div ref={transcriptEndRef} />

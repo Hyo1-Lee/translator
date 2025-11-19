@@ -64,6 +64,7 @@ export const connectDatabase = async (): Promise<void> => {
 
     // Sync models (development only)
     if (config.app.isDev) {
+      // Use alter: true to update tables without deleting data
       await sequelize.sync({ alter: true });
       console.log('✅ Database models synchronized.');
     }

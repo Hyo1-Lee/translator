@@ -21,6 +21,8 @@ export class RTZRClient extends STTProvider {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private isManualDisconnect: boolean = false;
+  private lastAudioTime: number = 0;
+  private keepAliveInterval: NodeJS.Timeout | null = null;
 
   constructor(roomId: string, config: RTZRConfig) {
     super(roomId);
@@ -106,10 +108,15 @@ export class RTZRClient extends STTProvider {
       console.log(`[STT][${this.roomId}] WebSocket connected`);
       this.isConnected = true;
       this.reconnectAttempts = 0;
+      this.lastAudioTime = Date.now();
       this.emit("connected");
 
       // Process pending audio
       this.processPendingAudio();
+
+      // Start keep-alive timer to prevent timeout
+      // Send silent audio if no real audio for 3 seconds
+      this.startKeepAlive();
     });
 
     this.ws.on("message", (data: WebSocket.Data) => {
@@ -138,6 +145,9 @@ export class RTZRClient extends STTProvider {
       this.isConnected = false;
       this.ws = null;
       this.emit("disconnected");
+
+      // Stop keep-alive
+      this.stopKeepAlive();
 
       // Auto-reconnect logic (only if not manually disconnected)
       if (
@@ -210,16 +220,23 @@ export class RTZRClient extends STTProvider {
   // Send audio data
   sendAudio(audioData: Buffer): void {
     if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(audioData);
-      // Log first few audio sends for debugging
-      const sendCount = (this as any)._audioSendCount || 0;
-      (this as any)._audioSendCount = sendCount + 1;
-      if (sendCount < 3) {
-        console.log(
-          `[STT][${this.roomId}] 🎤 Sent audio chunk #${sendCount + 1} (${
-            audioData.length
-          } bytes)`
-        );
+      try {
+        this.ws.send(audioData);
+        this.lastAudioTime = Date.now(); // Update last audio time
+
+        // Log first few audio sends for debugging
+        const sendCount = (this as any)._audioSendCount || 0;
+        (this as any)._audioSendCount = sendCount + 1;
+        if (sendCount < 3 || sendCount % 50 === 0) {
+          console.log(
+            `[STT][${this.roomId}] 🎤 Sent audio chunk #${sendCount + 1} (${
+              audioData.length
+            } bytes)`
+          );
+        }
+      } catch (error) {
+        console.error(`[STT][${this.roomId}] Error sending audio:`, error);
+        this.pendingAudioBuffer.push(audioData);
       }
     } else {
       // Buffer audio if not connected
@@ -232,6 +249,36 @@ export class RTZRClient extends STTProvider {
       if (this.pendingAudioBuffer.length > 100) {
         this.pendingAudioBuffer.shift(); // Remove oldest
       }
+    }
+  }
+
+  // Start keep-alive to prevent stream timeout
+  private startKeepAlive(): void {
+    // Clear any existing interval
+    this.stopKeepAlive();
+
+    // Check every 2 seconds if we need to send keep-alive audio
+    this.keepAliveInterval = setInterval(() => {
+      const timeSinceLastAudio = Date.now() - this.lastAudioTime;
+
+      // If no audio for 3 seconds, send silent audio to keep stream alive
+      if (timeSinceLastAudio > 3000) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          // Send silent audio chunk (2048 samples of silence for 24kHz)
+          const silentAudio = Buffer.alloc(4096, 0);
+          this.ws.send(silentAudio);
+          this.lastAudioTime = Date.now();
+          console.log(`[STT][${this.roomId}] 🔇 Sent keep-alive silent audio`);
+        }
+      }
+    }, 2000);
+  }
+
+  // Stop keep-alive
+  private stopKeepAlive(): void {
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+      this.keepAliveInterval = null;
     }
   }
 
@@ -263,6 +310,9 @@ export class RTZRClient extends STTProvider {
   disconnect(): void {
     console.log(`[STT][${this.roomId}] Disconnecting client...`);
     this.isManualDisconnect = true;
+
+    // Stop keep-alive first
+    this.stopKeepAlive();
 
     if (this.ws) {
       // Remove all event listeners to prevent any reconnection attempts
