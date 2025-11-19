@@ -124,7 +124,7 @@ async function bootstrap() {
   const translationService = new TranslationService({
     apiKey: process.env.OPENAI_API_KEY || ''
   });
-  const sttProvider = (process.env.STT_PROVIDER as 'rtzr' | 'openai') || 'rtzr';
+  const sttProvider = (process.env.STT_PROVIDER as 'rtzr' | 'openai' | 'openai-whisper') || 'rtzr';
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
   console.log('='.repeat(50));
@@ -136,6 +136,9 @@ async function bootstrap() {
     console.log(`🤖 Model: ${model}`);
     console.log(`🎚️  VAD Threshold: ${process.env.OPENAI_VAD_THRESHOLD || '0.5'}`);
     console.log(`⏱️  VAD Silence: ${process.env.OPENAI_VAD_SILENCE || '500'}ms`);
+  } else if (sttProvider === 'openai-whisper') {
+    console.log(`🤖 Model: whisper-1`);
+    console.log(`🌐 Language: ko`);
   } else {
     console.log(`🌐 RTZR API: ${process.env.RTZR_API_URL || 'https://openapi.vito.ai'}`);
   }
@@ -160,6 +163,12 @@ async function bootstrap() {
         vadSilenceDuration: parseInt(process.env.OPENAI_VAD_SILENCE || '500'),
         prefixPadding: parseInt(process.env.OPENAI_PREFIX_PADDING || '300'),
         turnDetection: (process.env.OPENAI_TURN_DETECTION as any) || 'server_vad'
+      },
+      whisper: {
+        apiKey: process.env.OPENAI_API_KEY || '',
+        model: 'whisper-1',
+        language: 'ko',
+        temperature: 0
       }
     },
     translationService

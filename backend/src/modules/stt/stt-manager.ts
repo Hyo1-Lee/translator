@@ -1,10 +1,11 @@
 import { RTZRClient } from './rtzr-client';
 import { OpenAIRealtimeClient } from './openai-realtime-client';
+import { OpenAIWhisperClient } from './openai-whisper-client';
 import { STTProvider } from './stt-provider.interface';
 import { TranslationService } from '../translation/translation-service';
 import { optimizeCustomPromptWithGPT } from './prompts/prompt-templates';
 
-type STTProviderType = 'rtzr' | 'openai';
+type STTProviderType = 'rtzr' | 'openai' | 'openai-whisper';
 
 interface RTZRConfig {
   clientId: string;
@@ -24,10 +25,19 @@ interface OpenAIRealtimeConfig {
   turnDetection?: 'server_vad' | 'disabled';
 }
 
+interface OpenAIWhisperConfig {
+  apiKey: string;
+  model?: string;
+  language?: string;
+  prompt?: string;
+  temperature?: number;
+}
+
 interface STTConfig {
   provider: STTProviderType;
   rtzr?: RTZRConfig;
   openai?: OpenAIRealtimeConfig;
+  whisper?: OpenAIWhisperConfig;
   defaultPromptTemplate?: string; // 'church', 'medical', 'legal', 'business', 'tech', 'education', 'general'
 }
 
@@ -93,6 +103,12 @@ export class STTManager {
       }
 
       client = new OpenAIRealtimeClient(roomId, this.config.openai, template, optimizedPrompt);
+    } else if (provider === 'openai-whisper') {
+      if (!this.config.whisper) {
+        throw new Error('OpenAI Whisper configuration is missing');
+      }
+
+      client = new OpenAIWhisperClient(roomId, this.config.whisper);
     } else {
       if (!this.config.rtzr) {
         throw new Error('RTZR configuration is missing');
