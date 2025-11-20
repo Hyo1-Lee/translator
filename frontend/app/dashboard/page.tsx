@@ -333,56 +333,6 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* Stats Cards */}
-          {stats && (
-            <div className={styles.statsGrid}>
-              <div className={styles.statCard}>
-                <div className={styles.statIcon}>
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  </svg>
-                </div>
-                <div className={styles.statContent}>
-                  <div className={styles.statValue}>{stats.totalRooms}</div>
-                  <div className={styles.statLabel}>
-                    {t("dashboard.totalRooms")}
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.statCard}>
-                <div className={styles.statIcon}>
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                </div>
-                <div className={styles.statContent}>
-                  <div className={styles.statValue}>{stats.totalListeners}</div>
-                  <div className={styles.statLabel}>
-                    {t("dashboard.totalListeners")}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Tabs */}
           <div className={styles.tabs}>
             <button
@@ -473,8 +423,13 @@ export default function Dashboard() {
 
                           <div className={styles.roomBody}>
                             <h3 className={styles.roomTitle}>
-                              {room.speakerName}
+                              {room.roomSettings?.roomTitle || room.speakerName}
                             </h3>
+                            {room.roomSettings?.roomTitle && (
+                              <p className={styles.roomSpeaker}>
+                                Speaker: {room.speakerName}
+                              </p>
+                            )}
                             <div className={styles.roomMeta}>
                               <span className={styles.metaItem}>
                                 <svg
@@ -490,43 +445,10 @@ export default function Dashboard() {
                                 </svg>
                                 {formatDate(room.createdAt)}
                               </span>
-                              {room.roomSettings && (
-                                <span className={styles.metaItem}>
-                                  <svg
-                                    width="14"
-                                    height="14"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                  >
-                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                  </svg>
-                                  {room.roomSettings.promptTemplate}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className={styles.roomStats}>
-                              <div className={styles.roomStat}>
+                              <span className={styles.metaItem}>
                                 <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                >
-                                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                                  <circle cx="9" cy="7" r="4" />
-                                </svg>
-                                {room._count?.listeners ?? 0}{" "}
-                                {t("dashboard.listeners")}
-                              </div>
-                              <div className={styles.roomStat}>
-                                <svg
-                                  width="16"
-                                  height="16"
+                                  width="14"
+                                  height="14"
                                   viewBox="0 0 24 24"
                                   fill="none"
                                   stroke="currentColor"
@@ -535,9 +457,8 @@ export default function Dashboard() {
                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                   <polyline points="14 2 14 8 20 8" />
                                 </svg>
-                                {room._count?.transcripts ?? 0}{" "}
-                                {t("dashboard.transcripts")}
-                              </div>
+                                {room._count?.transcripts ?? 0} transcripts
+                              </span>
                             </div>
                           </div>
 

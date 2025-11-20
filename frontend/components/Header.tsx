@@ -47,8 +47,8 @@ export default function Header() {
               <circle cx="12" cy="12" r="3" fill="url(#gradient)" />
               <defs>
                 <linearGradient id="gradient" x1="2" y1="2" x2="22" y2="22">
-                  <stop offset="0%" stopColor="#3b82f6" />
-                  <stop offset="100%" stopColor="#8b5cf6" />
+                  <stop offset="0%" stopColor="#60a5fa" />
+                  <stop offset="100%" stopColor="#3b82f6" />
                 </linearGradient>
               </defs>
             </svg>

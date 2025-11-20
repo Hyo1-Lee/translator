@@ -49,6 +49,7 @@ const TARGET_LANGUAGES = [
 
 interface RoomSettings {
   roomTitle: string;
+  speakerName: string;
   promptTemplate: string;
   customPrompt: string;
   targetLanguages: string[];
@@ -78,6 +79,7 @@ export default function Speaker() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     roomTitle: "",
+    speakerName: "",
     promptTemplate: "general",
     customPrompt: "",
     targetLanguages: ["en"],
@@ -1003,7 +1005,14 @@ export default function Speaker() {
               </h2>
               {roomId && (
                 <div className={styles.compactListenerBadge}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                     <circle cx="9" cy="7" r="4" />
                     <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -1281,187 +1290,227 @@ export default function Speaker() {
       {showSettingsModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
-            <h2>{roomId ? "방 설정 변경" : "방 설정"}</h2>
-
-            {/* Room Title */}
-            <div className={styles.settingGroup}>
-              <label>방 제목 (선택)</label>
-              <input
-                type="text"
-                value={roomSettings.roomTitle}
-                onChange={(e) =>
-                  setRoomSettings({
-                    ...roomSettings,
-                    roomTitle: e.target.value,
-                  })
-                }
-                className={styles.input}
-                placeholder="방 제목을 입력하세요"
-              />
-            </div>
-
-            {/* Prompt Template */}
-            <div className={styles.settingGroup}>
-              <label>음성 인식 유형</label>
-              <select
-                value={roomSettings.promptTemplate}
-                onChange={(e) =>
-                  setRoomSettings({
-                    ...roomSettings,
-                    promptTemplate: e.target.value,
-                  })
-                }
-                className={styles.select}
+            <div className={styles.modalHeader}>
+              <h2>{roomId ? "방 설정 변경" : "방 설정"}</h2>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className={styles.closeModalButton}
               >
-                {PROMPT_TEMPLATES.map((template) => (
-                  <option key={template.value} value={template.value}>
-                    {template.label}
-                  </option>
-                ))}
-              </select>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
 
-            {/* Custom Prompt */}
-            {roomSettings.promptTemplate === "custom" && (
+            <div className={styles.modalBody}>
+              {/* Room Title */}
               <div className={styles.settingGroup}>
-                <label>사용자 지정 프롬프트</label>
-                <textarea
-                  value={roomSettings.customPrompt}
+                <label>방 제목 (선택)</label>
+                <input
+                  type="text"
+                  value={roomSettings.roomTitle}
                   onChange={(e) =>
                     setRoomSettings({
                       ...roomSettings,
-                      customPrompt: e.target.value,
+                      roomTitle: e.target.value,
                     })
                   }
-                  className={styles.textarea}
-                  placeholder="음성 인식을 위한 사용자 지정 프롬프트를 입력하세요..."
-                  rows={4}
+                  className={styles.input}
+                  placeholder="예: 주일 예배"
                 />
               </div>
-            )}
 
-            {/* Target Languages */}
-            <div className={styles.settingGroup}>
-              <label>번역 언어 (영어만 지원)</label>
-              <div className={styles.languageGrid}>
-                {TARGET_LANGUAGES.map((lang) => {
-                  const isEnglish = lang.code === "en";
-                  const isDisabled = !isEnglish;
-                  return (
-                    <label
-                      key={lang.code}
-                      className={`${styles.checkbox} ${
-                        isDisabled ? styles.disabled : ""
-                      }`}
-                      title={isDisabled ? "현재 영어만 지원됩니다" : ""}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={roomSettings.targetLanguages.includes(
-                          lang.code
-                        )}
-                        disabled={isDisabled}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setRoomSettings({
-                              ...roomSettings,
-                              targetLanguages: [
-                                ...roomSettings.targetLanguages,
-                                lang.code,
-                              ],
-                            });
-                          } else {
-                            setRoomSettings({
-                              ...roomSettings,
-                              targetLanguages:
-                                roomSettings.targetLanguages.filter(
-                                  (l) => l !== lang.code
-                                ),
-                            });
-                          }
-                        }}
-                      />
-                      <span>{lang.name}</span>
-                    </label>
-                  );
-                })}
+              {/* Speaker Name */}
+              <div className={styles.settingGroup}>
+                <label>발표자 이름 (선택)</label>
+                <input
+                  type="text"
+                  value={roomSettings.speakerName}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      speakerName: e.target.value,
+                    })
+                  }
+                  className={styles.input}
+                  placeholder="예: 홍길동 목사"
+                />
               </div>
-            </div>
 
-            {/* Password */}
-            <div className={styles.settingGroup}>
-              <label>
-                비밀번호 (선택)
+              {/* Prompt Template */}
+              <div className={styles.settingGroup}>
+                <label>음성 인식 유형</label>
+                <select
+                  value={roomSettings.promptTemplate}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      promptTemplate: e.target.value,
+                    })
+                  }
+                  className={styles.select}
+                >
+                  {PROMPT_TEMPLATES.map((template) => (
+                    <option key={template.value} value={template.value}>
+                      {template.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Custom Prompt */}
+              {roomSettings.promptTemplate === "custom" && (
+                <div className={styles.settingGroup}>
+                  <label>사용자 지정 프롬프트</label>
+                  <textarea
+                    value={roomSettings.customPrompt}
+                    onChange={(e) =>
+                      setRoomSettings({
+                        ...roomSettings,
+                        customPrompt: e.target.value,
+                      })
+                    }
+                    className={styles.textarea}
+                    placeholder="음성 인식을 위한 사용자 지정 프롬프트를 입력하세요..."
+                    rows={4}
+                  />
+                </div>
+              )}
+
+              {/* Target Languages */}
+              <div className={styles.settingGroup}>
+                <label>번역 언어 (영어만 지원)</label>
+                <div className={styles.languageGrid}>
+                  {TARGET_LANGUAGES.map((lang) => {
+                    const isEnglish = lang.code === "en";
+                    const isDisabled = !isEnglish;
+                    return (
+                      <label
+                        key={lang.code}
+                        className={`${styles.checkbox} ${
+                          isDisabled ? styles.disabled : ""
+                        }`}
+                        title={isDisabled ? "현재 영어만 지원됩니다" : ""}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={roomSettings.targetLanguages.includes(
+                            lang.code
+                          )}
+                          disabled={isDisabled}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setRoomSettings({
+                                ...roomSettings,
+                                targetLanguages: [
+                                  ...roomSettings.targetLanguages,
+                                  lang.code,
+                                ],
+                              });
+                            } else {
+                              setRoomSettings({
+                                ...roomSettings,
+                                targetLanguages:
+                                  roomSettings.targetLanguages.filter(
+                                    (l) => l !== lang.code
+                                  ),
+                              });
+                            }
+                          }}
+                        />
+                        <span>{lang.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Password */}
+              <div className={styles.settingGroup}>
+                <label>
+                  비밀번호 (선택)
+                  {roomSettings.password && (
+                    <span
+                      style={{
+                        marginLeft: "0.5rem",
+                        color: "#4ade80",
+                        fontSize: "0.875rem",
+                      }}
+                    >
+                      ✓ 설정됨
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="password"
+                  value={roomSettings.password}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      password: e.target.value,
+                    })
+                  }
+                  className={styles.input}
+                  placeholder={
+                    roomId
+                      ? "비밀번호 변경 (공백으로 두면 제거)"
+                      : "비밀번호를 설정하지 않으면 누구나 입장 가능"
+                  }
+                />
                 {roomSettings.password && (
-                  <span
+                  <p
                     style={{
-                      marginLeft: "0.5rem",
-                      color: "#4ade80",
-                      fontSize: "0.875rem",
+                      fontSize: "0.8125rem",
+                      color: "#94a3b8",
+                      marginTop: "0.5rem",
                     }}
                   >
-                    ✓ 설정됨
-                  </span>
+                    💡 청취자는 방 입장 시 이 비밀번호를 입력해야 합니다
+                  </p>
                 )}
-              </label>
-              <input
-                type="password"
-                value={roomSettings.password}
-                onChange={(e) =>
-                  setRoomSettings({ ...roomSettings, password: e.target.value })
-                }
-                className={styles.input}
-                placeholder={
-                  roomId
-                    ? "비밀번호 변경 (공백으로 두면 제거)"
-                    : "비밀번호를 설정하지 않으면 누구나 입장 가능"
-                }
-              />
-              {roomSettings.password && (
-                <p
-                  style={{
-                    fontSize: "0.8125rem",
-                    color: "#94a3b8",
-                    marginTop: "0.5rem",
-                  }}
+              </div>
+
+              {/* Max Listeners */}
+              <div className={styles.settingGroup}>
+                <label>최대 청취자 수</label>
+                <input
+                  type="number"
+                  value={roomSettings.maxListeners}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      maxListeners: parseInt(e.target.value) || 100,
+                    })
+                  }
+                  className={styles.input}
+                  min="1"
+                  max="1000"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className={styles.modalActions}>
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className={styles.cancelButton}
                 >
-                  💡 청취자는 방 입장 시 이 비밀번호를 입력해야 합니다
-                </p>
-              )}
-            </div>
-
-            {/* Max Listeners */}
-            <div className={styles.settingGroup}>
-              <label>최대 청취자 수</label>
-              <input
-                type="number"
-                value={roomSettings.maxListeners}
-                onChange={(e) =>
-                  setRoomSettings({
-                    ...roomSettings,
-                    maxListeners: parseInt(e.target.value) || 100,
-                  })
-                }
-                className={styles.input}
-                min="1"
-                max="1000"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className={styles.modalActions}>
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className={styles.cancelButton}
-              >
-                {roomId ? "닫기" : "취소"}
-              </button>
-              <button
-                onClick={roomId ? updateRoomSettings : createRoom}
-                className={styles.createButton}
-              >
-                {roomId ? "설정 저장" : "방 만들기"}
-              </button>
+                  {roomId ? "닫기" : "취소"}
+                </button>
+                <button
+                  onClick={roomId ? updateRoomSettings : createRoom}
+                  className={styles.createButton}
+                >
+                  {roomId ? "설정 저장" : "방 만들기"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
