@@ -9,8 +9,10 @@ import QRCode from "qrcode";
 import styles from "./speaker.module.css";
 
 // Constants
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
-const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const FRONTEND_URL =
+  process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
 const STORAGE_KEY = "speaker_room_info";
 
 // Prompt template options
@@ -23,7 +25,7 @@ const PROMPT_TEMPLATES = [
   { value: "legal", label: "법률/계약" },
   { value: "education", label: "교육/학습" },
   { value: "tech", label: "기술/IT" },
-  { value: "custom", label: "사용자 지정" }
+  { value: "custom", label: "사용자 지정" },
 ];
 
 // Target languages
@@ -42,11 +44,12 @@ const TARGET_LANGUAGES = [
   { code: "vi", name: "Tiếng Việt" },
   { code: "th", name: "ภาษาไทย" },
   { code: "id", name: "Bahasa Indonesia" },
-  { code: "hi", name: "हिन्दी" }
+  { code: "hi", name: "हिन्दी" },
 ];
 
 interface RoomSettings {
   roomTitle: string;
+  speakerName: string;
   promptTemplate: string;
   customPrompt: string;
   targetLanguages: string[];
@@ -76,11 +79,12 @@ export default function Speaker() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     roomTitle: "",
+    speakerName: "",
     promptTemplate: "general",
     customPrompt: "",
     targetLanguages: ["en"],
     password: "",
-    maxListeners: 100
+    maxListeners: 100,
   });
 
   // Refs
@@ -92,6 +96,15 @@ export default function Speaker() {
   const animationRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const translationListRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to latest translation
+  useEffect(() => {
+    if (translationListRef.current) {
+      translationListRef.current.scrollTop =
+        translationListRef.current.scrollHeight;
+    }
+  }, [transcripts]);
 
   // Generate QR code
   const generateQRCode = useCallback(async (roomCode: string) => {
@@ -102,8 +115,8 @@ export default function Speaker() {
         margin: 2,
         color: {
           dark: "#1e293b",
-          light: "#ffffff"
-        }
+          light: "#ffffff",
+        },
       });
       setQrCodeUrl(qrUrl);
     } catch (error) {
@@ -113,28 +126,28 @@ export default function Speaker() {
 
   // Split text into sentences
   const splitIntoSentences = useCallback((text: string): string[] => {
-    if (!text || text.trim() === '') return [];
+    if (!text || text.trim() === "") return [];
 
     // More sophisticated sentence splitting for Korean and English
     // Split on sentence-ending punctuation followed by space or end of string
     const sentences = text.split(/([.!?]+(?:\s+|$))/g);
 
     const result: string[] = [];
-    let currentSentence = '';
+    let currentSentence = "";
 
     for (let i = 0; i < sentences.length; i++) {
       const part = sentences[i];
 
       // Skip empty parts
-      if (!part || part.trim() === '') continue;
+      if (!part || part.trim() === "") continue;
 
       // If this is punctuation, add to current sentence and finalize
       if (/^[.!?]+(?:\s+|$)/.test(part)) {
-        currentSentence += part.replace(/\s+$/, ''); // Remove trailing space from punctuation
+        currentSentence += part.replace(/\s+$/, ""); // Remove trailing space from punctuation
         if (currentSentence.trim().length > 0) {
           result.push(currentSentence.trim());
         }
-        currentSentence = '';
+        currentSentence = "";
       } else {
         // Regular text - accumulate
         currentSentence += part;
@@ -196,7 +209,7 @@ export default function Speaker() {
     const dataToSend = {
       name,
       userId: user?.id,
-      ...roomSettings
+      ...roomSettings,
     };
 
     console.log("🏗️ Creating room with settings:");
@@ -219,12 +232,12 @@ export default function Speaker() {
       roomTitle: roomSettings.roomTitle,
       hasPassword: !!roomSettings.password,
       targetLanguages: roomSettings.targetLanguages,
-      fullSettings: roomSettings
+      fullSettings: roomSettings,
     });
 
     socketRef.current.emit("update-settings", {
       roomId,
-      settings: roomSettings
+      settings: roomSettings,
     });
 
     setShowSettingsModal(false);
@@ -270,7 +283,7 @@ export default function Speaker() {
           existingRoomCode: roomParam,
           promptTemplate: "general",
           targetLanguages: ["en"],
-          maxListeners: 100
+          maxListeners: 100,
         });
         // Clear URL parameter after processing
         router.replace("/speaker");
@@ -289,7 +302,7 @@ export default function Speaker() {
           existingRoomCode: savedRoom.roomCode,
           promptTemplate: "general",
           targetLanguages: ["en"],
-          maxListeners: 100
+          maxListeners: 100,
         });
       } else {
         // Show settings modal for new room
@@ -323,7 +336,7 @@ export default function Speaker() {
           existingRoomCode: savedRoom.roomCode,
           promptTemplate: "general",
           targetLanguages: ["en"],
-          maxListeners: 100
+          maxListeners: 100,
         });
       }
     });
@@ -347,16 +360,19 @@ export default function Speaker() {
 
       // Update roomSettings from server response
       if (data.roomSettings) {
-        console.log("📋 Received room settings from server:", data.roomSettings);
+        console.log(
+          "📋 Received room settings from server:",
+          data.roomSettings
+        );
         setRoomSettings({
-          roomTitle: data.roomSettings.roomTitle || '',
-          promptTemplate: data.roomSettings.promptTemplate || 'general',
-          customPrompt: data.roomSettings.customPrompt || '',
+          roomTitle: data.roomSettings.roomTitle || "",
+          promptTemplate: data.roomSettings.promptTemplate || "general",
+          customPrompt: data.roomSettings.customPrompt || "",
           targetLanguages: Array.isArray(data.roomSettings.targetLanguages)
             ? data.roomSettings.targetLanguages
-            : ['en'],
-          password: '', // Don't set password for security
-          maxListeners: data.roomSettings.maxListeners || 100
+            : ["en"],
+          password: "", // Don't set password for security
+          maxListeners: data.roomSettings.maxListeners || 100,
         });
       }
 
@@ -373,16 +389,19 @@ export default function Speaker() {
 
       // Update roomSettings from server response
       if (data.roomSettings) {
-        console.log("📋 Received room settings from server (rejoined):", data.roomSettings);
+        console.log(
+          "📋 Received room settings from server (rejoined):",
+          data.roomSettings
+        );
         setRoomSettings({
-          roomTitle: data.roomSettings.roomTitle || '',
-          promptTemplate: data.roomSettings.promptTemplate || 'general',
-          customPrompt: data.roomSettings.customPrompt || '',
+          roomTitle: data.roomSettings.roomTitle || "",
+          promptTemplate: data.roomSettings.promptTemplate || "general",
+          customPrompt: data.roomSettings.customPrompt || "",
           targetLanguages: Array.isArray(data.roomSettings.targetLanguages)
             ? data.roomSettings.targetLanguages
-            : ['en'],
-          password: '', // Don't set password for security
-          maxListeners: data.roomSettings.maxListeners || 100
+            : ["en"],
+          password: "", // Don't set password for security
+          maxListeners: data.roomSettings.maxListeners || 100,
         });
       }
 
@@ -434,7 +453,7 @@ export default function Speaker() {
           translations: data.translations || { en: data.english },
           timestamp: data.timestamp,
           isHistory: data.isHistory || false,
-          batchId: data.batchId
+          batchId: data.batchId,
         };
 
         // If it's history, add at the end; otherwise add at the end (keep last 50)
@@ -464,7 +483,10 @@ export default function Speaker() {
     try {
       console.log("[Recording] 🎤 Starting recording...");
       console.log("[Recording] RoomId:", roomId);
-      console.log("[Recording] Socket connected:", socketRef.current?.connected);
+      console.log(
+        "[Recording] Socket connected:",
+        socketRef.current?.connected
+      );
       console.log("[Recording] Socket ID:", socketRef.current?.id);
 
       setStatus("마이크 요청 중...");
@@ -489,14 +511,14 @@ export default function Speaker() {
       console.log("[Recording] Stream info:", {
         active: stream.active,
         tracks: stream.getTracks().length,
-        audioTracks: stream.getAudioTracks().map(t => ({
+        audioTracks: stream.getAudioTracks().map((t) => ({
           kind: t.kind,
           label: t.label,
           enabled: t.enabled,
           muted: t.muted,
           readyState: t.readyState,
-          settings: t.getSettings()
-        }))
+          settings: t.getSettings(),
+        })),
       });
 
       streamRef.current = stream;
@@ -504,13 +526,13 @@ export default function Speaker() {
       // Start MediaRecorder for local recording
       // Check supported mime types
       const mimeTypes = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/mp4'
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
       ];
 
-      let selectedMimeType = '';
+      let selectedMimeType = "";
       for (const mimeType of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mimeType)) {
           selectedMimeType = mimeType;
@@ -521,7 +543,7 @@ export default function Speaker() {
 
       if (!selectedMimeType) {
         console.error("[Recording] No supported mime type found!");
-        selectedMimeType = 'audio/webm'; // Fallback
+        selectedMimeType = "audio/webm"; // Fallback
       }
 
       const mediaRecorder = new MediaRecorder(stream, {
@@ -531,7 +553,9 @@ export default function Speaker() {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           recordedChunksRef.current.push(event.data);
-          console.log(`[Recording] Chunk received: ${event.data.size} bytes (total chunks: ${recordedChunksRef.current.length})`);
+          console.log(
+            `[Recording] Chunk received: ${event.data.size} bytes (total chunks: ${recordedChunksRef.current.length})`
+          );
         }
       };
 
@@ -545,10 +569,15 @@ export default function Speaker() {
       };
 
       mediaRecorder.onstop = () => {
-        console.log(`[Recording] ✅ MediaRecorder stopped (total chunks: ${recordedChunksRef.current.length})`);
+        console.log(
+          `[Recording] ✅ MediaRecorder stopped (total chunks: ${recordedChunksRef.current.length})`
+        );
 
         // Calculate total recording duration
-        const totalSize = recordedChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+        const totalSize = recordedChunksRef.current.reduce(
+          (sum, chunk) => sum + chunk.size,
+          0
+        );
         console.log(`[Recording] Total size: ${totalSize} bytes`);
       };
 
@@ -568,9 +597,11 @@ export default function Speaker() {
       const targetSampleRate = 16000;  // Target: 16kHz for Deepgram
       const resampleRatio = sourceSampleRate / targetSampleRate;
 
+
       console.log(`[Audio] 🔧 AudioContext created`);
       console.log(`[Audio] Source sample rate: ${sourceSampleRate} Hz`);
       console.log(`[Audio] Target sample rate: ${targetSampleRate} Hz (resample ratio: ${resampleRatio.toFixed(2)})`);
+
       console.log(`[Audio] State: ${audioContextRef.current.state}`);
 
       const source = audioContextRef.current.createMediaStreamSource(stream);
@@ -609,10 +640,16 @@ export default function Speaker() {
 
       // Optimized buffer size - 2048 for lower latency
       const bufferSize = 2048;
-      processorRef.current = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
-      console.log(`[Audio] ✅ ScriptProcessor created (buffer size: ${bufferSize})`);
+      processorRef.current = audioContextRef.current.createScriptProcessor(
+        bufferSize,
+        1,
+        1
+      );
+      console.log(
+        `[Audio] ✅ ScriptProcessor created (buffer size: ${bufferSize})`
+      );
 
-      let isProcessing = true;
+      const isProcessing = true;
       let frameCount = 0;
       const SEND_EVERY_N_FRAMES = 2; // Send every 2 frames to reduce CPU load
       let audioChunksSent = 0;
@@ -623,7 +660,9 @@ export default function Speaker() {
 
         // Log first few calls to confirm the processor is running
         if (audioProcessCallCount <= 5) {
-          console.log(`[Audio] 📢 onaudioprocess called #${audioProcessCallCount}`);
+          console.log(
+            `[Audio] 📢 onaudioprocess called #${audioProcessCallCount}`
+          );
         }
 
         // Comprehensive validation with detailed logging
@@ -640,7 +679,7 @@ export default function Speaker() {
             console.log("[Audio] Socket state:", {
               exists: !!socketRef.current,
               connected: socketRef.current?.connected,
-              disconnected: socketRef.current?.disconnected
+              disconnected: socketRef.current?.disconnected,
             });
           }
           return;
@@ -699,7 +738,9 @@ export default function Speaker() {
           }
 
           // Convert to base64 efficiently
-          const base64Audio = btoa(String.fromCharCode(...new Uint8Array(int16Data.buffer)));
+          const base64Audio = btoa(
+            String.fromCharCode(...new Uint8Array(int16Data.buffer))
+          );
 
           socketRef.current.emit("audio-stream", {
             roomId,
@@ -708,10 +749,16 @@ export default function Speaker() {
 
           audioChunksSent++;
           if (audioChunksSent <= 5 || audioChunksSent % 50 === 0) {
-            console.log(`[Audio] ✅ Sent chunk #${audioChunksSent} to server (roomId: ${roomId}, size: ${int16Data.length * 2} bytes, RMS: ${rms.toFixed(6)})`);
+            console.log(
+              `[Audio] ✅ Sent chunk #${audioChunksSent} to server (roomId: ${roomId}, size: ${
+                int16Data.length * 2
+              } bytes, RMS: ${rms.toFixed(6)})`
+            );
           }
         } else if (audioChunksSent < 10) {
-          console.log(`[Audio] 🔇 Audio too quiet, skipping (RMS=${rms.toFixed(6)})`);
+          console.log(
+            `[Audio] 🔇 Audio too quiet, skipping (RMS=${rms.toFixed(6)})`
+          );
         }
       };
 
@@ -719,7 +766,9 @@ export default function Speaker() {
 
       analyserRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
-      console.log(`[Audio] ✅ Audio chain connected: Source -> Analyser -> Processor -> Destination`);
+      console.log(
+        `[Audio] ✅ Audio chain connected: Source -> Analyser -> Processor -> Destination`
+      );
 
       const updateAudioLevel = () => {
         if (!analyserRef.current) return;
@@ -749,7 +798,7 @@ export default function Speaker() {
         socketConnected: socketRef.current?.connected,
         streamActive: stream.active,
         audioContextState: audioContextRef.current.state,
-        mediaRecorderState: mediaRecorderRef.current?.state
+        mediaRecorderState: mediaRecorderRef.current?.state,
       });
     } catch (error) {
       console.error("[Recording] ❌ Recording error:", error);
@@ -777,8 +826,10 @@ export default function Speaker() {
     // Stop MediaRecorder with proper error handling
     if (mediaRecorderRef.current) {
       try {
-        if (mediaRecorderRef.current.state !== 'inactive') {
-          console.log(`[Recording] Stopping MediaRecorder (state: ${mediaRecorderRef.current.state})`);
+        if (mediaRecorderRef.current.state !== "inactive") {
+          console.log(
+            `[Recording] Stopping MediaRecorder (state: ${mediaRecorderRef.current.state})`
+          );
           mediaRecorderRef.current.stop();
         }
       } catch (error) {
@@ -820,7 +871,9 @@ export default function Speaker() {
     if (streamRef.current) {
       try {
         streamRef.current.getTracks().forEach((track) => {
-          console.log(`[Recording] Stopping track: ${track.kind} (${track.label})`);
+          console.log(
+            `[Recording] Stopping track: ${track.kind} (${track.label})`
+          );
           track.stop();
         });
       } catch (error) {
@@ -829,7 +882,9 @@ export default function Speaker() {
       streamRef.current = null;
     }
 
-    console.log(`[Recording] ✅ Recording stopped. Total chunks recorded: ${recordedChunksRef.current.length}`);
+    console.log(
+      `[Recording] ✅ Recording stopped. Total chunks recorded: ${recordedChunksRef.current.length}`
+    );
   };
 
   // Download recording
@@ -839,17 +894,24 @@ export default function Speaker() {
       return;
     }
 
-    console.log(`[Recording] Creating download blob from ${recordedChunksRef.current.length} chunks`);
+    console.log(
+      `[Recording] Creating download blob from ${recordedChunksRef.current.length} chunks`
+    );
 
     // Calculate total size
-    const totalSize = recordedChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
+    const totalSize = recordedChunksRef.current.reduce(
+      (sum, chunk) => sum + chunk.size,
+      0
+    );
     console.log(`[Recording] Total recording size: ${totalSize} bytes`);
 
-    const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+    const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `recording_${roomId}_${new Date().toISOString().replace(/:/g, '-')}.webm`;
+    a.download = `recording_${roomId}_${new Date()
+      .toISOString()
+      .replace(/:/g, "-")}.webm`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -857,7 +919,7 @@ export default function Speaker() {
 
     console.log(`[Recording] ✅ Download initiated`);
     if (addToast) {
-      addToast('녹음 파일이 다운로드되었습니다', 'success');
+      addToast("녹음 파일이 다운로드되었습니다", "success");
     }
   };
 
@@ -883,46 +945,49 @@ export default function Speaker() {
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      alert('로그인이 필요합니다');
-      router.push('/login');
+      alert("로그인이 필요합니다");
+      router.push("/login");
       return;
     }
 
     if (!roomId) {
-      alert('저장할 세션이 없습니다');
+      alert("저장할 세션이 없습니다");
       return;
     }
 
     if (transcripts.length === 0) {
-      alert('저장할 번역 내용이 없습니다');
+      alert("저장할 번역 내용이 없습니다");
       return;
     }
 
-    const roomName = prompt('세션 이름을 입력하세요', roomSettings.roomTitle || `Session ${roomId}`);
+    const roomName = prompt(
+      "세션 이름을 입력하세요",
+      roomSettings.roomTitle || `Session ${roomId}`
+    );
     if (!roomName) return;
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/v1/recordings/save`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           roomCode: roomId,
-          roomName
-        })
+          roomName,
+        }),
       });
 
       const data = await response.json();
       if (data.success) {
-        alert('세션이 저장되었습니다');
+        alert("세션이 저장되었습니다");
       } else {
-        alert(data.message || '저장에 실패했습니다');
+        alert(data.message || "저장에 실패했습니다");
       }
     } catch (error) {
-      console.error('Save recording error:', error);
-      alert('저장 중 오류가 발생했습니다');
+      console.error("Save recording error:", error);
+      alert("저장 중 오류가 발생했습니다");
     }
   };
 
@@ -936,11 +1001,13 @@ export default function Speaker() {
   const shareRoom = () => {
     const url = `${FRONTEND_URL}/listener/${roomId}`;
     if (navigator.share) {
-      navigator.share({
-        title: "번역 세션 초대",
-        text: `방 코드: ${roomId}`,
-        url: url
-      }).catch(console.error);
+      navigator
+        .share({
+          title: "번역 세션 초대",
+          text: `방 코드: ${roomId}`,
+          url: url,
+        })
+        .catch(console.error);
     } else {
       copyToClipboard(url, "방 URL");
     }
@@ -948,314 +1015,541 @@ export default function Speaker() {
 
   return (
     <main className={styles.main}>
-      <div className={styles.container}>
-        {/* Header */}
-        <div className={styles.header}>
-          <button onClick={() => router.push(user ? "/dashboard" : "/")} className={styles.backButton}>
-            ← {user ? "대시보드" : "홈"}
-          </button>
-          <div className={styles.connectionStatus}>
-            <span className={isConnected ? styles.connected : styles.disconnected}>
-              {isConnected ? "● 연결됨" : "○ 연결 끊김"}
+      {/* Header */}
+      <div className={styles.header}>
+        <button
+          onClick={() => router.push(user ? "/dashboard" : "/")}
+          className={styles.backButton}
+        >
+          ← {user ? "대시보드" : "홈"}
+        </button>
+        <div className={styles.connectionStatus}>
+          <span
+            className={isConnected ? styles.connected : styles.disconnected}
+          >
+            {isConnected ? "● 연결됨" : "○ 연결 끊김"}
+          </span>
+        </div>
+      </div>
+
+      {/* Two-column layout */}
+      <div className={styles.twoColumnLayout}>
+        {/* Left Panel - Controls */}
+        <div className={styles.leftPanel}>
+          {/* Room Info - Compact */}
+          <div className={styles.compactRoomInfo}>
+            <div className={styles.compactHeader}>
+              <h2 className={styles.compactTitle}>
+                {roomSettings.roomTitle || speakerName || "Speaker"}
+              </h2>
+              {roomId && (
+                <div className={styles.compactListenerBadge}>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                  <span>{listenerCount}</span>
+                </div>
+              )}
+            </div>
+            {roomId && (
+              <>
+                <div className={styles.compactRoomCode}>
+                  <span className={styles.compactCodeLabel}>방 코드</span>
+                  <span className={styles.compactCodeValue}>{roomId}</span>
+                </div>
+                <div className={styles.compactActions}>
+                  <button
+                    onClick={() => copyToClipboard(roomId, "방 코드")}
+                    className={styles.compactIconButton}
+                    title="복사"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setShowQRModal(true)}
+                    className={styles.compactIconButton}
+                    title="QR 코드"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <rect x="3" y="3" width="7" height="7" rx="1" />
+                      <rect x="14" y="3" width="7" height="7" rx="1" />
+                      <rect x="3" y="14" width="7" height="7" rx="1" />
+                      <rect x="14" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={shareRoom}
+                    className={styles.compactIconButton}
+                    title="공유"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Controls */}
+          <div className={styles.compactControls}>
+            {!isRecording ? (
+              <button
+                onClick={startRecording}
+                className={styles.compactStartButton}
+                disabled={!roomId || !isConnected}
+              >
+                <span className={styles.recordDot}></span>
+                녹음 시작
+              </button>
+            ) : (
+              <button
+                onClick={stopRecording}
+                className={styles.compactStopButton}
+              >
+                ⏹ 녹음 중지
+              </button>
+            )}
+          </div>
+
+          {/* Audio level meter */}
+          {isRecording && (
+            <div className={styles.compactAudioLevel}>
+              <div className={styles.compactAudioHeader}>
+                <span className={styles.compactAudioLabel}>마이크</span>
+                <span className={styles.compactAudioPercent}>
+                  {audioLevel}%
+                </span>
+              </div>
+              <div className={styles.compactAudioMeter}>
+                <div
+                  className={styles.audioBar}
+                  style={{
+                    width: `${audioLevel}%`,
+                    backgroundColor:
+                      audioLevel > 70
+                        ? "#ef4444"
+                        : audioLevel > 30
+                        ? "#22c55e"
+                        : "#64748b",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons - Compact */}
+          <div className={styles.compactActionButtons}>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className={styles.compactActionButton}
+              title="방 설정"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
+              </svg>
+              설정
+            </button>
+            <button
+              onClick={saveRecording}
+              className={styles.compactActionButton}
+              disabled={!user || transcripts.length === 0}
+              title="세션 저장"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+              저장
+            </button>
+            <button
+              onClick={downloadRecording}
+              className={styles.compactActionButton}
+              disabled={recordedChunksRef.current.length === 0}
+              title="녹음 다운로드"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              다운로드
+            </button>
+            <button
+              onClick={createNewRoom}
+              className={styles.compactActionButton}
+              title="새 방"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              새 방
+            </button>
+          </div>
+        </div>
+
+        {/* Right Panel - Real-time Translation */}
+        <div className={styles.rightPanel}>
+          <div className={styles.translationHeader}>
+            <h3>실시간 번역</h3>
+            <span className={styles.translationCount}>
+              {transcripts.length} 항목
             </span>
           </div>
-        </div>
-
-        {/* Room Info - Compact Version */}
-        <div className={styles.roomInfo}>
-          <div className={styles.titleSection}>
-            <h2>{roomSettings.roomTitle || speakerName || "Speaker"}</h2>
-          </div>
-          {roomId && (
-            <div className={styles.roomCodeSection}>
-              {/* Compact Room Code */}
-              <div className={styles.roomCodeCompact}>
-                <div className={styles.codeDisplay}>
-                  <span className={styles.codeLabel}>방 코드</span>
-                  <span className={styles.codeValue}>{roomId}</span>
-                </div>
-                <div className={styles.codeActions}>
-                  <button onClick={() => copyToClipboard(roomId, "방 코드")} className={styles.iconButton} title="복사">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                    </svg>
-                  </button>
-                  <button onClick={() => setShowQRModal(true)} className={styles.iconButton} title="QR 코드 보기">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="3" width="7" height="7" rx="1"/>
-                      <rect x="14" y="3" width="7" height="7" rx="1"/>
-                      <rect x="3" y="14" width="7" height="7" rx="1"/>
-                      <rect x="14" y="14" width="7" height="7" rx="1"/>
-                    </svg>
-                  </button>
-                  <button onClick={shareRoom} className={styles.iconButton} title="공유">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="18" cy="5" r="3"/>
-                      <circle cx="6" cy="12" r="3"/>
-                      <circle cx="18" cy="19" r="3"/>
-                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className={styles.actionButtons}>
-                <button
-                  onClick={downloadRecording}
-                  className={styles.saveButton}
-                  disabled={recordedChunksRef.current.length === 0}
-                  title="녹음 파일 다운로드"
+          <div className={styles.translationContent} ref={translationListRef}>
+            {transcripts.length === 0 ? (
+              <div className={styles.emptyState}>
+                <svg
+                  width="64"
+                  height="64"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  녹음 다운로드
-                </button>
-                <button
-                  onClick={saveRecording}
-                  className={styles.saveButton}
-                  disabled={!user || transcripts.length === 0}
-                  title={!user ? "로그인이 필요합니다" : transcripts.length === 0 ? "저장할 내용이 없습니다" : "세션 저장"}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                    <polyline points="17 21 17 13 7 13 7 21"/>
-                    <polyline points="7 3 7 8 15 8"/>
-                  </svg>
-                  세션 저장
-                </button>
-                <button onClick={() => setShowSettingsModal(true)} className={styles.settingsButtonNew}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
-                  </svg>
-                  방 설정
-                </button>
-                <button onClick={createNewRoom} className={styles.newRoomButton}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                  </svg>
-                  새 방 만들기
-                </button>
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <p>녹음을 시작하면 실시간 번역이 여기에 표시됩니다</p>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className={styles.translationList}>
+                {transcripts.map((item, index) => (
+                  <div key={index} className={styles.translationCard}>
+                    {item.type === "stt" ? (
+                      <div className={styles.sttCard}>
+                        <div className={styles.sttBadge}>
+                          {(item as any).isFinal ? "음성 인식" : "인식 중..."}
+                        </div>
+                        <p
+                          className={`${styles.sttTextLarge} ${
+                            !(item as any).isFinal ? styles.partialText : ""
+                          }`}
+                        >
+                          {item.text}
+                          {!(item as any).isFinal && (
+                            <span className={styles.partialIndicator}>
+                              {" "}
+                              ...
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className={styles.translationCardContent}>
+                        <div className={styles.translationBadge}>번역</div>
+                        <div className={styles.translationTexts}>
+                          <p className={styles.koreanTextLarge}>
+                            {item.korean}
+                          </p>
+                          <div className={styles.divider}></div>
+                          <p className={styles.englishTextLarge}>
+                            {item.english}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* Stats */}
-        <div className={styles.stats}>
-          <div className={styles.statCard}>
-            <span className={styles.statValue}>{listenerCount}</span>
-            <span className={styles.statLabel}>청취자</span>
-          </div>
-          <div className={styles.statCard}>
-            <span className={styles.statValue}>{status}</span>
-            <span className={styles.statLabel}>상태</span>
-          </div>
-          <div className={styles.statCard}>
-            <span className={styles.statValue}>{roomSettings.targetLanguages.length}</span>
-            <span className={styles.statLabel}>번역 언어</span>
-          </div>
-        </div>
-
-        {/* Audio level meter */}
-        {isRecording && (
-          <div className={styles.audioLevel}>
-            <span className={styles.audioLabel}>마이크 레벨</span>
-            <div className={styles.audioMeter}>
-              <div
-                className={styles.audioBar}
-                style={{
-                  width: `${audioLevel}%`,
-                  backgroundColor: audioLevel > 70 ? "#ef4444" : audioLevel > 30 ? "#22c55e" : "#64748b",
-                }}
-              />
-            </div>
-            <span className={styles.audioPercent}>{audioLevel}%</span>
-          </div>
-        )}
-
-        {/* Controls */}
-        <div className={styles.controls}>
-          {!isRecording ? (
-            <button
-              onClick={startRecording}
-              className={styles.startButton}
-              disabled={!roomId || !isConnected}
-            >
-              <span className={styles.recordDot}></span>
-              시작
-            </button>
-          ) : (
-            <button onClick={stopRecording} className={styles.stopButton}>
-              ⏹ 녹음 중지
-            </button>
-          )}
-        </div>
-
-        {/* Recent transcripts preview */}
-        {transcripts.length > 0 && (
-          <div className={styles.transcriptPreview}>
-            <h3>실시간 음성 인식</h3>
-            <div className={styles.transcriptList}>
-              {transcripts.slice(-10).map((item, index) => (
-                <div key={index} className={styles.transcriptItem}>
-                  {item.type === "stt" ? (
-                    <p className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
-                      {item.text}
-                      {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
-                    </p>
-                  ) : (
-                    <div className={styles.translationContainer}>
-                      <span className={styles.translationLabel}>🌐 번역</span>
-                      <p className={styles.koreanText}>{item.korean}</p>
-                      <p className={styles.englishText}>{item.english}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Settings Modal */}
       {showSettingsModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
-            <h2>{roomId ? '방 설정 변경' : '방 설정'}</h2>
-
-            {/* Room Title */}
-            <div className={styles.settingGroup}>
-              <label>방 제목 (선택)</label>
-              <input
-                type="text"
-                value={roomSettings.roomTitle}
-                onChange={(e) => setRoomSettings({ ...roomSettings, roomTitle: e.target.value })}
-                className={styles.input}
-                placeholder="방 제목을 입력하세요"
-              />
-            </div>
-
-            {/* Prompt Template */}
-            <div className={styles.settingGroup}>
-              <label>음성 인식 유형</label>
-              <select
-                value={roomSettings.promptTemplate}
-                onChange={(e) => setRoomSettings({ ...roomSettings, promptTemplate: e.target.value })}
-                className={styles.select}
+            <div className={styles.modalHeader}>
+              <h2>{roomId ? "방 설정 변경" : "방 설정"}</h2>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className={styles.closeModalButton}
               >
-                {PROMPT_TEMPLATES.map((template) => (
-                  <option key={template.value} value={template.value}>
-                    {template.label}
-                  </option>
-                ))}
-              </select>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
             </div>
 
-            {/* Custom Prompt */}
-            {roomSettings.promptTemplate === "custom" && (
+            <div className={styles.modalBody}>
+              {/* Room Title */}
               <div className={styles.settingGroup}>
-                <label>사용자 지정 프롬프트</label>
-                <textarea
-                  value={roomSettings.customPrompt}
-                  onChange={(e) => setRoomSettings({ ...roomSettings, customPrompt: e.target.value })}
-                  className={styles.textarea}
-                  placeholder="음성 인식을 위한 사용자 지정 프롬프트를 입력하세요..."
-                  rows={4}
+                <label>방 제목 (선택)</label>
+                <input
+                  type="text"
+                  value={roomSettings.roomTitle}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      roomTitle: e.target.value,
+                    })
+                  }
+                  className={styles.input}
+                  placeholder="예: 주일 예배"
                 />
               </div>
-            )}
 
-            {/* Target Languages */}
-            <div className={styles.settingGroup}>
-              <label>번역 언어 (영어만 지원)</label>
-              <div className={styles.languageGrid}>
-                {TARGET_LANGUAGES.map((lang) => {
-                  const isEnglish = lang.code === "en";
-                  const isDisabled = !isEnglish;
-                  return (
-                    <label
-                      key={lang.code}
-                      className={`${styles.checkbox} ${isDisabled ? styles.disabled : ''}`}
-                      title={isDisabled ? "현재 영어만 지원됩니다" : ""}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={roomSettings.targetLanguages.includes(lang.code)}
-                        disabled={isDisabled}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setRoomSettings({
-                              ...roomSettings,
-                              targetLanguages: [...roomSettings.targetLanguages, lang.code],
-                            });
-                          } else {
-                            setRoomSettings({
-                              ...roomSettings,
-                              targetLanguages: roomSettings.targetLanguages.filter((l) => l !== lang.code),
-                            });
-                          }
-                        }}
-                      />
-                      <span>{lang.name}</span>
-                    </label>
-                  );
-                })}
+              {/* Speaker Name */}
+              <div className={styles.settingGroup}>
+                <label>발표자 이름 (선택)</label>
+                <input
+                  type="text"
+                  value={roomSettings.speakerName}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      speakerName: e.target.value,
+                    })
+                  }
+                  className={styles.input}
+                  placeholder="예: 홍길동 목사"
+                />
               </div>
-            </div>
 
-            {/* Password */}
-            <div className={styles.settingGroup}>
-              <label>
-                비밀번호 (선택)
-                {roomSettings.password && (
-                  <span style={{ marginLeft: '0.5rem', color: '#4ade80', fontSize: '0.875rem' }}>
-                    ✓ 설정됨
-                  </span>
-                )}
-              </label>
-              <input
-                type="password"
-                value={roomSettings.password}
-                onChange={(e) => setRoomSettings({ ...roomSettings, password: e.target.value })}
-                className={styles.input}
-                placeholder={roomId ? "비밀번호 변경 (공백으로 두면 제거)" : "비밀번호를 설정하지 않으면 누구나 입장 가능"}
-              />
-              {roomSettings.password && (
-                <p style={{ fontSize: '0.8125rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-                  💡 청취자는 방 입장 시 이 비밀번호를 입력해야 합니다
-                </p>
+              {/* Prompt Template */}
+              <div className={styles.settingGroup}>
+                <label>음성 인식 유형</label>
+                <select
+                  value={roomSettings.promptTemplate}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      promptTemplate: e.target.value,
+                    })
+                  }
+                  className={styles.select}
+                >
+                  {PROMPT_TEMPLATES.map((template) => (
+                    <option key={template.value} value={template.value}>
+                      {template.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Custom Prompt */}
+              {roomSettings.promptTemplate === "custom" && (
+                <div className={styles.settingGroup}>
+                  <label>사용자 지정 프롬프트</label>
+                  <textarea
+                    value={roomSettings.customPrompt}
+                    onChange={(e) =>
+                      setRoomSettings({
+                        ...roomSettings,
+                        customPrompt: e.target.value,
+                      })
+                    }
+                    className={styles.textarea}
+                    placeholder="음성 인식을 위한 사용자 지정 프롬프트를 입력하세요..."
+                    rows={4}
+                  />
+                </div>
               )}
-            </div>
 
-            {/* Max Listeners */}
-            <div className={styles.settingGroup}>
-              <label>최대 청취자 수</label>
-              <input
-                type="number"
-                value={roomSettings.maxListeners}
-                onChange={(e) => setRoomSettings({ ...roomSettings, maxListeners: parseInt(e.target.value) || 100 })}
-                className={styles.input}
-                min="1"
-                max="1000"
-              />
-            </div>
+              {/* Target Languages */}
+              <div className={styles.settingGroup}>
+                <label>번역 언어 (영어만 지원)</label>
+                <div className={styles.languageGrid}>
+                  {TARGET_LANGUAGES.map((lang) => {
+                    const isEnglish = lang.code === "en";
+                    const isDisabled = !isEnglish;
+                    return (
+                      <label
+                        key={lang.code}
+                        className={`${styles.checkbox} ${
+                          isDisabled ? styles.disabled : ""
+                        }`}
+                        title={isDisabled ? "현재 영어만 지원됩니다" : ""}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={roomSettings.targetLanguages.includes(
+                            lang.code
+                          )}
+                          disabled={isDisabled}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setRoomSettings({
+                                ...roomSettings,
+                                targetLanguages: [
+                                  ...roomSettings.targetLanguages,
+                                  lang.code,
+                                ],
+                              });
+                            } else {
+                              setRoomSettings({
+                                ...roomSettings,
+                                targetLanguages:
+                                  roomSettings.targetLanguages.filter(
+                                    (l) => l !== lang.code
+                                  ),
+                              });
+                            }
+                          }}
+                        />
+                        <span>{lang.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
-            {/* Actions */}
-            <div className={styles.modalActions}>
-              <button onClick={() => setShowSettingsModal(false)} className={styles.cancelButton}>
-                {roomId ? '닫기' : '취소'}
-              </button>
-              <button onClick={roomId ? updateRoomSettings : createRoom} className={styles.createButton}>
-                {roomId ? '설정 저장' : '방 만들기'}
-              </button>
+              {/* Password */}
+              <div className={styles.settingGroup}>
+                <label>
+                  비밀번호 (선택)
+                  {roomSettings.password && (
+                    <span
+                      style={{
+                        marginLeft: "0.5rem",
+                        color: "#4ade80",
+                        fontSize: "0.875rem",
+                      }}
+                    >
+                      ✓ 설정됨
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="password"
+                  value={roomSettings.password}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      password: e.target.value,
+                    })
+                  }
+                  className={styles.input}
+                  placeholder={
+                    roomId
+                      ? "비밀번호 변경 (공백으로 두면 제거)"
+                      : "비밀번호를 설정하지 않으면 누구나 입장 가능"
+                  }
+                />
+                {roomSettings.password && (
+                  <p
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "#94a3b8",
+                      marginTop: "0.5rem",
+                    }}
+                  >
+                    💡 청취자는 방 입장 시 이 비밀번호를 입력해야 합니다
+                  </p>
+                )}
+              </div>
+
+              {/* Max Listeners */}
+              <div className={styles.settingGroup}>
+                <label>최대 청취자 수</label>
+                <input
+                  type="number"
+                  value={roomSettings.maxListeners}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      maxListeners: parseInt(e.target.value) || 100,
+                    })
+                  }
+                  className={styles.input}
+                  min="1"
+                  max="1000"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className={styles.modalActions}>
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className={styles.cancelButton}
+                >
+                  {roomId ? "닫기" : "취소"}
+                </button>
+                <button
+                  onClick={roomId ? updateRoomSettings : createRoom}
+                  className={styles.createButton}
+                >
+                  {roomId ? "설정 저장" : "방 만들기"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1265,15 +1559,22 @@ export default function Speaker() {
       {showQRModal && (
         <div className={styles.qrModalOverlay}>
           <div className={styles.qrModalContent}>
-            <button onClick={() => setShowQRModal(false)} className={styles.closeButton}>
+            <button
+              onClick={() => setShowQRModal(false)}
+              className={styles.closeButton}
+            >
               ✕
             </button>
             <div className={styles.qrFullscreen}>
               <h1>{roomSettings.roomTitle || "번역 세션"}</h1>
               <p className={styles.roomCodeLarge}>{roomId}</p>
               <img src={qrCodeUrl} alt="Room QR Code" />
-              <p className={styles.instruction}>QR 코드를 스캔하여 세션에 참여하세요</p>
-              <p className={styles.urlText}>{`${FRONTEND_URL}/listener/${roomId}`}</p>
+              <p className={styles.instruction}>
+                QR 코드를 스캔하여 세션에 참여하세요
+              </p>
+              <p
+                className={styles.urlText}
+              >{`${FRONTEND_URL}/listener/${roomId}`}</p>
             </div>
           </div>
         </div>
