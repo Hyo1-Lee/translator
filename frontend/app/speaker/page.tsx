@@ -469,17 +469,20 @@ export default function Speaker() {
 
       setStatus("마이크 요청 중...");
 
-      // Test microphone access first
-      console.log("[Recording] Requesting microphone access...");
+      // Request microphone with professional audio settings
+      console.log("[Recording] Requesting microphone access with professional audio settings...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 24000,
           sampleSize: 16,
           echoCancellation: true,
-          noiseSuppression: false,  // Disable for higher sensitivity
-          autoGainControl: false,    // Disable to control gain manually
-        },
+          noiseSuppression: true,    // Browser-level noise suppression
+          autoGainControl: true,     // Browser-level automatic gain control
+          // Advanced constraints for better audio quality
+          latency: 0.01,             // Low latency (10ms)
+          volume: 1.0,               // Maximum volume
+        } as any,
       });
 
       console.log("[Recording] ✅ Microphone access granted!");
@@ -558,21 +561,50 @@ export default function Speaker() {
         console.error("[Recording] Failed to start MediaRecorder:", error);
       }
 
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 24000,
-      });
+      // Create AudioContext with browser's native sample rate
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
 
-      // Log actual sample rate (browsers may not honor requested rate)
+      const sourceSampleRate = audioContextRef.current.sampleRate;
+      const targetSampleRate = 16000;  // Target: 16kHz for Deepgram
+      const resampleRatio = sourceSampleRate / targetSampleRate;
+
       console.log(`[Audio] 🔧 AudioContext created`);
-      console.log(`[Audio] Requested: 24000 Hz, Actual: ${audioContextRef.current.sampleRate} Hz`);
+      console.log(`[Audio] Source sample rate: ${sourceSampleRate} Hz`);
+      console.log(`[Audio] Target sample rate: ${targetSampleRate} Hz (resample ratio: ${resampleRatio.toFixed(2)})`);
       console.log(`[Audio] State: ${audioContextRef.current.state}`);
 
       const source = audioContextRef.current.createMediaStreamSource(stream);
       console.log(`[Audio] ✅ Media stream source created`);
 
+      // Create professional audio filter chain
+      // 1. High-pass filter to remove low-frequency noise (rumble, wind)
+      const highpassFilter = audioContextRef.current.createBiquadFilter();
+      highpassFilter.type = "highpass";
+      highpassFilter.frequency.value = 80; // Remove frequencies below 80Hz
+      highpassFilter.Q.value = 0.707; // Butterworth response
+
+      // 2. Low-pass filter to remove high-frequency noise (hiss)
+      const lowpassFilter = audioContextRef.current.createBiquadFilter();
+      lowpassFilter.type = "lowpass";
+      lowpassFilter.frequency.value = 8000; // Remove frequencies above 8kHz
+      lowpassFilter.Q.value = 0.707;
+
+      // 3. Peaking filter to boost speech frequencies (2-4kHz)
+      const speechBoost = audioContextRef.current.createBiquadFilter();
+      speechBoost.type = "peaking";
+      speechBoost.frequency.value = 3000; // Center frequency for speech clarity
+      speechBoost.Q.value = 1.0;
+      speechBoost.gain.value = 3; // +3dB boost
+
+      // Connect the filter chain
+      source.connect(highpassFilter);
+      highpassFilter.connect(lowpassFilter);
+      lowpassFilter.connect(speechBoost);
+      console.log(`[Audio] ✅ Professional filter chain created: Highpass(80Hz) -> Lowpass(8kHz) -> Speech Boost(3kHz, +3dB)`);
+
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
-      source.connect(analyserRef.current);
+      speechBoost.connect(analyserRef.current);
       console.log(`[Audio] ✅ Analyser connected`);
 
       // Optimized buffer size - 2048 for lower latency
@@ -627,28 +659,41 @@ export default function Speaker() {
 
         const inputData = e.inputBuffer.getChannelData(0);
 
+        // Downsample to 16kHz
+        const targetSampleRate = 16000;
+        const sourceSampleRate = audioContextRef.current!.sampleRate;
+        const resampleRatio = sourceSampleRate / targetSampleRate;
+        const outputLength = Math.floor(inputData.length / resampleRatio);
+        const resampledData = new Float32Array(outputLength);
+
+        // Simple downsampling (nearest neighbor)
+        for (let i = 0; i < outputLength; i++) {
+          const srcIndex = Math.floor(i * resampleRatio);
+          resampledData[i] = inputData[srcIndex];
+        }
+
         // Calculate RMS for better noise detection
         let sum = 0;
         let maxSample = 0;
-        for (let i = 0; i < inputData.length; i++) {
-          sum += inputData[i] * inputData[i];
-          maxSample = Math.max(maxSample, Math.abs(inputData[i]));
+        for (let i = 0; i < resampledData.length; i++) {
+          sum += resampledData[i] * resampledData[i];
+          maxSample = Math.max(maxSample, Math.abs(resampledData[i]));
         }
-        const rms = Math.sqrt(sum / inputData.length);
+        const rms = Math.sqrt(sum / resampledData.length);
 
         // Detailed logging for first few chunks
         if (audioChunksSent < 10) {
-          console.log(`[Audio] 🔊 Frame #${frameCount}: RMS=${rms.toFixed(6)}, Max=${maxSample.toFixed(6)}, threshold=0.002`);
+          console.log(`[Audio] 🔊 Frame #${frameCount}: Original=${inputData.length}, Resampled=${resampledData.length}, RMS=${rms.toFixed(6)}, Max=${maxSample.toFixed(6)}`);
         }
 
-        // Lower threshold for higher sensitivity - SEND EVERYTHING for debugging
-        if (rms > 0.001) {  // Very low threshold for testing
-          const int16Data = new Int16Array(inputData.length);
+        // Optimized threshold - backend preprocessing handles most enhancement
+        if (rms > 0.002) {  // Balanced threshold - filters out very quiet noise
+          const int16Data = new Int16Array(resampledData.length);
 
-          // High amplification for better sensitivity
-          for (let i = 0; i < inputData.length; i++) {
-            const s = Math.max(-1, Math.min(1, inputData[i]));
-            const amplified = s * 3.5; // Increased from 3.0 to 3.5 for higher gain
+          // Moderate amplification
+          for (let i = 0; i < resampledData.length; i++) {
+            const s = Math.max(-1, Math.min(1, resampledData[i]));
+            const amplified = s * 2.5;  // Moderate amplification
             const clamped = Math.max(-1, Math.min(1, amplified));
             int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
           }

@@ -23,7 +23,15 @@
       "WebFetch(domain:platform.openai.com)",
       "Read(//c/Users/gydnj/Desktop/side_projects/PARALLAX/**)",
       "WebFetch(domain:community.openai.com)",
-      "Bash(mysql:*)"
+      "Bash(mysql:*)",
+      "WebFetch(domain:cookbook.openai.com)",
+      "WebFetch(domain:openai.com)",
+      "WebFetch(domain:www.infoq.com)",
+      "WebFetch(domain:techcommunity.microsoft.com)",
+      "WebFetch(domain:deepgram.com)",
+      "WebFetch(domain:developers.deepgram.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm run build:*)"
     ],
     "deny": []
   }

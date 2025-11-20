@@ -241,14 +241,14 @@ export class AuthService {
 
     const accessToken = jwt.sign(
       { userId, email } as JWTPayload,
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
+      JWT_SECRET as string,
+      { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
     );
 
     const refreshToken = jwt.sign(
       { userId, email } as JWTPayload,
-      JWT_REFRESH_SECRET,
-      { expiresIn: JWT_REFRESH_EXPIRES_IN }
+      JWT_REFRESH_SECRET as string,
+      { expiresIn: JWT_REFRESH_EXPIRES_IN } as jwt.SignOptions
     );
 
     return { accessToken, refreshToken };
@@ -307,8 +307,8 @@ export class AuthService {
       // Generate new access token
       const accessToken = jwt.sign(
         { userId: payload.userId, email: payload.email },
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRES_IN }
+        JWT_SECRET as string,
+        { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
       );
 
       return { accessToken };

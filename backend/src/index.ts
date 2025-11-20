@@ -121,41 +121,20 @@ async function bootstrap() {
   // Initialize services
   const roomService = new RoomService();
   const transcriptService = new TranscriptService();
-  const translationService = new TranslationService({
-    apiKey: process.env.OPENAI_API_KEY || ''
-  });
-  const sttProvider = (process.env.STT_PROVIDER as 'rtzr' | 'openai' | 'openai-whisper') || 'rtzr';
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
-  const sttManager = new STTManager(
-    {
-      provider: sttProvider,
-      defaultPromptTemplate: promptTemplate,
-      rtzr: {
-        clientId: process.env.RTZR_CLIENT_ID || '',
-        clientSecret: process.env.RTZR_CLIENT_SECRET || '',
-        apiUrl: process.env.RTZR_API_URL || 'https://openapi.vito.ai'
-      },
-      openai: {
-        apiKey: process.env.OPENAI_API_KEY || '',
-        model: process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17',
-        voice: (process.env.OPENAI_VOICE as any) || 'alloy',
-        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.8'),
-        maxOutputTokens: process.env.OPENAI_MAX_TOKENS === 'inf' ? 'inf' : parseInt(process.env.OPENAI_MAX_TOKENS || '4096'),
-        vadThreshold: parseFloat(process.env.OPENAI_VAD_THRESHOLD || '0.5'),
-        vadSilenceDuration: parseInt(process.env.OPENAI_VAD_SILENCE || '500'),
-        prefixPadding: parseInt(process.env.OPENAI_PREFIX_PADDING || '300'),
-        turnDetection: (process.env.OPENAI_TURN_DETECTION as any) || 'server_vad'
-      },
-      whisper: {
-        apiKey: process.env.OPENAI_API_KEY || '',
-        model: 'whisper-1',
-        language: 'ko',
-        temperature: 0
-      }
+  // Simplified STT Manager - Deepgram only
+  const sttManager = new STTManager({
+    deepgram: {
+      apiKey: process.env.DEEPGRAM_API_KEY || '',
+      model: (process.env.DEEPGRAM_MODEL as 'nova-3' | 'enhanced') || 'nova-3',
+      language: process.env.DEEPGRAM_LANGUAGE || 'ko',
+      smartFormat: process.env.DEEPGRAM_SMART_FORMAT !== 'false',
+      punctuate: process.env.DEEPGRAM_PUNCTUATE !== 'false',
+      diarize: process.env.DEEPGRAM_DIARIZE === 'true'
     },
-    translationService
-  );
+    defaultPromptTemplate: promptTemplate
+  });
 
   // Initialize Socket handler
   new SocketHandler(io, roomService, transcriptService, sttManager);
