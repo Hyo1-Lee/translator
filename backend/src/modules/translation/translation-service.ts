@@ -166,7 +166,6 @@ OUTPUT REQUIREMENTS:
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
-      console.log('[Translation] Context translation completed:', translation ? 'Success' : 'Failed');
       return translation || null;
     } catch (error) {
       console.error('[Translation] Context translation error:', error);

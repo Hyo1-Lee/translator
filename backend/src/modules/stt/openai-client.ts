@@ -45,7 +45,6 @@ export class OpenAIClient extends STTProvider {
     // OpenAI doesn't require connection, just API key validation
     try {
       // Test API key by making a simple request
-      console.log(`[STT][OpenAI][${this.roomId}] Initializing OpenAI Whisper client`);
       this.isConnected = true;
       this.emit('connected');
 
@@ -55,8 +54,6 @@ export class OpenAIClient extends STTProvider {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      console.log(`[STT][OpenAI][${this.roomId}] OpenAI client ready`);
-      console.log(`[STT][OpenAI][${this.roomId}] ⚠️  Note: Expected latency is 2-5 seconds per chunk`);
     } catch (error) {
       console.error(`[STT][OpenAI][${this.roomId}] Failed to initialize:`, error);
       throw error;
@@ -96,8 +93,6 @@ export class OpenAIClient extends STTProvider {
       const combinedAudio = Buffer.concat(this.audioBuffer);
       this.audioBuffer = [];
 
-      console.log(`[STT][OpenAI][${this.roomId}] Processing ${combinedAudio.length} bytes of audio`);
-
       // Save to temporary file (OpenAI requires file input)
       fs.writeFileSync(this.tempAudioPath, combinedAudio);
 
@@ -121,7 +116,6 @@ export class OpenAIClient extends STTProvider {
       const transcription = await this.client.audio.transcriptions.create(transcriptionOptions);
 
       const latency = Date.now() - startTime;
-      console.log(`[STT][OpenAI][${this.roomId}] Transcription latency: ${latency}ms`);
 
       // Extract text
       const text = transcription.text?.trim();
@@ -173,7 +167,6 @@ export class OpenAIClient extends STTProvider {
     this.audioBuffer = [];
     this.isConnected = false;
     this.emit('disconnected');
-    console.log(`[STT][OpenAI][${this.roomId}] Disconnected`);
   }
 
   isActive(): boolean {
@@ -189,7 +182,6 @@ export class OpenAIClient extends STTProvider {
    */
   setPrompt(prompt: string): void {
     this.config.prompt = prompt;
-    console.log(`[STT][OpenAI][${this.roomId}] Prompt updated for better accuracy`);
   }
 
   /**
@@ -198,7 +190,6 @@ export class OpenAIClient extends STTProvider {
    */
   setChunkDuration(durationMs: number): void {
     this.chunkDuration = durationMs;
-    console.log(`[STT][OpenAI][${this.roomId}] Chunk duration set to ${durationMs}ms`);
   }
 
   /**

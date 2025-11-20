@@ -81,25 +81,14 @@ export class SocketHandler {
         existingRoomCode
       } = data;
 
-      console.log('[Room] Creating room with data:', {
-        name,
-        userId,
-        roomTitle,
-        hasPassword: !!password,
-        promptTemplate,
-        targetLanguages
-      });
-
       let room;
 
       // Log active STT clients for debugging
       const activeClients = this.sttManager.getActiveRoomIds();
-      console.log(`[Room] Active STT clients before creating room: [${activeClients.join(', ')}]`);
 
       // Clean up any existing STT client for this speaker's previous rooms
       const previousRoom = await this.roomService.getRoomBySpeakerId(socket.id);
       if (previousRoom) {
-        console.log(`[Room] Cleaning up previous STT client for speaker (room: ${previousRoom.roomCode})`);
         this.sttManager.removeClient(previousRoom.roomCode);
         this.audioChunksReceived.delete(previousRoom.roomCode);
       }
@@ -109,7 +98,6 @@ export class SocketHandler {
         const existingRoom = await this.roomService.getRoom(existingRoomCode);
         if (existingRoom && existingRoom.status !== 'ENDED') {
           // Clean up STT client for the existing room before rejoining
-          console.log(`[Room] Cleaning up STT client before rejoining room ${existingRoomCode}`);
           this.sttManager.removeClient(existingRoomCode);
           this.audioChunksReceived.delete(existingRoomCode);
 
@@ -143,8 +131,6 @@ export class SocketHandler {
       const roomTargetLanguages = room.roomSettings?.targetLanguages
         ? room.roomSettings.targetLanguages.split(',')
         : ['en'];
-
-      console.log(`[Room] Creating STT client for room: ${room.roomCode}`);
 
       // Create STT client for this room with custom prompt
       await this.sttManager.createClient(
@@ -310,27 +296,17 @@ export class SocketHandler {
     try {
       const { roomId, name = 'Guest', password } = data;
 
-      console.log(`[Room] Join attempt:`, {
-        roomId,
-        name,
-        hasPassword: !!password,
-        socketId: socket.id
-      });
-
       const room = await this.roomService.getRoom(roomId);
       if (!room) {
-        console.log(`[Room] ❌ Room not found: ${roomId}`);
         socket.emit('error', { message: 'Room not found' });
         return;
       }
 
       // Check if room is password protected
       const isProtected = await this.roomService.isPasswordProtected(roomId);
-      console.log(`[Room] Password protected: ${isProtected} for room ${roomId}`);
 
       if (isProtected) {
         if (!password) {
-          console.log(`[Room] 🔒 Password required for ${roomId}, requesting from listener`);
           socket.emit('password-required', { roomId });
           return;
         }
@@ -338,17 +314,13 @@ export class SocketHandler {
         // Verify password
         const isValid = await this.roomService.verifyRoomPassword(roomId, password);
         if (!isValid) {
-          console.log(`[Room] ❌ Incorrect password for ${roomId}`);
           socket.emit('error', { message: 'Incorrect password' });
           return;
         }
-        console.log(`[Room] ✅ Password verified for ${roomId}`);
       }
 
       await this.roomService.addListener(roomId, socket.id, name);
       socket.join(roomId);
-
-      console.log(`[Room] ✅ Listener ${name} joined room ${roomId}`);
 
       // Parse targetLanguages to array before sending
       const roomSettings = room.roomSettings ? {
@@ -419,7 +391,6 @@ export class SocketHandler {
       const count = (this.audioChunksReceived.get(roomId) || 0) + 1;
       this.audioChunksReceived.set(roomId, count);
       if (count === 1 || count % 100 === 0) {
-        console.log(`[Audio][${roomId}] ✅ Received ${count} audio chunks (${audioBuffer.length} bytes)`);
       }
 
       // Check if STT client exists
@@ -432,11 +403,6 @@ export class SocketHandler {
 
       // Send to STT
       this.sttManager.sendAudio(roomId, audioBuffer);
-
-      // Log successful send for first few chunks
-      if (count <= 3) {
-        console.log(`[Audio][${roomId}] 🎤 Sent audio chunk #${count} to STT (${audioBuffer.length} bytes)`);
-      }
 
     } catch (error) {
       console.error(`[Audio] ❌ Stream error:`, error);
@@ -501,14 +467,6 @@ export class SocketHandler {
     try {
       const { roomId, settings } = data;
 
-      console.log('[Settings] Update request:', {
-        roomId,
-        roomTitle: settings.roomTitle,
-        promptTemplate: settings.promptTemplate,
-        targetLanguages: settings.targetLanguages,
-        hasPassword: !!settings.password
-      });
-
       // Verify speaker
       const room = await this.roomService.getRoom(roomId);
       if (!room || room.speakerId !== socket.id) {
@@ -525,11 +483,6 @@ export class SocketHandler {
         maxListeners: settings.maxListeners,
         enableTranslation: settings.enableTranslation,
         enableAutoScroll: settings.enableAutoScroll
-      });
-
-      console.log('[Settings] Updated successfully:', {
-        roomId,
-        roomTitle: updatedSettings.roomTitle
       });
 
       // Update password if provided
@@ -600,7 +553,6 @@ export class SocketHandler {
       // Check if this socket was a speaker and clean up STT client
       const speakerRoom = await this.roomService.getRoomBySpeakerId(socket.id);
       if (speakerRoom) {
-        console.log(`[Disconnect] Cleaning up STT client for room ${speakerRoom.roomCode}`);
         this.sttManager.removeClient(speakerRoom.roomCode);
         this.audioChunksReceived.delete(speakerRoom.roomCode);
       }
@@ -611,7 +563,6 @@ export class SocketHandler {
       for (const roomId of rooms) {
         const listenerCount = await this.roomService.getListenerCount(roomId);
         this.io.to(roomId).emit('listener-count', { count: listenerCount });
-        console.log(`[Disconnect] Updated listener count for room ${roomId}: ${listenerCount}`);
       }
 
     } catch (error) {

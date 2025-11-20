@@ -155,21 +155,13 @@ export class OpenAIRealtimeClient extends STTProvider {
   async connect(): Promise<void> {
     if (this.sessionState === SessionState.CONNECTING ||
         this.sessionState === SessionState.CONNECTED) {
-      console.log(`[STT][OpenAI][${this.roomId}] Already connecting or connected`);
       return;
     }
 
     try {
       this.sessionState = SessionState.CONNECTING;
-      console.log(`[STT][OpenAI][${this.roomId}] ========================================`);
-      console.log(`[STT][OpenAI][${this.roomId}] 🔌 Connecting to Realtime API...`);
-      console.log(`[STT][OpenAI][${this.roomId}] 🤖 Model: ${this.config.model}`);
-      console.log(`[STT][OpenAI][${this.roomId}] 📝 Prompt Template: ${this.promptTemplate.name}`);
-      console.log(`[STT][OpenAI][${this.roomId}] 🎵 Audio: PCM16 @ 24kHz mono`);
 
       const url = 'wss://api.openai.com/v1/realtime?model=' + this.config.model;
-      console.log(`[STT][OpenAI][${this.roomId}] 🌐 URL: ${url}`);
-      console.log(' ##########3 apikey: ', this.config.apiKey);
       this.ws = new WebSocket(url, {
         headers: {
           'Authorization': `Bearer ${this.config.apiKey}`,
@@ -201,7 +193,6 @@ export class OpenAIRealtimeClient extends STTProvider {
     if (!this.ws) return;
 
     this.ws.on('open', () => {
-      console.log(`[STT][OpenAI][${this.roomId}] ✅ WebSocket connected successfully`);
       this.sessionState = SessionState.CONNECTED;
       this.reconnectAttempts = 0;
       this.reconnectDelay = 1000;
@@ -231,7 +222,6 @@ export class OpenAIRealtimeClient extends STTProvider {
     });
 
     this.ws.on('close', (code, reason) => {
-      console.log(`[STT][OpenAI][${this.roomId}] 🔌 WebSocket closed: ${code} - ${reason}`);
       this.handleDisconnection(code, reason.toString());
     });
   }
@@ -268,8 +258,6 @@ export class OpenAIRealtimeClient extends STTProvider {
     try {
       const message = JSON.parse(data.toString());
 
-      console.log(`[STT][OpenAI][${this.roomId}] 📨 Received: ${message.type}`);
-
       switch (message.type) {
         case 'session.created':
           this.handleSessionCreated(message);
@@ -285,7 +273,6 @@ export class OpenAIRealtimeClient extends STTProvider {
 
         case 'conversation.item.input_audio_transcription.delta':
           // Partial transcription - can emit interim results if needed
-          console.log(`[STT][OpenAI][${this.roomId}] 📝 Partial transcription: ${message.delta}`);
           break;
 
         case 'input_audio_buffer.speech_started':
@@ -304,13 +291,9 @@ export class OpenAIRealtimeClient extends STTProvider {
         case 'response.audio.delta':
         case 'response.audio_transcript.delta':
         case 'response.output_item.done':
-          // Handle response events if needed (these are for AI responses, not transcription)
-          console.log(`[STT][OpenAI][${this.roomId}] 📢 Response event: ${message.type}`);
           break;
 
         default:
-          // Log unknown message types for debugging
-          console.log(`[STT][OpenAI][${this.roomId}] ⚠️  Unknown message type: ${message.type}`);
           console.log(`[STT][OpenAI][${this.roomId}] Message data:`, JSON.stringify(message, null, 2));
       }
     } catch (error) {
@@ -324,9 +307,6 @@ export class OpenAIRealtimeClient extends STTProvider {
    */
   private handleSessionCreated(message: any): void {
     this.sessionId = message.session.id;
-    console.log(`[STT][OpenAI][${this.roomId}] ✅ Session created: ${this.sessionId}`);
-    console.log(`[STT][OpenAI][${this.roomId}] Session details:`, JSON.stringify(message.session, null, 2));
-
     // Update session with our configuration
     this.updateSession();
   }
@@ -354,9 +334,6 @@ export class OpenAIRealtimeClient extends STTProvider {
       max_response_output_tokens: this.config.maxOutputTokens
     };
 
-    console.log(`[STT][OpenAI][${this.roomId}] 📤 Sending session configuration...`);
-    console.log(`[STT][OpenAI][${this.roomId}] Config:`, JSON.stringify(sessionConfig, null, 2));
-
     this.sendMessage({
       type: 'session.update',
       session: sessionConfig
@@ -367,17 +344,10 @@ export class OpenAIRealtimeClient extends STTProvider {
    * Handle session.updated event
    */
   private handleSessionUpdated(message: any): void {
-    console.log(`[STT][OpenAI][${this.roomId}] ✅ Session updated successfully`);
-    console.log(`[STT][OpenAI][${this.roomId}] 🎉 Client is now READY for audio streaming`);
-    console.log(`[STT][OpenAI][${this.roomId}] ========================================`);
     this.sessionState = SessionState.READY;
     this.isConnected = true;
     this.emit('connected');
 
-    // Process any queued audio
-    if (this.audioQueue.length > 0) {
-      console.log(`[STT][OpenAI][${this.roomId}] 📦 Processing ${this.audioQueue.length} queued audio chunks...`);
-    }
     this.processAudioQueue();
   }
 
@@ -385,9 +355,6 @@ export class OpenAIRealtimeClient extends STTProvider {
    * Handle transcription completed event
    */
   private handleTranscriptionCompleted(message: any): void {
-    console.log(`[STT][OpenAI][${this.roomId}] 📝 Transcription completed event received`);
-    console.log(`[STT][OpenAI][${this.roomId}] Full message:`, JSON.stringify(message, null, 2));
-
     const transcript = message.transcript?.trim();
 
     if (!transcript) {
@@ -409,16 +376,12 @@ export class OpenAIRealtimeClient extends STTProvider {
     }
 
     this.emit('transcript', result);
-
-    console.log(`[STT][OpenAI][${this.roomId}] ✅ Transcription: "${transcript}"`);
-    console.log(`[STT][OpenAI][${this.roomId}] 📊 Total transcriptions: ${this.metrics.transcriptionsReceived}`);
   }
 
   /**
    * Handle speech started event
    */
   private handleSpeechStarted(message: any): void {
-    console.log(`[STT][OpenAI][${this.roomId}] Speech detected`);
     this.emit('speech_started');
   }
 
@@ -426,7 +389,6 @@ export class OpenAIRealtimeClient extends STTProvider {
    * Handle speech stopped event
    */
   private handleSpeechStopped(message: any): void {
-    console.log(`[STT][OpenAI][${this.roomId}] Speech ended`);
     this.emit('speech_stopped');
   }
 
@@ -448,7 +410,6 @@ export class OpenAIRealtimeClient extends STTProvider {
       // Queue audio if not ready
       if (this.audioQueue.length < this.maxQueueSize) {
         this.audioQueue.push(audioData);
-        console.log(`[STT][OpenAI][${this.roomId}] 📦 Queued audio (state: ${this.sessionState}, queue: ${this.audioQueue.length}/${this.maxQueueSize})`);
       } else {
         console.warn(`[STT][OpenAI][${this.roomId}] ⚠️  Audio queue full (${this.maxQueueSize}), dropping packet`);
       }
@@ -469,9 +430,6 @@ export class OpenAIRealtimeClient extends STTProvider {
 
     // Convert to base64 as required by Realtime API
     const base64Audio = audioData.toString('base64');
-
-    console.log(`[STT][OpenAI][${this.roomId}] 🎵 Sending ${audioData.length} bytes (${base64Audio.length} base64 chars)`);
-
     try {
       this.sendMessage({
         type: 'input_audio_buffer.append',
@@ -479,7 +437,6 @@ export class OpenAIRealtimeClient extends STTProvider {
       });
 
       this.metrics.audioBytesSent += audioData.length;
-      console.log(`[STT][OpenAI][${this.roomId}] 📊 Total audio sent: ${this.metrics.audioBytesSent} bytes`);
     } catch (error) {
       console.error(`[STT][OpenAI][${this.roomId}] ❌ Failed to send audio:`, error);
       if (error instanceof Error) {
@@ -518,7 +475,6 @@ export class OpenAIRealtimeClient extends STTProvider {
       this.sendMessage({
         type: 'input_audio_buffer.commit'
       });
-      console.log(`[STT][OpenAI][${this.roomId}] Audio buffer committed`);
     }
   }
 
@@ -543,8 +499,6 @@ export class OpenAIRealtimeClient extends STTProvider {
    * Disconnect from the API
    */
   disconnect(): void {
-    console.log(`[STT][OpenAI][${this.roomId}] Disconnecting...`);
-
     this.stopHeartbeat();
 
     if (this.reconnectTimer) {
@@ -609,10 +563,6 @@ export class OpenAIRealtimeClient extends STTProvider {
       this.maxReconnectDelay
     );
 
-    console.log(
-      `[STT][OpenAI][${this.roomId}] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
-    );
-
     this.reconnectTimer = setTimeout(async () => {
       try {
         await this.connect();
@@ -674,7 +624,6 @@ export class OpenAIRealtimeClient extends STTProvider {
 
     if (this.sessionState === SessionState.READY) {
       this.updateSession();
-      console.log(`[STT][OpenAI][${this.roomId}] Prompt template updated to: ${templateName}`);
     }
   }
 

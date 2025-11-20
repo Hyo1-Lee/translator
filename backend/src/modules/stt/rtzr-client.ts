@@ -65,7 +65,6 @@ export class RTZRClient extends STTProvider {
         expiresAt: Date.now() + 23 * 60 * 60 * 1000, // 23 hours
       };
 
-      console.log(`[STT][${this.roomId}] Token obtained successfully`);
       return this.token.accessToken;
     } catch (error) {
       console.error(`[STT][${this.roomId}] Failed to get token:`, error);
@@ -128,7 +127,6 @@ export class RTZRClient extends STTProvider {
     });
 
     this.ws.on("close", (code, reason) => {
-      console.log(`[STT][${this.roomId}] WS closed: ${code} - ${reason}`);
       this.isConnected = false;
       this.ws = null;
       this.emit("disconnected");
@@ -160,12 +158,6 @@ export class RTZRClient extends STTProvider {
         if (this.firstAudioSentTime > 0) {
           const latency = Date.now() - this.firstAudioSentTime;
           const isFinal = message.final || false;
-          console.log(
-            `[STT][${this.roomId}] ⚡ Latency: ${latency}ms | ` +
-              `Type: ${isFinal ? "FINAL" : "PARTIAL"} | ` +
-              `AudioChunks: ${this.audioChunkCount} | ` +
-              `Text: "${text.substring(0, 30)}${text.length > 30 ? "..." : ""}"`
-          );
 
           // Reset after final result
           if (isFinal) {
@@ -193,14 +185,7 @@ export class RTZRClient extends STTProvider {
       this.audioChunkCount++;
       if (this.audioChunkCount === 1) {
         this.firstAudioSentTime = Date.now();
-        console.log(
-          `[STT][${this.roomId}] ⏱️  First audio sent to RTZR WebSocket (${audioData.length} bytes)`
-        );
-      } else if (this.audioChunkCount <= 3 || this.audioChunkCount % 100 === 0) {
-        console.log(
-          `[STT][${this.roomId}] 📡 Sent audio chunk #${this.audioChunkCount} to RTZR (${audioData.length} bytes)`
-        );
-      }
+      } 
     } else {
       if (this.pendingAudioBuffer.length === 0) {
         console.warn(

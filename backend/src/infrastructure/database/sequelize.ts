@@ -60,13 +60,11 @@ sequelize.addModels([
 export const connectDatabase = async (): Promise<void> => {
   try {
     await sequelize.authenticate();
-    console.log('✅ MySQL database connection established successfully.');
 
     // Sync models (development only)
     if (config.app.isDev) {
       // Use alter: true to update tables without deleting data
       await sequelize.sync({ alter: true });
-      console.log('✅ Database models synchronized.');
     }
   } catch (error) {
     console.error('❌ Unable to connect to the database:', error);
@@ -76,7 +74,6 @@ export const connectDatabase = async (): Promise<void> => {
 
 export const closeDatabase = async (): Promise<void> => {
   await sequelize.close();
-  console.log('Database connection closed.');
 };
 
 export default sequelize;

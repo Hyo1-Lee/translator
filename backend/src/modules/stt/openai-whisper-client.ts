@@ -37,7 +37,6 @@ export class OpenAIWhisperClient extends STTProvider {
   }
 
   async connect(): Promise<void> {
-    console.log(`[STT][${this.roomId}] Connecting to OpenAI Whisper API...`);
     this.isConnected = true;
     this.lastProcessTime = Date.now();
 
@@ -47,7 +46,6 @@ export class OpenAIWhisperClient extends STTProvider {
     }, 1000);
 
     this.emit("connected");
-    console.log(`[STT][${this.roomId}] Connected to OpenAI Whisper API`);
   }
 
   private async checkAndProcessBuffer(): Promise<void> {
@@ -77,8 +75,6 @@ export class OpenAIWhisperClient extends STTProvider {
     this.lastProcessTime = Date.now();
 
     try {
-      console.log(`[STT][${this.roomId}] 📤 Processing ${audioData.length} bytes with Whisper API...`);
-
       // PCM 데이터를 WAV 형식으로 변환
       const wavBuffer = this.pcmToWav(audioData, this.sampleRate, this.bytesPerSample);
 
@@ -107,8 +103,6 @@ export class OpenAIWhisperClient extends STTProvider {
       }
 
       if (text && text !== this.lastTranscript) {
-        console.log(`[STT][${this.roomId}] ⚡ Whisper latency: ${latency}ms | Text: "${text.substring(0, 50)}${text.length > 50 ? "..." : ""}"`);
-
         this.lastTranscript = text;
         this.transcriptBuffer.push(text);
 
@@ -183,8 +177,6 @@ export class OpenAIWhisperClient extends STTProvider {
   }
 
   disconnect(): void {
-    console.log(`[STT][${this.roomId}] Disconnecting from OpenAI Whisper API...`);
-
     if (this.processingInterval) {
       clearInterval(this.processingInterval);
       this.processingInterval = null;

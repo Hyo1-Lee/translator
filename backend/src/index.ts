@@ -127,23 +127,6 @@ async function bootstrap() {
   const sttProvider = (process.env.STT_PROVIDER as 'rtzr' | 'openai' | 'openai-whisper') || 'rtzr';
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
-  console.log('='.repeat(50));
-  console.log('🎤 STT Configuration');
-  console.log(`📌 Provider: ${sttProvider.toUpperCase()}`);
-  console.log(`📝 Prompt Template: ${promptTemplate}`);
-  if (sttProvider === 'openai') {
-    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
-    console.log(`🤖 Model: ${model}`);
-    console.log(`🎚️  VAD Threshold: ${process.env.OPENAI_VAD_THRESHOLD || '0.5'}`);
-    console.log(`⏱️  VAD Silence: ${process.env.OPENAI_VAD_SILENCE || '500'}ms`);
-  } else if (sttProvider === 'openai-whisper') {
-    console.log(`🤖 Model: whisper-1`);
-    console.log(`🌐 Language: ko`);
-  } else {
-    console.log(`🌐 RTZR API: ${process.env.RTZR_API_URL || 'https://openapi.vito.ai'}`);
-  }
-  console.log('='.repeat(50));
-
   const sttManager = new STTManager(
     {
       provider: sttProvider,
@@ -180,15 +163,8 @@ async function bootstrap() {
   // Cleanup job - run every hour
   setInterval(async () => {
     try {
-      const cleanedRooms = await roomService.cleanupOldRooms(24);
-      if (cleanedRooms > 0) {
-        console.log(`[Cleanup] Closed ${cleanedRooms} old rooms`);
-      }
-
-      const { sttTexts, translations } = await transcriptService.cleanupOldTranscripts(7);
-      if (sttTexts > 0 || translations > 0) {
-        console.log(`[Cleanup] Removed ${sttTexts} STT texts and ${translations} translations`);
-      }
+      await roomService.cleanupOldRooms(24);
+      await transcriptService.cleanupOldTranscripts(7);
     } catch (error) {
       console.error('[Cleanup] Error:', error);
     }
@@ -197,12 +173,6 @@ async function bootstrap() {
   // Start server
   try {
     await fastify.listen({ port: Number(PORT), host: '0.0.0.0' });
-    console.log('='.repeat(50));
-    console.log('🚀 Real-time Translation Service');
-    console.log(`📍 Server: http://localhost:${PORT}`);
-    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🌐 Frontend: ${FRONTEND_URL}`);
-    console.log('='.repeat(50));
   } catch (error) {
     fastify.log.error(error);
     process.exit(1);
@@ -211,13 +181,11 @@ async function bootstrap() {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
   await closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
   await closeDatabase();
   process.exit(0);
 });

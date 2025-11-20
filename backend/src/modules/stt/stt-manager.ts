@@ -70,11 +70,8 @@ export class STTManager {
   ): Promise<void> {
     // Check if client already exists
     if (this.clients.has(roomId)) {
-      console.log(`[STT][${roomId}] Client already exists, skipping creation`);
       return;
     }
-
-    console.log(`[STT][${roomId}] Creating new STT client with provider: ${this.config.provider}`);
 
     // Determine which provider to use
     const provider = this.config.provider;
@@ -93,10 +90,8 @@ export class STTManager {
       let optimizedPrompt = customPrompt;
       if (template === 'custom' && customPrompt && this.config.openai.apiKey) {
         try {
-          console.log(`[STT][${roomId}] Optimizing custom prompt with GPT...`);
           const optimizedTemplate = await optimizeCustomPromptWithGPT(customPrompt, this.config.openai.apiKey);
           optimizedPrompt = optimizedTemplate.instructions;
-          console.log(`[STT][${roomId}] Custom prompt optimized successfully`);
         } catch (error) {
           console.error(`[STT][${roomId}] Failed to optimize custom prompt, using original:`, error);
         }
@@ -193,7 +188,6 @@ export class STTManager {
 
     for (const roomId of clientRoomIds) {
       if (!activeSet.has(roomId)) {
-        console.log(`[STT] Removing orphaned client for room ${roomId}`);
         this.removeClient(roomId);
       }
     }

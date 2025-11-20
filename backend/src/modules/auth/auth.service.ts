@@ -106,7 +106,6 @@ export class AuthService {
       `,
       });
 
-      console.log(`[Auth] Verification code sent to ${email}: ${code}`);
     } catch (error) {
       console.error('[Auth] Failed to send verification email:', error);
       throw new Error('Failed to send verification email. Please try again later.');
