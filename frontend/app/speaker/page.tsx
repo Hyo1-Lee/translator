@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
 import QRCode from "qrcode";
+import { AudioRecorder } from "@/lib/audio-recorder";
 import styles from "./speaker.module.css";
 
 // Constants
@@ -89,13 +90,7 @@ export default function Speaker() {
 
   // Refs
   const socketRef = useRef<any>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<any>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
+  const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const translationListRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to latest translation
@@ -487,190 +482,48 @@ export default function Speaker() {
   const startRecording = async () => {
     try {
       setStatus("마이크 요청 중...");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 24000,
-          sampleSize: 16,
-          echoCancellation: true,
-          noiseSuppression: true,    // Browser-level noise suppression
-          autoGainControl: true,     // Browser-level automatic gain control
-          // Advanced constraints for better audio quality
-          latency: 0.01,             // Low latency (10ms)
-          volume: 1.0,               // Maximum volume
-        } as any,
+
+      // Create audio recorder
+      audioRecorderRef.current = new AudioRecorder({
+        onAudioData: (base64Audio) => {
+          if (socketRef.current?.connected && roomId) {
+            socketRef.current.emit("audio-stream", { roomId, audio: base64Audio });
+          }
+        },
+        onAudioLevel: (level) => {
+          setAudioLevel(level);
+        },
+        onError: (error) => {
+          console.error("[Recording] ❌ Error:", error);
+          setStatus("마이크 오류");
+          alert("마이크 접근 권한이 필요합니다.");
+        },
       });
 
-      streamRef.current = stream;
-      console.log("[Recording] ✅ Microphone access granted");
-
-      // Start MediaRecorder for local recording
-      // Check supported mime types
-      const mimeTypes = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/ogg;codecs=opus",
-        "audio/mp4",
-      ];
-
-      let selectedMimeType = "";
-      for (const mimeType of mimeTypes) {
-        if (MediaRecorder.isTypeSupported(mimeType)) {
-          selectedMimeType = mimeType;
-          break;
-        }
-      }
-
-      if (!selectedMimeType) {
-        selectedMimeType = "audio/webm";
-      }
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: selectedMimeType,
-      });
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstart = () => {
-        recordedChunksRef.current = [];
-      };
-
-      mediaRecorder.start(100);
-      mediaRecorderRef.current = mediaRecorder;
-
-      // Create AudioContext with browser's native sample rate
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-
-      const sourceSampleRate = audioContextRef.current.sampleRate;
-      const targetSampleRate = 16000;
-      const resampleRatio = sourceSampleRate / targetSampleRate;
-
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-
-      // Direct connection without filters - Deepgram handles audio optimization
-      // Filters can distort audio and reduce STT accuracy
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 256;
-      source.connect(analyserRef.current);
-
-      const bufferSize = 2048;
-      processorRef.current = audioContextRef.current.createScriptProcessor(
-        bufferSize,
-        1,
-        1
-      );
-
-      const isProcessing = true;
-      let audioChunksSent = 0;
-
-      processorRef.current.onaudioprocess = (e: any) => {
-        if (!isProcessing || !socketRef.current?.connected || !roomId) return;
-
-        // Send all frames - no skipping for better STT accuracy
-        const inputData = e.inputBuffer.getChannelData(0);
-
-        // Downsample to 16kHz
-        const targetSampleRate = 16000;
-        const sourceSampleRate = audioContextRef.current!.sampleRate;
-        const resampleRatio = sourceSampleRate / targetSampleRate;
-        const outputLength = Math.floor(inputData.length / resampleRatio);
-        const resampledData = new Float32Array(outputLength);
-
-        // Simple downsampling (nearest neighbor)
-        for (let i = 0; i < outputLength; i++) {
-          const srcIndex = Math.floor(i * resampleRatio);
-          resampledData[i] = inputData[srcIndex];
-        }
-
-        // Calculate RMS for better noise detection
-        let sum = 0;
-        let maxSample = 0;
-        for (let i = 0; i < resampledData.length; i++) {
-          sum += resampledData[i] * resampledData[i];
-          maxSample = Math.max(maxSample, Math.abs(resampledData[i]));
-        }
-        const rms = Math.sqrt(sum / resampledData.length);
-
-        // Lower threshold to capture quieter speech
-        if (rms > 0.001) {
-          const int16Data = new Int16Array(resampledData.length);
-
-          // Reduced amplification to prevent distortion
-          for (let i = 0; i < resampledData.length; i++) {
-            const s = Math.max(-1, Math.min(1, resampledData[i]));
-            const amplified = s * 1.5;
-            const clamped = Math.max(-1, Math.min(1, amplified));
-            int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-          }
-
-          // Convert to base64 correctly
-          const uint8Array = new Uint8Array(int16Data.buffer);
-          let binary = '';
-          for (let i = 0; i < uint8Array.length; i++) {
-            binary += String.fromCharCode(uint8Array[i]);
-          }
-          const base64Audio = btoa(binary);
-
-          socketRef.current.emit("audio-stream", {
-            roomId,
-            audio: base64Audio,
-          });
-
-          audioChunksSent++;
-          // Log only first chunk
-          if (audioChunksSent === 1) {
-            console.log(`[Audio] ✅ First chunk sent: ${int16Data.length * 2} bytes, RMS: ${rms.toFixed(3)}`);
-          }
-        }
-      };
-
-      processorRef.current.isProcessing = isProcessing;
-
-      analyserRef.current.connect(processorRef.current);
-      processorRef.current.connect(audioContextRef.current.destination);
-
-      const updateAudioLevel = () => {
-        if (!analyserRef.current) return;
-
-        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-        analyserRef.current.getByteTimeDomainData(dataArray);
-
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          const normalized = (dataArray[i] - 128) / 128;
-          sum += normalized * normalized;
-        }
-        const rms = Math.sqrt(sum / dataArray.length);
-        const level = Math.min(100, Math.round(rms * 500)); // Increased from 300 to 500 for more sensitive meter
-        setAudioLevel(level);
-
-        animationRef.current = requestAnimationFrame(updateAudioLevel);
-      };
-      updateAudioLevel();
+      // Start recording
+      await audioRecorderRef.current.start();
 
       setIsRecording(true);
       setStatus("녹음 중");
       console.log("[Recording] ✅ Started");
 
-      // Notify server to create/reconnect STT client
+      // Notify server to create STT client
       if (socketRef.current && roomId) {
         socketRef.current.emit("start-recording", { roomId });
-        console.log("[Recording] 📤 Sent start-recording event to server");
+        console.log("[Recording] 📤 Server notified");
       }
     } catch (error) {
-      console.error("[Recording] ❌ Error:", error);
+      console.error("[Recording] ❌ Start failed:", error);
       setStatus("마이크 오류");
-      alert("마이크 접근 권한이 필요합니다.");
     }
   };
 
   // Stop recording
   const stopRecording = () => {
     console.log("[Recording] ⏹️ Stopping...");
+
+    // Stop audio recorder
+    audioRecorderRef.current?.stop();
 
     setIsRecording(false);
     setStatus("정지");
@@ -679,51 +532,25 @@ export default function Speaker() {
     // Notify server to close STT client
     if (socketRef.current && roomId) {
       socketRef.current.emit("stop-recording", { roomId });
-      console.log("[Recording] 📤 Sent stop-recording event to server");
+      console.log("[Recording] 📤 Server notified");
     }
-
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-
-    if (mediaRecorderRef.current?.state !== "inactive") {
-      mediaRecorderRef.current?.stop();
-    }
-    mediaRecorderRef.current = null;
-
-    if (processorRef.current) {
-      processorRef.current.isProcessing = false;
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
-
-    analyserRef.current?.disconnect();
-    analyserRef.current = null;
-
-    audioContextRef.current?.close();
-    audioContextRef.current = null;
-
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
 
     console.log("[Recording] ✅ Stopped");
   };
 
   // Download recording
   const downloadRecording = () => {
-    if (recordedChunksRef.current.length === 0) {
+    const blob = audioRecorderRef.current?.getRecordedBlob();
+
+    if (!blob) {
       alert("녹음된 내용이 없습니다.");
       return;
     }
 
-    const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `recording_${roomId}_${new Date()
-      .toISOString()
-      .replace(/:/g, "-")}.webm`;
+    a.download = `recording_${roomId}_${new Date().toISOString().replace(/:/g, "-")}.webm`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1030,7 +857,7 @@ export default function Speaker() {
             <button
               onClick={downloadRecording}
               className={styles.compactActionButton}
-              disabled={recordedChunksRef.current.length === 0}
+              disabled={!audioRecorderRef.current?.getRecordedBlob()}
               title="녹음 다운로드"
             >
               <svg
