@@ -1,9 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=Pretendard:wght@300;400;500;600;700;900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=Pretendard:wght@300;400;500;600;700;900&display=swap");
 
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-start-rgb: 30, 30, 46;
   --background-end-rgb: 45, 45, 68;
+
+  /* Gradient Variables */
+  --gradient-primary: linear-gradient(180deg, #f5f7fa 0%, #c3cfe2 100%);
+  --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  --gradient-background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  --gradient-disabled: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
 }
 
 html,
@@ -15,8 +22,13 @@ body {
 
 body {
   color: rgb(var(--foreground-rgb));
-  background: linear-gradient(135deg, rgb(var(--background-start-rgb)) 0%, rgb(var(--background-end-rgb)) 100%);
-  font-family: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: linear-gradient(
+    135deg,
+    rgb(var(--background-start-rgb)) 0%,
+    rgb(var(--background-end-rgb)) 100%
+  );
+  font-family: "Pretendard", "Noto Sans KR", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
@@ -39,20 +51,24 @@ a {
   transition: opacity 0.2s ease;
 }
 
-
 button {
   font-family: inherit;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-
-input, textarea {
+input,
+textarea {
   font-family: inherit;
 }
 
 /* Reset */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 600;
   line-height: 1.2;
 }
@@ -104,7 +120,8 @@ h1, h2, h3, h4, h5, h6 {
 /* 터치 디바이스 최적화 */
 @media (hover: none) and (pointer: coarse) {
   /* 터치 디바이스에서 버튼과 링크의 최소 터치 영역 보장 */
-  button, a {
+  button,
+  a {
     min-height: 44px;
     display: inline-flex;
     align-items: center;

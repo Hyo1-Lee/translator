@@ -1,19 +1,52 @@
 import OpenAI from 'openai';
+import { buildTranslationPrompt, EnvironmentPreset } from './presets';
 
 interface TranslationConfig {
   apiKey: string;
   model?: string;
+  provider?: 'openai' | 'groq';
+  groqApiKey?: string;
+  groqModel?: string;
+  enableSmartBatch?: boolean;
+  batchSize?: number;
 }
 
 export class TranslationService {
   private openai: OpenAI;
+  private groq?: OpenAI;
   private model: string;
+  private provider: 'openai' | 'groq';
+  private enableSmartBatch: boolean;
+  private batchSize: number;
 
   constructor(config: TranslationConfig) {
+    this.provider = config.provider || 'openai';
+    this.enableSmartBatch = config.enableSmartBatch ?? false;
+    this.batchSize = config.batchSize || 3;
+
+    // OpenAI client
     this.openai = new OpenAI({
       apiKey: config.apiKey
     });
     this.model = config.model || 'gpt-5-nano';
+
+    // Groq client (OpenAI SDK compatible)
+    if (this.provider === 'groq' && config.groqApiKey) {
+      this.groq = new OpenAI({
+        apiKey: config.groqApiKey,
+        baseURL: 'https://api.groq.com/openai/v1'
+      });
+      this.model = config.groqModel || 'llama-3.3-70b-versatile';
+      console.log(`[TranslationService] 🚀 Groq enabled with model: ${this.model}`);
+      console.log(`[TranslationService] 📦 Smart batch: ${this.enableSmartBatch ? `enabled (${this.batchSize} items)` : 'disabled'}`);
+    }
+  }
+
+  /**
+   * Get active client based on provider
+   */
+  private getClient(): OpenAI {
+    return this.provider === 'groq' && this.groq ? this.groq : this.openai;
   }
 
   // Translate text
@@ -28,8 +61,9 @@ export class TranslationService {
       }
 
       const { langName, systemPrompt } = this.getLanguageConfig(targetLanguage);
+      const client = this.getClient();
 
-      const response = await this.openai.chat.completions.create({
+      const response = await client.chat.completions.create({
         model: this.model,
         messages: [
           {
@@ -48,6 +82,109 @@ export class TranslationService {
       return translation || null;
     } catch (error) {
       console.error('[Translation] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 🚀 스마트 배치 번역 (여러 문장을 한 번에)
+   * - API 호출 횟수 대폭 감소 (3개 → 1개)
+   * - Groq의 초고속 처리로 전체 시간 단축
+   */
+  async translateBatch(
+    texts: Array<{ text: string; confidence?: number }>,
+    recentContext: string,
+    summary: string,
+    sourceLanguage: string,
+    targetLanguage: string,
+    environmentPreset: EnvironmentPreset,
+    customEnvironmentDescription?: string,
+    customGlossary?: Record<string, string>
+  ): Promise<Array<{ originalText: string; translatedText: string; confidence?: number }> | null> {
+    try {
+      if (texts.length === 0) return [];
+
+      const startTime = Date.now();
+      console.log(`[TranslationService] 📦 Batch translating ${texts.length} items with ${this.provider}...`);
+
+      // Build prompt
+      const systemPrompt = buildTranslationPrompt(
+        sourceLanguage,
+        targetLanguage,
+        environmentPreset,
+        customEnvironmentDescription,
+        customGlossary
+      );
+
+      // Format: [1] 문장1\n[2] 문장2\n[3] 문장3
+      const numberedTexts = texts.map((item, i) => `[${i + 1}] ${item.text}`).join('\n');
+
+      const userPrompt = systemPrompt
+        .replace('{summary}', summary || '(No summary yet)')
+        .replace('{recentContext}', recentContext || '(No recent context)')
+        .replace('{currentText}', `TRANSLATE EACH OF THE FOLLOWING ${texts.length} SENTENCES SEPARATELY. Keep the numbering format [1], [2], [3] etc in your response:\n\n${numberedTexts}`);
+
+      const client = this.getClient();
+
+      const response = await client.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_completion_tokens: 5000,
+        temperature: 0.3
+      });
+
+      const fullResponse = response.choices[0]?.message?.content?.trim();
+      if (!fullResponse) {
+        console.error('[TranslationService] ❌ Empty batch response');
+        return null;
+      }
+
+      const elapsed = Date.now() - startTime;
+      console.log(`[TranslationService] ⚡ Batch completed in ${elapsed}ms (${Math.round(texts.length * 1000 / elapsed)} items/sec)`);
+
+      // Parse response: [1] Translation1\n[2] Translation2\n[3] Translation3
+      const results: Array<{ originalText: string; translatedText: string; confidence?: number }> = [];
+
+      for (let i = 0; i < texts.length; i++) {
+        const num = i + 1;
+        // Try multiple patterns to extract translation
+        const patterns = [
+          new RegExp(`\\[${num}\\]\\s*([^\\[]+?)(?=\\[${num + 1}\\]|$)`, 's'),
+          new RegExp(`${num}\\.?\\s*([^\\d]+?)(?=${num + 1}\\.|$)`, 's'),
+        ];
+
+        let translation = '';
+        for (const pattern of patterns) {
+          const match = fullResponse.match(pattern);
+          if (match) {
+            translation = match[1].trim();
+            break;
+          }
+        }
+
+        // Fallback: if parsing fails, split by lines
+        if (!translation && i < texts.length) {
+          const lines = fullResponse.split('\n').filter(l => l.trim());
+          if (lines[i]) {
+            translation = lines[i].replace(/^\[\d+\]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+          }
+        }
+
+        results.push({
+          originalText: texts[i].text,
+          translatedText: translation || `[Translation failed for item ${num}]`,
+          confidence: texts[i].confidence
+        });
+      }
+
+      return results;
+    } catch (error) {
+      console.error('[TranslationService] ❌ Batch translation error:', error);
       return null;
     }
   }
@@ -84,7 +221,121 @@ export class TranslationService {
     return translations.filter(t => t !== null) as string[];
   }
 
-  // Translate with context for better accuracy
+  /**
+   * 프리셋 기반 문맥 번역 (신규)
+   * - 슬라이딩 윈도우 + 요약 기반
+   * - 프리셋 시스템 활용
+   */
+  async translateWithPreset(
+    currentText: string,
+    recentContext: string,
+    summary: string,
+    sourceLanguage: string,
+    targetLanguage: string,
+    environmentPreset: EnvironmentPreset,
+    customEnvironmentDescription?: string,
+    customGlossary?: Record<string, string>
+  ): Promise<string | null> {
+    try {
+      // 프리셋 기반 프롬프트 생성
+      const systemPrompt = buildTranslationPrompt(
+        sourceLanguage,
+        targetLanguage,
+        environmentPreset,
+        customEnvironmentDescription,
+        customGlossary
+      );
+
+      // 컨텍스트 변수 치환
+      const userPrompt = systemPrompt
+        .replace('{summary}', summary || '(No summary yet)')
+        .replace('{recentContext}', recentContext || '(No recent context)')
+        .replace('{currentText}', currentText);
+
+      const client = this.getClient();
+
+      const response = await client.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_completion_tokens: 3000
+      });
+
+      const translation = response.choices[0]?.message?.content?.trim();
+      return translation || null;
+    } catch (error) {
+      console.error('[Translation] Preset-based translation error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 스트리밍 번역 (신규)
+   * - 점진적 번역 표시
+   */
+  async translateWithStreaming(
+    currentText: string,
+    recentContext: string,
+    summary: string,
+    sourceLanguage: string,
+    targetLanguage: string,
+    environmentPreset: EnvironmentPreset,
+    customEnvironmentDescription?: string,
+    customGlossary?: Record<string, string>,
+    onChunk?: (chunk: string) => void
+  ): Promise<string | null> {
+    try {
+      const systemPrompt = buildTranslationPrompt(
+        sourceLanguage,
+        targetLanguage,
+        environmentPreset,
+        customEnvironmentDescription,
+        customGlossary
+      );
+
+      const userPrompt = systemPrompt
+        .replace('{summary}', summary || '(No summary yet)')
+        .replace('{recentContext}', recentContext || '(No recent context)')
+        .replace('{currentText}', currentText);
+
+      const client = this.getClient();
+
+      const stream = await client.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_completion_tokens: 3000,
+        stream: true
+      });
+
+      let fullTranslation = '';
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          fullTranslation += content;
+          if (onChunk) {
+            onChunk(content);
+          }
+        }
+      }
+
+      return fullTranslation.trim() || null;
+    } catch (error) {
+      console.error('[Translation] Streaming translation error:', error);
+      return null;
+    }
+  }
+
+  // Translate with context for better accuracy (기존 함수 - 하위 호환성 유지)
   async translateWithContext(
     currentText: string,
     fullContext: string,
@@ -166,7 +417,6 @@ OUTPUT REQUIREMENTS:
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
-      console.log('[Translation] Context translation completed:', translation ? 'Success' : 'Failed');
       return translation || null;
     } catch (error) {
       console.error('[Translation] Context translation error:', error);
@@ -178,7 +428,9 @@ OUTPUT REQUIREMENTS:
   // Generate conversation summary
   async generateSummary(recentText: string, previousSummary: string = ''): Promise<string | null> {
     try {
-      const response = await this.openai.chat.completions.create({
+      const client = this.getClient();
+
+      const response = await client.chat.completions.create({
         model: this.model,
         messages: [
           {
@@ -412,28 +664,53 @@ Translation guidelines:
     try {
       // Religious terminology corrections (LDS/Mormon specific)
       const religiousCorrections: Record<string, string> = {
+        // 경전
         '몰멍평': '몰몬경',
         '몰몸경': '몰몬경',
         '몰몽경': '몰몬경',
+        '교리와성약': '교리와 성약',
+
+        // 현대 선지자 (매우 중요! 자주 틀림)
+        '주작스미스': '조셉 스미스',
+        '주작 스미스': '조셉 스미스',
+        '조섭스미스': '조셉 스미스',
+        '조섭 스미스': '조셉 스미스',
+        '조셉스미스': '조셉 스미스',
+        '브리검영': '브리검 영',
+        '러셀넬슨': '러셀 엠 넬슨',
+        '러셀엠넬슨': '러셀 엠 넬슨',
+        '토마스몬슨': '토마스 에스 몬슨',
+        '제프리홀런드': '제프리 알 홀런드',
+
+        // 경전 인물
         '앨몬': '앨마',
         '엘마': '앨마',
         '에뮬레크': '앰율레크',
         '배념민': '베냐민',
+        '베념민왕': '베냐민 왕',
+        '노파이': '니파이',
+        '리하이': '리하이',
+        '힐라맨': '힐라맨',
+
+        // 교리 용어
         '크리스토': '그리스도',
         '예수크리스토': '예수 그리스도',
         '고주': '구주',
         '잡비': '자비',
         '속주': '속죄',
         '성심': '성신',
-        '성전': '성전',
+        '성령': '성신',
         '선지차': '선지자',
-        '제일회장단': '제일회장단',
-        '사도': '사도',
-        '감독': '감독',
-        '와드': '와드',
-        '스테이크': '스테이크',
         '반중': '간증',
-        '간중': '간증'
+        '간중': '간증',
+        '회개': '회개',
+        '권한': '권능',
+
+        // 조직
+        '제일회장단': '제일회장단',
+        '십이사도': '십이사도',
+        '와드': '와드',
+        '스테이크': '스테이크'
       };
 
       // Common STT error patterns
@@ -479,7 +756,9 @@ Translation guidelines:
       const basicCorrected = await this.correctSttErrors(text);
 
       // Then use LLM for more sophisticated corrections
-      const response = await this.openai.chat.completions.create({
+      const client = this.getClient();
+
+      const response = await client.chat.completions.create({
         model: this.model,
         messages: [
           {

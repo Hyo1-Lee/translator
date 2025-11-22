@@ -13,6 +13,7 @@ dotenv.config();
 import { RoomService } from './modules/room/room-service';
 import { TranscriptService } from './modules/room/transcript-service';
 import { TranslationService } from './modules/translation/translation-service';
+import { GoogleTranslateService } from './modules/translation/google-translate.service';
 import { STTManager } from './modules/stt/stt-manager';
 import { SocketHandler } from './modules/socket/socket-handler';
 
@@ -121,74 +122,57 @@ async function bootstrap() {
   // Initialize services
   const roomService = new RoomService();
   const transcriptService = new TranscriptService();
-  const translationService = new TranslationService({
-    apiKey: process.env.OPENAI_API_KEY || ''
-  });
-  const sttProvider = (process.env.STT_PROVIDER as 'rtzr' | 'openai' | 'openai-whisper') || 'rtzr';
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
-  console.log('='.repeat(50));
-  console.log('🎤 STT Configuration');
-  console.log(`📌 Provider: ${sttProvider.toUpperCase()}`);
-  console.log(`📝 Prompt Template: ${promptTemplate}`);
-  if (sttProvider === 'openai') {
-    const model = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
-    console.log(`🤖 Model: ${model}`);
-    console.log(`🎚️  VAD Threshold: ${process.env.OPENAI_VAD_THRESHOLD || '0.5'}`);
-    console.log(`⏱️  VAD Silence: ${process.env.OPENAI_VAD_SILENCE || '500'}ms`);
-  } else if (sttProvider === 'openai-whisper') {
-    console.log(`🤖 Model: whisper-1`);
-    console.log(`🌐 Language: ko`);
-  } else {
-    console.log(`🌐 RTZR API: ${process.env.RTZR_API_URL || 'https://openapi.vito.ai'}`);
-  }
-  console.log('='.repeat(50));
+  // Translation services (Groq/GPT + Google Translate)
+  const translationProvider = process.env.TRANSLATION_PROVIDER as 'openai' | 'groq' || 'openai';
+  const translationService = new TranslationService({
+    apiKey: process.env.OPENAI_API_KEY || '',
+    model: process.env.OPENAI_MODEL || 'gpt-5-nano',
+    provider: translationProvider,
+    groqApiKey: process.env.GROQ_API_KEY,
+    groqModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    enableSmartBatch: process.env.ENABLE_SMART_BATCH === 'true',
+    batchSize: parseInt(process.env.BATCH_SIZE || '3')
+  });
 
-  const sttManager = new STTManager(
-    {
-      provider: sttProvider,
-      defaultPromptTemplate: promptTemplate,
-      rtzr: {
-        clientId: process.env.RTZR_CLIENT_ID || '',
-        clientSecret: process.env.RTZR_CLIENT_SECRET || '',
-        apiUrl: process.env.RTZR_API_URL || 'https://openapi.vito.ai'
-      },
-      openai: {
-        apiKey: process.env.OPENAI_API_KEY || '',
-        model: process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17',
-        voice: (process.env.OPENAI_VOICE as any) || 'alloy',
-        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.8'),
-        maxOutputTokens: process.env.OPENAI_MAX_TOKENS === 'inf' ? 'inf' : parseInt(process.env.OPENAI_MAX_TOKENS || '4096'),
-        vadThreshold: parseFloat(process.env.OPENAI_VAD_THRESHOLD || '0.5'),
-        vadSilenceDuration: parseInt(process.env.OPENAI_VAD_SILENCE || '500'),
-        prefixPadding: parseInt(process.env.OPENAI_PREFIX_PADDING || '300'),
-        turnDetection: (process.env.OPENAI_TURN_DETECTION as any) || 'server_vad'
-      },
-      whisper: {
-        apiKey: process.env.OPENAI_API_KEY || '',
-        model: 'whisper-1',
-        language: 'ko',
-        temperature: 0
-      }
-    },
-    translationService
+  const googleTranslateService = new GoogleTranslateService(
+    process.env.GOOGLE_TRANSLATE_API_KEY || ''
   );
 
+  console.log('[Bootstrap] 🌐 Translation services initialized');
+  console.log(`[Bootstrap] - Provider: ${translationProvider.toUpperCase()}`);
+  if (translationProvider === 'groq') {
+    console.log(`[Bootstrap] - Groq Model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'} ⚡ (260 tokens/s)`);
+    console.log(`[Bootstrap] - Smart Batch: ${process.env.ENABLE_SMART_BATCH === 'true' ? `Enabled (${process.env.BATCH_SIZE || 3} items)` : 'Disabled'}`);
+  } else {
+    console.log(`[Bootstrap] - OpenAI Model: ${process.env.OPENAI_MODEL || 'gpt-5-nano'}`);
+  }
+  console.log(`[Bootstrap] - Google Translate: ${process.env.GOOGLE_TRANSLATE_API_KEY ? 'Enabled' : 'Disabled (no API key)'}`);
+
+  // Simplified STT Manager - Deepgram only
+  const sttManager = new STTManager({
+    deepgram: {
+      apiKey: process.env.DEEPGRAM_API_KEY || '',
+      model: (process.env.DEEPGRAM_MODEL as 'nova-3' | 'nova-2' | 'enhanced' | 'general') || 'nova-3',
+      tier: process.env.DEEPGRAM_TIER as 'enhanced' | 'base' | undefined,
+      version: process.env.DEEPGRAM_VERSION,
+      language: process.env.DEEPGRAM_LANGUAGE || 'ko',
+      smartFormat: process.env.DEEPGRAM_SMART_FORMAT !== 'false',
+      punctuate: process.env.DEEPGRAM_PUNCTUATE !== 'false',
+      diarize: process.env.DEEPGRAM_DIARIZE === 'true'
+    },
+    defaultPromptTemplate: promptTemplate
+  });
+
   // Initialize Socket handler
-  new SocketHandler(io, roomService, transcriptService, sttManager);
+  new SocketHandler(io, roomService, transcriptService, sttManager, translationService, googleTranslateService);
 
   // Cleanup job - run every hour
   setInterval(async () => {
     try {
-      const cleanedRooms = await roomService.cleanupOldRooms(24);
-      if (cleanedRooms > 0) {
-        console.log(`[Cleanup] Closed ${cleanedRooms} old rooms`);
-      }
-
-      const { sttTexts, translations } = await transcriptService.cleanupOldTranscripts(7);
-      if (sttTexts > 0 || translations > 0) {
-        console.log(`[Cleanup] Removed ${sttTexts} STT texts and ${translations} translations`);
-      }
+      await roomService.cleanupOldRooms(24);
+      await transcriptService.cleanupOldTranscripts(7);
     } catch (error) {
       console.error('[Cleanup] Error:', error);
     }
@@ -197,12 +181,6 @@ async function bootstrap() {
   // Start server
   try {
     await fastify.listen({ port: Number(PORT), host: '0.0.0.0' });
-    console.log('='.repeat(50));
-    console.log('🚀 Real-time Translation Service');
-    console.log(`📍 Server: http://localhost:${PORT}`);
-    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🌐 Frontend: ${FRONTEND_URL}`);
-    console.log('='.repeat(50));
   } catch (error) {
     fastify.log.error(error);
     process.exit(1);
@@ -211,13 +189,11 @@ async function bootstrap() {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
   await closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
   await closeDatabase();
   process.exit(0);
 });

@@ -84,7 +84,6 @@ export class RoomService {
       include: [RoomSettings]
     });
 
-    console.log(`[Room] Created: ${roomCode} for ${options.speakerName}`);
     return roomWithSettings;
   }
 
@@ -228,7 +227,6 @@ export class RoomService {
     if (room) {
       // Speaker disconnected - pause room
       await this.updateRoomStatus(room.roomCode, 'PAUSED');
-      console.log(`[Room] Speaker disconnected: ${room.roomCode}`);
     } else {
       // Listener disconnected
       await this.removeListener(socketId);

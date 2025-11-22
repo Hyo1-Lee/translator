@@ -94,8 +94,8 @@ export default function Home() {
                     />
                     <defs>
                       <linearGradient id="speakerGradient" x1="0" y1="0" x2="24" y2="24">
-                        <stop offset="0%" stopColor="#3b82f6"/>
-                        <stop offset="100%" stopColor="#8b5cf6"/>
+                        <stop offset="0%" stopColor="#60a5fa"/>
+                        <stop offset="100%" stopColor="#3b82f6"/>
                       </linearGradient>
                     </defs>
                   </svg>
@@ -156,7 +156,7 @@ export default function Home() {
                     />
                     <defs>
                       <linearGradient id="listenerGradient" x1="0" y1="0" x2="24" y2="24">
-                        <stop offset="0%" stopColor="#8b5cf6"/>
+                        <stop offset="0%" stopColor="#3b82f6"/>
                         <stop offset="100%" stopColor="#06b6d4"/>
                       </linearGradient>
                     </defs>

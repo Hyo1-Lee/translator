@@ -5,5 +5,6 @@ export { Room, RoomStatus } from './Room';
 export { RoomSettings } from './RoomSettings';
 export { Listener } from './Listener';
 export { SttText } from './SttText';
+export { TranslationText } from './TranslationText';
 export { Transcript } from './Transcript';
 export { SavedTranscript } from './SavedTranscript';

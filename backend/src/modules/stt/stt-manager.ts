@@ -1,44 +1,20 @@
-import { RTZRClient } from './rtzr-client';
-import { OpenAIRealtimeClient } from './openai-realtime-client';
-import { OpenAIWhisperClient } from './openai-whisper-client';
+import { DeepgramClient } from './deepgram-client';
 import { STTProvider } from './stt-provider.interface';
-import { TranslationService } from '../translation/translation-service';
-import { optimizeCustomPromptWithGPT } from './prompts/prompt-templates';
 
-type STTProviderType = 'rtzr' | 'openai' | 'openai-whisper';
-
-interface RTZRConfig {
-  clientId: string;
-  clientSecret: string;
-  apiUrl: string;
-}
-
-interface OpenAIRealtimeConfig {
+interface DeepgramConfig {
   apiKey: string;
-  model?: string;
-  voice?: string;
-  temperature?: number;
-  maxOutputTokens?: number | 'inf';
-  vadThreshold?: number;
-  vadSilenceDuration?: number;
-  prefixPadding?: number;
-  turnDetection?: 'server_vad' | 'disabled';
-}
-
-interface OpenAIWhisperConfig {
-  apiKey: string;
-  model?: string;
+  model?: 'nova-3' | 'nova-2' | 'enhanced' | 'general';
+  tier?: 'enhanced' | 'base';
+  version?: string;
   language?: string;
-  prompt?: string;
-  temperature?: number;
+  smartFormat?: boolean;
+  punctuate?: boolean;
+  diarize?: boolean;
 }
 
 interface STTConfig {
-  provider: STTProviderType;
-  rtzr?: RTZRConfig;
-  openai?: OpenAIRealtimeConfig;
-  whisper?: OpenAIWhisperConfig;
-  defaultPromptTemplate?: string; // 'church', 'medical', 'legal', 'business', 'tech', 'education', 'general'
+  deepgram: DeepgramConfig;
+  defaultPromptTemplate?: string;
 }
 
 interface TranscriptData {
@@ -49,154 +25,166 @@ interface TranscriptData {
   isFinal?: boolean;
 }
 
+/**
+ * Simplified STT Manager - Deepgram Only
+ *
+ * Removed: OpenAI, RTZR, Translation services
+ * Optimized: Direct Deepgram integration for low latency
+ */
 export class STTManager {
   private clients: Map<string, STTProvider> = new Map();
   private config: STTConfig;
-  private translationService: TranslationService;
 
-  constructor(config: STTConfig, translationService: TranslationService) {
+  constructor(config: STTConfig) {
     this.config = config;
-    this.translationService = translationService;
+    console.log(`[STT Manager] 🚀 Initialized with Deepgram ${config.deepgram.model || 'nova-3'}`);
   }
 
-  // Create STT client for a room
+  /**
+   * Create STT client for a room (Deepgram only)
+   */
   async createClient(
     roomId: string,
     onTranscript: (data: TranscriptData) => void,
-    _onTranslation?: (data: any) => void,
+    _onTranslation?: (data: any) => void, // Kept for API compatibility, unused
     promptTemplate?: string,
-    customPrompt?: string,
-    _targetLanguages?: string[]
+    _customPrompt?: string, // Unused - Deepgram uses keywords
+    _targetLanguages?: string[] // Unused
   ): Promise<void> {
     // Check if client already exists
     if (this.clients.has(roomId)) {
-      console.log(`[STT][${roomId}] Client already exists, skipping creation`);
+      console.log(`[STT Manager][${roomId}] ♻️  Client already exists, reusing`);
       return;
     }
 
-    console.log(`[STT][${roomId}] Creating new STT client with provider: ${this.config.provider}`);
+    console.log(`[STT Manager][${roomId}] 🔨 Creating Deepgram client...`);
 
-    // Determine which provider to use
-    const provider = this.config.provider;
+    const client = new DeepgramClient(roomId, this.config.deepgram);
 
-    // Create appropriate client based on provider
-    let client: STTProvider;
-
-    if (provider === 'openai') {
-      if (!this.config.openai) {
-        throw new Error('OpenAI configuration is missing');
-      }
-
-      const template = promptTemplate || this.config.defaultPromptTemplate || 'general';
-
-      // If custom prompt is provided and template is 'custom', optimize it with GPT
-      let optimizedPrompt = customPrompt;
-      if (template === 'custom' && customPrompt && this.config.openai.apiKey) {
-        try {
-          console.log(`[STT][${roomId}] Optimizing custom prompt with GPT...`);
-          const optimizedTemplate = await optimizeCustomPromptWithGPT(customPrompt, this.config.openai.apiKey);
-          optimizedPrompt = optimizedTemplate.instructions;
-          console.log(`[STT][${roomId}] Custom prompt optimized successfully`);
-        } catch (error) {
-          console.error(`[STT][${roomId}] Failed to optimize custom prompt, using original:`, error);
-        }
-      }
-
-      client = new OpenAIRealtimeClient(roomId, this.config.openai, template, optimizedPrompt);
-    } else if (provider === 'openai-whisper') {
-      if (!this.config.whisper) {
-        throw new Error('OpenAI Whisper configuration is missing');
-      }
-
-      client = new OpenAIWhisperClient(roomId, this.config.whisper);
-    } else {
-      if (!this.config.rtzr) {
-        throw new Error('RTZR configuration is missing');
-      }
-
-      client = new RTZRClient(roomId, this.config.rtzr);
-    }
-
-    // Handle transcripts - ULTRA SIMPLE REAL-TIME
-    client.on('transcript', async (result: any) => {
-      // Just emit the text directly - no sentence splitting!
-      onTranscript({
+    // Handle transcripts - ULTRA FAST PATH
+    client.on('transcript', (result: any) => {
+      const transcriptData = {
         roomId,
         text: result.text || '',
         timestamp: new Date(),
         confidence: result.confidence,
         isFinal: result.final
-      });
+      };
+
+      // Log transcripts for debugging
+      if (transcriptData.isFinal) {
+        console.log(`[STT Manager][${roomId}] ✅ FINAL: "${transcriptData.text}" (confidence: ${(transcriptData.confidence * 100).toFixed(1)}%)`);
+      } else {
+        console.log(`[STT Manager][${roomId}] ⏳ INTERIM: "${transcriptData.text}"`);
+      }
+
+      onTranscript(transcriptData);
     });
 
     // Handle errors
     client.on('error', (error) => {
-      console.error(`[STT][${roomId}] Error:`, error);
+      console.error(`[STT Manager][${roomId}] ❌ Error:`, error);
     });
 
-    // Connect to service
-    await client.connect();
+    // Handle disconnection
+    client.on('disconnected', () => {
+      console.log(`[STT Manager][${roomId}] 🔴 Disconnected`);
+    });
 
-    this.clients.set(roomId, client);
+    // Connect to Deepgram
+    try {
+      await client.connect();
+      this.clients.set(roomId, client);
+      console.log(`[STT Manager][${roomId}] ✅ Client created and connected`);
+    } catch (error) {
+      console.error(`[STT Manager][${roomId}] ❌ Failed to create client:`, error);
+      throw error;
+    }
   }
 
-  // Send audio to STT - FAST PATH
+  /**
+   * Send audio to STT - OPTIMIZED FAST PATH
+   */
+  private sendCount: Map<string, number> = new Map();
+
   sendAudio(roomId: string, audioData: Buffer): void {
     const client = this.clients.get(roomId);
+
     if (!client) {
-      console.warn(`[STT][${roomId}] ⚠️  No client found for room`);
+      const count = this.sendCount.get(roomId) || 0;
+      if (count === 0) {
+        console.error(`[STT Manager][${roomId}] ❌ No client found for room`);
+      }
+      this.sendCount.set(roomId, count + 1);
       return;
     }
 
     if (!client.isActive()) {
-      console.warn(`[STT][${roomId}] ⚠️  Client exists but is not active`);
+      const count = this.sendCount.get(roomId) || 0;
+      if (count === 0) {
+        console.error(`[STT Manager][${roomId}] ❌ Client is not active`);
+      }
+      this.sendCount.set(roomId, count + 1);
       return;
     }
 
+    // Direct send - no buffering, no preprocessing
     client.sendAudio(audioData);
   }
 
-  // Remove client
+  /**
+   * Remove client
+   */
   removeClient(roomId: string): void {
     const client = this.clients.get(roomId);
     if (client) {
+      console.log(`[STT Manager][${roomId}] 🧹 Removing client...`);
       client.disconnect();
       this.clients.delete(roomId);
     }
   }
 
-  // Close client (alias for removeClient)
+  /**
+   * Close client (alias for removeClient)
+   */
   closeClient(roomId: string): void {
     this.removeClient(roomId);
   }
 
-  // Get active client count
+  /**
+   * Get active client count
+   */
   getActiveClientCount(): number {
     return this.clients.size;
   }
 
-  // Check if room has active client
+  /**
+   * Check if room has active client
+   */
   hasActiveClient(roomId: string): boolean {
     const client = this.clients.get(roomId);
     return client ? client.isActive() : false;
   }
 
-  // Get all active room IDs
+  /**
+   * Get all active room IDs
+   */
   getActiveRoomIds(): string[] {
     return Array.from(this.clients.keys());
   }
 
-  // Clean up orphaned clients (clients for rooms that no longer exist)
+  /**
+   * Clean up orphaned clients
+   */
   cleanupOrphanedClients(activeRoomCodes: string[]): void {
     const activeSet = new Set(activeRoomCodes);
     const clientRoomIds = Array.from(this.clients.keys());
 
     for (const roomId of clientRoomIds) {
       if (!activeSet.has(roomId)) {
-        console.log(`[STT] Removing orphaned client for room ${roomId}`);
+        console.log(`[STT Manager][${roomId}] 🧹 Cleaning up orphaned client`);
         this.removeClient(roomId);
       }
     }
   }
-
 }
