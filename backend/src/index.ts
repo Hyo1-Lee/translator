@@ -127,7 +127,9 @@ async function bootstrap() {
   const sttManager = new STTManager({
     deepgram: {
       apiKey: process.env.DEEPGRAM_API_KEY || '',
-      model: (process.env.DEEPGRAM_MODEL as 'nova-3' | 'enhanced') || 'nova-3',
+      model: (process.env.DEEPGRAM_MODEL as 'nova-3' | 'nova-2' | 'enhanced' | 'general') || 'nova-3',
+      tier: process.env.DEEPGRAM_TIER as 'enhanced' | 'base' | undefined,
+      version: process.env.DEEPGRAM_VERSION,
       language: process.env.DEEPGRAM_LANGUAGE || 'ko',
       smartFormat: process.env.DEEPGRAM_SMART_FORMAT !== 'false',
       punctuate: process.env.DEEPGRAM_PUNCTUATE !== 'false',

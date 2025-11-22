@@ -433,10 +433,8 @@ export class SocketHandler {
   // Send transcript history
   private async sendTranscriptHistory(socket: Socket, roomId: string): Promise<void> {
     try {
-      // Get recent STT transcripts
       const transcripts = await this.transcriptService.getRecentSttTexts(roomId, 50);
 
-      // Send transcripts (oldest first)
       transcripts.reverse().forEach((transcript: any) => {
         socket.emit('stt-text', {
           text: transcript.text,

@@ -6,7 +6,9 @@ import { STTProvider } from './stt-provider.interface';
  */
 interface DeepgramConfig {
   apiKey: string;
-  model?: 'nova-3' | 'enhanced';
+  model?: 'nova-3' | 'nova-2' | 'enhanced' | 'general';
+  tier?: 'enhanced' | 'base';
+  version?: string;
   language?: string;
   smartFormat?: boolean;
   punctuate?: boolean;
@@ -54,17 +56,41 @@ export class DeepgramClient extends STTProvider {
       this.client = createClient(this.config.apiKey);
       console.log(`[Deepgram][${this.roomId}] ✅ Client created`);
 
-      // Connection options - Nova 모델 권장 설정
-      const options = {
+      // Connection options - 한국어 최적화 설정
+      const options: any = {
         model: this.config.model,
         language: this.config.language,
-        smart_format: this.config.smartFormat,
-        punctuate: this.config.punctuate,
+
+        // 포맷팅 설정 - 띄어쓰기 및 구두점
+        smart_format: true,
+        punctuate: true,
+
+        // 실시간 결과
         interim_results: this.config.interimResults,
+
+        // 발화 끝점 감지 - 긴 문장 지원
+        endpointing: 1000,           // 발화 끝 감지 시간 (ms) - 500ms로 증가
+        utterance_end_ms: 3000,     // 발화 종료 판단 시간 (ms) - 2초로 증가 (긴 문장 지원)
+
+        // VAD (Voice Activity Detection)
+        vad_events: true,           // 음성 활동 감지 이벤트
+
+        // 한국어 특화 설정
+        filler_words: false,        // 필러 단어 제거 (어, 음 등)
+
+        // 오디오 포맷
         encoding: 'linear16',
         sample_rate: 16000,
         channels: 1,
       };
+
+      // Enhanced 모델을 위한 tier/version 추가
+      if (this.config.tier) {
+        options.tier = this.config.tier;
+      }
+      if (this.config.version) {
+        options.version = this.config.version;
+      }
 
       console.log(`[Deepgram][${this.roomId}] 📋 Connection options:`, JSON.stringify(options, null, 2));
 

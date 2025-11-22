@@ -3,7 +3,9 @@ import { STTProvider } from './stt-provider.interface';
 
 interface DeepgramConfig {
   apiKey: string;
-  model?: 'nova-3' | 'enhanced';
+  model?: 'nova-3' | 'nova-2' | 'enhanced' | 'general';
+  tier?: 'enhanced' | 'base';
+  version?: string;
   language?: string;
   smartFormat?: boolean;
   punctuate?: boolean;

@@ -5,7 +5,6 @@ import {
   DataType,
   PrimaryKey,
   Default,
-  CreatedAt,
   ForeignKey,
   BelongsTo,
 } from 'sequelize-typescript';
@@ -32,7 +31,7 @@ export class SttText extends Model {
   @Column(DataType.FLOAT)
   declare confidence: number | null;
 
-  @CreatedAt
+  @Default(DataType.NOW)
   @Column(DataType.DATE)
   declare timestamp: Date;
 
