@@ -412,8 +412,13 @@ export default function Speaker() {
       setListenerCount(data.count);
     });
 
-    // Listen for transcripts - ULTRA SIMPLE
+    // Listen for transcripts
     socketRef.current.on("stt-text", (data: any) => {
+      // Log final transcripts only
+      if (data.isFinal !== false) {
+        console.log(`[Frontend] ✅ Received: "${data.text}"`);
+      }
+
       setTranscripts((prev) => {
         const newTranscript = {
           type: "stt",
@@ -481,18 +486,7 @@ export default function Speaker() {
   // Start recording
   const startRecording = async () => {
     try {
-      console.log("[Recording] 🎤 Starting recording...");
-      console.log("[Recording] RoomId:", roomId);
-      console.log(
-        "[Recording] Socket connected:",
-        socketRef.current?.connected
-      );
-      console.log("[Recording] Socket ID:", socketRef.current?.id);
-
       setStatus("마이크 요청 중...");
-
-      // Request microphone with professional audio settings
-      console.log("[Recording] Requesting microphone access with professional audio settings...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -507,21 +501,8 @@ export default function Speaker() {
         } as any,
       });
 
-      console.log("[Recording] ✅ Microphone access granted!");
-      console.log("[Recording] Stream info:", {
-        active: stream.active,
-        tracks: stream.getTracks().length,
-        audioTracks: stream.getAudioTracks().map((t) => ({
-          kind: t.kind,
-          label: t.label,
-          enabled: t.enabled,
-          muted: t.muted,
-          readyState: t.readyState,
-          settings: t.getSettings(),
-        })),
-      });
-
       streamRef.current = stream;
+      console.log("[Recording] ✅ Microphone access granted");
 
       // Start MediaRecorder for local recording
       // Check supported mime types
@@ -536,14 +517,12 @@ export default function Speaker() {
       for (const mimeType of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mimeType)) {
           selectedMimeType = mimeType;
-          console.log(`[Recording] Using mime type: ${mimeType}`);
           break;
         }
       }
 
       if (!selectedMimeType) {
-        console.error("[Recording] No supported mime type found!");
-        selectedMimeType = "audio/webm"; // Fallback
+        selectedMimeType = "audio/webm";
       }
 
       const mediaRecorder = new MediaRecorder(stream, {
@@ -553,149 +532,45 @@ export default function Speaker() {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           recordedChunksRef.current.push(event.data);
-          console.log(
-            `[Recording] Chunk received: ${event.data.size} bytes (total chunks: ${recordedChunksRef.current.length})`
-          );
         }
       };
 
-      mediaRecorder.onerror = (event) => {
-        console.error("[Recording] MediaRecorder error:", event);
-      };
-
       mediaRecorder.onstart = () => {
-        console.log("[Recording] ✅ MediaRecorder started successfully");
-        recordedChunksRef.current = []; // Clear previous recordings
+        recordedChunksRef.current = [];
       };
 
-      mediaRecorder.onstop = () => {
-        console.log(
-          `[Recording] ✅ MediaRecorder stopped (total chunks: ${recordedChunksRef.current.length})`
-        );
-
-        // Calculate total recording duration
-        const totalSize = recordedChunksRef.current.reduce(
-          (sum, chunk) => sum + chunk.size,
-          0
-        );
-        console.log(`[Recording] Total size: ${totalSize} bytes`);
-      };
-
-      try {
-        // Use timeslice to continuously record chunks
-        mediaRecorder.start(100); // Record in 100ms chunks for smoother recording
-        mediaRecorderRef.current = mediaRecorder;
-        console.log(`[Recording] MediaRecorder state: ${mediaRecorder.state}`);
-      } catch (error) {
-        console.error("[Recording] Failed to start MediaRecorder:", error);
-      }
+      mediaRecorder.start(100);
+      mediaRecorderRef.current = mediaRecorder;
 
       // Create AudioContext with browser's native sample rate
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
 
       const sourceSampleRate = audioContextRef.current.sampleRate;
-      const targetSampleRate = 16000;  // Target: 16kHz for Deepgram
+      const targetSampleRate = 16000;
       const resampleRatio = sourceSampleRate / targetSampleRate;
 
-
-      console.log(`[Audio] 🔧 AudioContext created`);
-      console.log(`[Audio] Source sample rate: ${sourceSampleRate} Hz`);
-      console.log(`[Audio] Target sample rate: ${targetSampleRate} Hz (resample ratio: ${resampleRatio.toFixed(2)})`);
-
-      console.log(`[Audio] State: ${audioContextRef.current.state}`);
-
       const source = audioContextRef.current.createMediaStreamSource(stream);
-      console.log(`[Audio] ✅ Media stream source created`);
 
-      // Create professional audio filter chain
-      // 1. High-pass filter to remove low-frequency noise (rumble, wind)
-      const highpassFilter = audioContextRef.current.createBiquadFilter();
-      highpassFilter.type = "highpass";
-      highpassFilter.frequency.value = 80; // Remove frequencies below 80Hz
-      highpassFilter.Q.value = 0.707; // Butterworth response
-
-      // 2. Low-pass filter to remove high-frequency noise (hiss)
-      const lowpassFilter = audioContextRef.current.createBiquadFilter();
-      lowpassFilter.type = "lowpass";
-      lowpassFilter.frequency.value = 8000; // Remove frequencies above 8kHz
-      lowpassFilter.Q.value = 0.707;
-
-      // 3. Peaking filter to boost speech frequencies (2-4kHz)
-      const speechBoost = audioContextRef.current.createBiquadFilter();
-      speechBoost.type = "peaking";
-      speechBoost.frequency.value = 3000; // Center frequency for speech clarity
-      speechBoost.Q.value = 1.0;
-      speechBoost.gain.value = 3; // +3dB boost
-
-      // Connect the filter chain
-      source.connect(highpassFilter);
-      highpassFilter.connect(lowpassFilter);
-      lowpassFilter.connect(speechBoost);
-      console.log(`[Audio] ✅ Professional filter chain created: Highpass(80Hz) -> Lowpass(8kHz) -> Speech Boost(3kHz, +3dB)`);
-
+      // Direct connection without filters - Deepgram handles audio optimization
+      // Filters can distort audio and reduce STT accuracy
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
-      speechBoost.connect(analyserRef.current);
-      console.log(`[Audio] ✅ Analyser connected`);
+      source.connect(analyserRef.current);
 
-      // Optimized buffer size - 2048 for lower latency
       const bufferSize = 2048;
       processorRef.current = audioContextRef.current.createScriptProcessor(
         bufferSize,
         1,
         1
       );
-      console.log(
-        `[Audio] ✅ ScriptProcessor created (buffer size: ${bufferSize})`
-      );
 
       const isProcessing = true;
-      let frameCount = 0;
-      const SEND_EVERY_N_FRAMES = 2; // Send every 2 frames to reduce CPU load
       let audioChunksSent = 0;
-      let audioProcessCallCount = 0;
 
       processorRef.current.onaudioprocess = (e: any) => {
-        audioProcessCallCount++;
+        if (!isProcessing || !socketRef.current?.connected || !roomId) return;
 
-        // Log first few calls to confirm the processor is running
-        if (audioProcessCallCount <= 5) {
-          console.log(
-            `[Audio] 📢 onaudioprocess called #${audioProcessCallCount}`
-          );
-        }
-
-        // Comprehensive validation with detailed logging
-        if (!isProcessing) {
-          if (audioChunksSent === 0) {
-            console.warn("[Audio] ❌ Cannot send audio: not processing");
-          }
-          return;
-        }
-
-        if (!socketRef.current || !socketRef.current.connected) {
-          if (audioChunksSent === 0) {
-            console.error("[Audio] ❌ Cannot send audio: socket not connected");
-            console.log("[Audio] Socket state:", {
-              exists: !!socketRef.current,
-              connected: socketRef.current?.connected,
-              disconnected: socketRef.current?.disconnected,
-            });
-          }
-          return;
-        }
-
-        if (!roomId) {
-          if (audioChunksSent === 0) {
-            console.error("[Audio] ❌ Cannot send audio: roomId is missing");
-          }
-          return;
-        }
-
-        // Skip frames to reduce CPU usage
-        frameCount++;
-        if (frameCount % SEND_EVERY_N_FRAMES !== 0) return;
-
+        // Send all frames - no skipping for better STT accuracy
         const inputData = e.inputBuffer.getChannelData(0);
 
         // Downsample to 16kHz
@@ -720,27 +595,25 @@ export default function Speaker() {
         }
         const rms = Math.sqrt(sum / resampledData.length);
 
-        // Detailed logging for first few chunks
-        if (audioChunksSent < 10) {
-          console.log(`[Audio] 🔊 Frame #${frameCount}: Original=${inputData.length}, Resampled=${resampledData.length}, RMS=${rms.toFixed(6)}, Max=${maxSample.toFixed(6)}`);
-        }
-
-        // Optimized threshold - backend preprocessing handles most enhancement
-        if (rms > 0.002) {  // Balanced threshold - filters out very quiet noise
+        // Lower threshold to capture quieter speech
+        if (rms > 0.001) {
           const int16Data = new Int16Array(resampledData.length);
 
-          // Moderate amplification
+          // Reduced amplification to prevent distortion
           for (let i = 0; i < resampledData.length; i++) {
             const s = Math.max(-1, Math.min(1, resampledData[i]));
-            const amplified = s * 2.5;  // Moderate amplification
+            const amplified = s * 1.5;
             const clamped = Math.max(-1, Math.min(1, amplified));
             int16Data[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
           }
 
-          // Convert to base64 efficiently
-          const base64Audio = btoa(
-            String.fromCharCode(...new Uint8Array(int16Data.buffer))
-          );
+          // Convert to base64 correctly
+          const uint8Array = new Uint8Array(int16Data.buffer);
+          let binary = '';
+          for (let i = 0; i < uint8Array.length; i++) {
+            binary += String.fromCharCode(uint8Array[i]);
+          }
+          const base64Audio = btoa(binary);
 
           socketRef.current.emit("audio-stream", {
             roomId,
@@ -748,17 +621,10 @@ export default function Speaker() {
           });
 
           audioChunksSent++;
-          if (audioChunksSent <= 5 || audioChunksSent % 50 === 0) {
-            console.log(
-              `[Audio] ✅ Sent chunk #${audioChunksSent} to server (roomId: ${roomId}, size: ${
-                int16Data.length * 2
-              } bytes, RMS: ${rms.toFixed(6)})`
-            );
+          // Log only first chunk
+          if (audioChunksSent === 1) {
+            console.log(`[Audio] ✅ First chunk sent: ${int16Data.length * 2} bytes, RMS: ${rms.toFixed(3)}`);
           }
-        } else if (audioChunksSent < 10) {
-          console.log(
-            `[Audio] 🔇 Audio too quiet, skipping (RMS=${rms.toFixed(6)})`
-          );
         }
       };
 
@@ -766,9 +632,6 @@ export default function Speaker() {
 
       analyserRef.current.connect(processorRef.current);
       processorRef.current.connect(audioContextRef.current.destination);
-      console.log(
-        `[Audio] ✅ Audio chain connected: Source -> Analyser -> Processor -> Destination`
-      );
 
       const updateAudioLevel = () => {
         if (!analyserRef.current) return;
@@ -791,21 +654,15 @@ export default function Speaker() {
 
       setIsRecording(true);
       setStatus("녹음 중");
+      console.log("[Recording] ✅ Started");
 
-      console.log(`[Recording] ✅ Recording started successfully!`);
-      console.log(`[Recording] Summary:`, {
-        roomId,
-        socketConnected: socketRef.current?.connected,
-        streamActive: stream.active,
-        audioContextState: audioContextRef.current.state,
-        mediaRecorderState: mediaRecorderRef.current?.state,
-      });
-    } catch (error) {
-      console.error("[Recording] ❌ Recording error:", error);
-      if (error instanceof Error) {
-        console.error("[Recording] Error details:", error.message);
-        console.error("[Recording] Stack trace:", error.stack);
+      // Notify server to create/reconnect STT client
+      if (socketRef.current && roomId) {
+        socketRef.current.emit("start-recording", { roomId });
+        console.log("[Recording] 📤 Sent start-recording event to server");
       }
+    } catch (error) {
+      console.error("[Recording] ❌ Error:", error);
       setStatus("마이크 오류");
       alert("마이크 접근 권한이 필요합니다.");
     }
@@ -813,78 +670,44 @@ export default function Speaker() {
 
   // Stop recording
   const stopRecording = () => {
-    console.log("[Recording] Stopping recording...");
+    console.log("[Recording] ⏹️ Stopping...");
+
     setIsRecording(false);
     setStatus("정지");
     setAudioLevel(0);
+
+    // Notify server to close STT client
+    if (socketRef.current && roomId) {
+      socketRef.current.emit("stop-recording", { roomId });
+      console.log("[Recording] 📤 Sent stop-recording event to server");
+    }
 
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
 
-    // Stop MediaRecorder with proper error handling
-    if (mediaRecorderRef.current) {
-      try {
-        if (mediaRecorderRef.current.state !== "inactive") {
-          console.log(
-            `[Recording] Stopping MediaRecorder (state: ${mediaRecorderRef.current.state})`
-          );
-          mediaRecorderRef.current.stop();
-        }
-      } catch (error) {
-        console.error("[Recording] Error stopping MediaRecorder:", error);
-      }
-      mediaRecorderRef.current = null;
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
     }
+    mediaRecorderRef.current = null;
 
     if (processorRef.current) {
-      try {
-        if (processorRef.current.isProcessing !== undefined) {
-          processorRef.current.isProcessing = false;
-        }
-        processorRef.current.disconnect();
-      } catch (error) {
-        console.error("[Recording] Error disconnecting processor:", error);
-      }
+      processorRef.current.isProcessing = false;
+      processorRef.current.disconnect();
       processorRef.current = null;
     }
 
-    if (analyserRef.current) {
-      try {
-        analyserRef.current.disconnect();
-      } catch (error) {
-        console.error("[Recording] Error disconnecting analyser:", error);
-      }
-      analyserRef.current = null;
-    }
+    analyserRef.current?.disconnect();
+    analyserRef.current = null;
 
-    if (audioContextRef.current) {
-      try {
-        audioContextRef.current.close();
-      } catch (error) {
-        console.error("[Recording] Error closing audio context:", error);
-      }
-      audioContextRef.current = null;
-    }
+    audioContextRef.current?.close();
+    audioContextRef.current = null;
 
-    if (streamRef.current) {
-      try {
-        streamRef.current.getTracks().forEach((track) => {
-          console.log(
-            `[Recording] Stopping track: ${track.kind} (${track.label})`
-          );
-          track.stop();
-        });
-      } catch (error) {
-        console.error("[Recording] Error stopping tracks:", error);
-      }
-      streamRef.current = null;
-    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
 
-    console.log(
-      `[Recording] ✅ Recording stopped. Total chunks recorded: ${recordedChunksRef.current.length}`
-    );
+    console.log("[Recording] ✅ Stopped");
   };
 
   // Download recording
@@ -893,17 +716,6 @@ export default function Speaker() {
       alert("녹음된 내용이 없습니다.");
       return;
     }
-
-    console.log(
-      `[Recording] Creating download blob from ${recordedChunksRef.current.length} chunks`
-    );
-
-    // Calculate total size
-    const totalSize = recordedChunksRef.current.reduce(
-      (sum, chunk) => sum + chunk.size,
-      0
-    );
-    console.log(`[Recording] Total recording size: ${totalSize} bytes`);
 
     const blob = new Blob(recordedChunksRef.current, { type: "audio/webm" });
     const url = URL.createObjectURL(blob);
@@ -917,7 +729,6 @@ export default function Speaker() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    console.log(`[Recording] ✅ Download initiated`);
     if (addToast) {
       addToast("녹음 파일이 다운로드되었습니다", "success");
     }

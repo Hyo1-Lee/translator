@@ -57,18 +57,26 @@ export class STTManager {
 
     console.log(`[STT Manager][${roomId}] 🔨 Creating Deepgram client...`);
 
-    const template = promptTemplate || this.config.defaultPromptTemplate || 'general';
-    const client = new DeepgramClient(roomId, this.config.deepgram, template);
+    const client = new DeepgramClient(roomId, this.config.deepgram);
 
     // Handle transcripts - ULTRA FAST PATH
     client.on('transcript', (result: any) => {
-      onTranscript({
+      const transcriptData = {
         roomId,
         text: result.text || '',
         timestamp: new Date(),
         confidence: result.confidence,
         isFinal: result.final
-      });
+      };
+
+      // Log transcripts for debugging
+      if (transcriptData.isFinal) {
+        console.log(`[STT Manager][${roomId}] ✅ FINAL: "${transcriptData.text}" (confidence: ${(transcriptData.confidence * 100).toFixed(1)}%)`);
+      } else {
+        console.log(`[STT Manager][${roomId}] ⏳ INTERIM: "${transcriptData.text}"`);
+      }
+
+      onTranscript(transcriptData);
     });
 
     // Handle errors
@@ -95,16 +103,26 @@ export class STTManager {
   /**
    * Send audio to STT - OPTIMIZED FAST PATH
    */
+  private sendCount: Map<string, number> = new Map();
+
   sendAudio(roomId: string, audioData: Buffer): void {
     const client = this.clients.get(roomId);
 
     if (!client) {
-      // Silent fail - reduce log spam
+      const count = this.sendCount.get(roomId) || 0;
+      if (count === 0) {
+        console.error(`[STT Manager][${roomId}] ❌ No client found for room`);
+      }
+      this.sendCount.set(roomId, count + 1);
       return;
     }
 
     if (!client.isActive()) {
-      // Silent fail - reduce log spam
+      const count = this.sendCount.get(roomId) || 0;
+      if (count === 0) {
+        console.error(`[STT Manager][${roomId}] ❌ Client is not active`);
+      }
+      this.sendCount.set(roomId, count + 1);
       return;
     }
 

@@ -31,7 +31,8 @@
       "WebFetch(domain:deepgram.com)",
       "WebFetch(domain:developers.deepgram.com)",
       "WebFetch(domain:github.com)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(cat:*)"
     ],
     "deny": []
   }

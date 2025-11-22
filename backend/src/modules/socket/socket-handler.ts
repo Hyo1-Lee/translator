@@ -54,6 +54,16 @@ export class SocketHandler {
         await this.handleAudioBlob(socket, data);
       });
 
+      // Start recording - create/reconnect STT client
+      socket.on('start-recording', async (data: { roomId: string }) => {
+        await this.handleStartRecording(socket, data);
+      });
+
+      // Stop recording - close STT client to prevent timeout
+      socket.on('stop-recording', async (data: { roomId: string }) => {
+        await this.handleStopRecording(socket, data);
+      });
+
       // Request transcript history
       socket.on('request-history', async (data) => {
         await this.sendTranscriptHistory(socket, data.roomId);
@@ -86,10 +96,6 @@ export class SocketHandler {
       } = data;
 
       let room;
-
-      // Log active STT clients for debugging
-      const activeClients = this.sttManager.getActiveRoomIds();
-      console.log(`[Room] 🔍 Active STT clients: [${activeClients.join(', ')}]`);
 
       // Check if speaker wants to rejoin existing room
       if (existingRoomCode) {
@@ -167,7 +173,6 @@ export class SocketHandler {
           );
 
           console.log(`[Room][${room.roomCode}] ✅ STT client created and active`);
-          console.log(`[Room] 📊 Active clients: [${this.sttManager.getActiveRoomIds().join(', ')}]`);
         } catch (error) {
           console.error(`[Room][${room.roomCode}] ❌ Failed to create STT client:`, error);
           socket.emit('error', { message: 'Failed to initialize STT service' });
@@ -338,14 +343,14 @@ export class SocketHandler {
       const count = (this.audioChunksReceived.get(roomId) || 0) + 1;
       this.audioChunksReceived.set(roomId, count);
 
-      if (count === 1 || count % 50 === 0) {
-        console.log(`[Audio][${roomId}] ✅ Blob chunk #${count} (${audio.length} bytes)`);
+      if (count === 1) {
+        console.log(`[Audio][${roomId}] ✅ First blob chunk (${audio.length} bytes)`);
       }
 
       // Check STT client
       if (!this.sttManager.hasActiveClient(roomId)) {
         if (count === 1) {
-          console.error(`[Audio][${roomId}] ❌ No STT client! Active: [${this.sttManager.getActiveRoomIds().join(', ')}]`);
+          console.error(`[Audio][${roomId}] ❌ No STT client`);
         }
         return;
       }
@@ -393,17 +398,25 @@ export class SocketHandler {
         return;
       }
 
-      // Log audio reception
+      // Log first chunk with detailed info
       const count = (this.audioChunksReceived.get(roomId) || 0) + 1;
       this.audioChunksReceived.set(roomId, count);
-      if (count === 1 || count % 100 === 0) {
-        console.log(`[Audio][${roomId}] ✅ Received chunk #${count} (${audioBuffer.length} bytes)`);
+
+      if (count === 1) {
+        console.log(`[Audio][${roomId}] ✅ First chunk received:`);
+        console.log(`  - Buffer size: ${audioBuffer.length} bytes`);
+        console.log(`  - Base64 size: ${audio.length} chars`);
+        console.log(`  - Expected format: 16-bit PCM, 16kHz mono`);
+        console.log(`  - Sample count: ~${audioBuffer.length / 2} samples`);
+        console.log(`  - Duration: ~${(audioBuffer.length / 2 / 16000).toFixed(3)}s`);
+      } else if (count === 10) {
+        console.log(`[Audio][${roomId}] ✅ 10 chunks received and processing`);
       }
 
       // Check if STT client exists
       if (!this.sttManager.hasActiveClient(roomId)) {
         if (count === 1) {
-          console.error(`[Audio][${roomId}] ❌ No active STT client found! Active clients: [${this.sttManager.getActiveRoomIds().join(', ')}]`);
+          console.error(`[Audio][${roomId}] ❌ No active STT client - audio will be dropped`);
         }
         return;
       }
@@ -413,10 +426,7 @@ export class SocketHandler {
 
     } catch (error) {
       console.error(`[Audio] ❌ Stream error:`, error);
-      if (error instanceof Error) {
-        console.error(`[Audio] Error details: ${error.message}`);
-        console.error(`[Audio] Stack trace:`, error.stack);
-      }
+      console.error(`[Audio] ❌ Stack:`, error instanceof Error ? error.stack : 'N/A');
     }
   }
 
@@ -498,6 +508,104 @@ export class SocketHandler {
     } catch (error) {
       console.error('[Settings] Update error:', error);
       socket.emit('error', { message: 'Failed to update settings' });
+    }
+  }
+
+  // Handle start recording
+  private async handleStartRecording(socket: Socket, data: { roomId: string }): Promise<void> {
+    try {
+      const { roomId } = data;
+
+      if (!roomId) {
+        console.error('[Recording] ❌ No roomId provided');
+        return;
+      }
+
+      // Verify room and speaker
+      const room = await this.roomService.getRoom(roomId);
+      if (!room) {
+        console.warn(`[Recording][${roomId}] ❌ Room not found`);
+        return;
+      }
+
+      if (room.speakerId !== socket.id) {
+        console.warn(`[Recording][${roomId}] ❌ Unauthorized (not speaker)`);
+        return;
+      }
+
+      // Check if STT client already exists and is active
+      if (this.sttManager.hasActiveClient(roomId)) {
+        console.log(`[Recording][${roomId}] ✅ STT client already active`);
+        return;
+      }
+
+      // Create new STT client
+      console.log(`[Recording][${roomId}] 🔨 Creating new STT client...`);
+      try {
+        await this.sttManager.createClient(
+          roomId,
+          // STT callback
+          async (transcriptData) => {
+            // Save final transcripts only
+            if (transcriptData.isFinal) {
+              await this.transcriptService.saveSttText(
+                transcriptData.roomId,
+                transcriptData.text,
+                transcriptData.confidence
+              );
+            }
+
+            // Broadcast immediately
+            this.io.to(transcriptData.roomId).emit('stt-text', {
+              text: transcriptData.text,
+              timestamp: transcriptData.timestamp.getTime(),
+              isFinal: transcriptData.isFinal
+            });
+          },
+          undefined, // No translation
+          room.roomSettings?.promptTemplate || 'general'
+        );
+
+        console.log(`[Recording][${roomId}] ✅ STT client created and ready`);
+      } catch (error) {
+        console.error(`[Recording][${roomId}] ❌ Failed to create STT client:`, error);
+      }
+
+    } catch (error) {
+      console.error('[Recording] Start error:', error);
+    }
+  }
+
+  // Handle stop recording
+  private async handleStopRecording(socket: Socket, data: { roomId: string }): Promise<void> {
+    try {
+      const { roomId } = data;
+
+      if (!roomId) {
+        console.error('[Recording] ❌ No roomId provided');
+        return;
+      }
+
+      // Verify room and speaker
+      const room = await this.roomService.getRoom(roomId);
+      if (!room) {
+        console.warn(`[Recording][${roomId}] ❌ Room not found`);
+        return;
+      }
+
+      if (room.speakerId !== socket.id) {
+        console.warn(`[Recording][${roomId}] ❌ Unauthorized (not speaker)`);
+        return;
+      }
+
+      // Close STT client to prevent Deepgram timeout
+      console.log(`[Recording][${roomId}] 🔌 Closing STT client...`);
+      this.sttManager.removeClient(roomId);
+      this.audioChunksReceived.delete(roomId);
+      console.log(`[Recording][${roomId}] ✅ STT client closed`);
+
+    } catch (error) {
+      console.error('[Recording] Stop error:', error);
     }
   }
 
