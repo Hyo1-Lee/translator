@@ -13,6 +13,7 @@ dotenv.config();
 import { RoomService } from './modules/room/room-service';
 import { TranscriptService } from './modules/room/transcript-service';
 import { TranslationService } from './modules/translation/translation-service';
+import { GoogleTranslateService } from './modules/translation/google-translate.service';
 import { STTManager } from './modules/stt/stt-manager';
 import { SocketHandler } from './modules/socket/socket-handler';
 
@@ -123,6 +124,32 @@ async function bootstrap() {
   const transcriptService = new TranscriptService();
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
+  // Translation services (Groq/GPT + Google Translate)
+  const translationProvider = process.env.TRANSLATION_PROVIDER as 'openai' | 'groq' || 'openai';
+  const translationService = new TranslationService({
+    apiKey: process.env.OPENAI_API_KEY || '',
+    model: process.env.OPENAI_MODEL || 'gpt-5-nano',
+    provider: translationProvider,
+    groqApiKey: process.env.GROQ_API_KEY,
+    groqModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    enableSmartBatch: process.env.ENABLE_SMART_BATCH === 'true',
+    batchSize: parseInt(process.env.BATCH_SIZE || '3')
+  });
+
+  const googleTranslateService = new GoogleTranslateService(
+    process.env.GOOGLE_TRANSLATE_API_KEY || ''
+  );
+
+  console.log('[Bootstrap] 🌐 Translation services initialized');
+  console.log(`[Bootstrap] - Provider: ${translationProvider.toUpperCase()}`);
+  if (translationProvider === 'groq') {
+    console.log(`[Bootstrap] - Groq Model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'} ⚡ (260 tokens/s)`);
+    console.log(`[Bootstrap] - Smart Batch: ${process.env.ENABLE_SMART_BATCH === 'true' ? `Enabled (${process.env.BATCH_SIZE || 3} items)` : 'Disabled'}`);
+  } else {
+    console.log(`[Bootstrap] - OpenAI Model: ${process.env.OPENAI_MODEL || 'gpt-5-nano'}`);
+  }
+  console.log(`[Bootstrap] - Google Translate: ${process.env.GOOGLE_TRANSLATE_API_KEY ? 'Enabled' : 'Disabled (no API key)'}`);
+
   // Simplified STT Manager - Deepgram only
   const sttManager = new STTManager({
     deepgram: {
@@ -139,7 +166,7 @@ async function bootstrap() {
   });
 
   // Initialize Socket handler
-  new SocketHandler(io, roomService, transcriptService, sttManager);
+  new SocketHandler(io, roomService, transcriptService, sttManager, translationService, googleTranslateService);
 
   // Cleanup job - run every hour
   setInterval(async () => {

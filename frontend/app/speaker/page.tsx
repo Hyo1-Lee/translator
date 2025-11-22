@@ -48,6 +48,26 @@ const TARGET_LANGUAGES = [
   { code: "hi", name: "हिन्दी" },
 ];
 
+// Source languages (commonly used)
+const SOURCE_LANGUAGES = [
+  { code: "ko", name: "한국어" },
+  { code: "en", name: "English" },
+  { code: "ja", name: "日本語" },
+  { code: "zh", name: "中文" },
+  { code: "es", name: "Español" },
+  { code: "fr", name: "Français" },
+];
+
+// Environment presets
+const ENVIRONMENT_PRESETS = [
+  { value: "general", label: "일반 대화" },
+  { value: "church", label: "종교/교회" },
+  { value: "medical", label: "의료/건강" },
+  { value: "legal", label: "법률/계약" },
+  { value: "business", label: "비즈니스/회의" },
+  { value: "custom", label: "사용자 지정" },
+];
+
 interface RoomSettings {
   roomTitle: string;
   speakerName: string;
@@ -56,6 +76,13 @@ interface RoomSettings {
   targetLanguages: string[];
   password: string;
   maxListeners: number;
+  // Translation settings
+  enableTranslation: boolean;
+  sourceLanguage: string;
+  environmentPreset: string;
+  customEnvironmentDescription: string;
+  customGlossary: Record<string, string> | null;
+  enableStreaming: boolean;
 }
 
 export default function Speaker() {
@@ -74,6 +101,7 @@ export default function Speaker() {
   const [speakerName, setSpeakerName] = useState("");
   const [transcripts, setTranscripts] = useState<any[]>([]);
   const [qrCodeUrl, setQrCodeUrl] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
 
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -81,11 +109,18 @@ export default function Speaker() {
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     roomTitle: "",
     speakerName: "",
-    promptTemplate: "general",
+    promptTemplate: "church",
     customPrompt: "",
     targetLanguages: ["en"],
     password: "",
     maxListeners: 100,
+    // Translation settings (Default: LDS Church optimized)
+    enableTranslation: true,
+    sourceLanguage: "ko",
+    environmentPreset: "church",
+    customEnvironmentDescription: "",
+    customGlossary: null,
+    enableStreaming: true,
   });
 
   // Refs
@@ -198,19 +233,34 @@ export default function Speaker() {
   const createRoom = useCallback(() => {
     if (!socketRef.current) return;
 
-    const name = user?.name || speakerName || "Speaker";
+    const name = user?.name || roomSettings.speakerName || speakerName || "Speaker";
     setSpeakerName(name);
 
     const dataToSend = {
       name,
       userId: user?.id,
-      ...roomSettings,
+      roomTitle: roomSettings.roomTitle,
+      password: roomSettings.password,
+      promptTemplate: roomSettings.promptTemplate,
+      customPrompt: roomSettings.customPrompt,
+      maxListeners: roomSettings.maxListeners,
+      // Translation settings
+      enableTranslation: roomSettings.enableTranslation,
+      sourceLanguage: roomSettings.sourceLanguage,
+      targetLanguagesArray: roomSettings.targetLanguages,
+      environmentPreset: roomSettings.environmentPreset,
+      customEnvironmentDescription: roomSettings.customEnvironmentDescription,
+      customGlossary: roomSettings.customGlossary,
+      enableStreaming: roomSettings.enableStreaming,
     };
 
     console.log("🏗️ Creating room with settings:");
     console.log("  - roomTitle:", roomSettings.roomTitle);
     console.log("  - password:", roomSettings.password ? "***" : "(none)");
+    console.log("  - enableTranslation:", roomSettings.enableTranslation);
+    console.log("  - sourceLanguage:", roomSettings.sourceLanguage);
     console.log("  - targetLanguages:", roomSettings.targetLanguages);
+    console.log("  - environmentPreset:", roomSettings.environmentPreset);
     console.log("  - Full data:", dataToSend);
 
     socketRef.current.emit("create-room", dataToSend);
@@ -361,13 +411,19 @@ export default function Speaker() {
         );
         setRoomSettings({
           roomTitle: data.roomSettings.roomTitle || "",
+          speakerName: speakerName,
           promptTemplate: data.roomSettings.promptTemplate || "general",
           customPrompt: data.roomSettings.customPrompt || "",
-          targetLanguages: Array.isArray(data.roomSettings.targetLanguages)
-            ? data.roomSettings.targetLanguages
-            : ["en"],
+          targetLanguages: data.roomSettings.targetLanguagesArray || ["en"],
           password: "", // Don't set password for security
           maxListeners: data.roomSettings.maxListeners || 100,
+          // Translation settings
+          enableTranslation: data.roomSettings.enableTranslation ?? true,
+          sourceLanguage: data.roomSettings.sourceLanguage || "ko",
+          environmentPreset: data.roomSettings.environmentPreset || "general",
+          customEnvironmentDescription: data.roomSettings.customEnvironmentDescription || "",
+          customGlossary: data.roomSettings.customGlossary || null,
+          enableStreaming: data.roomSettings.enableStreaming ?? true,
         });
       }
 
@@ -390,13 +446,19 @@ export default function Speaker() {
         );
         setRoomSettings({
           roomTitle: data.roomSettings.roomTitle || "",
+          speakerName: speakerName,
           promptTemplate: data.roomSettings.promptTemplate || "general",
           customPrompt: data.roomSettings.customPrompt || "",
-          targetLanguages: Array.isArray(data.roomSettings.targetLanguages)
-            ? data.roomSettings.targetLanguages
-            : ["en"],
+          targetLanguages: data.roomSettings.targetLanguagesArray || ["en"],
           password: "", // Don't set password for security
           maxListeners: data.roomSettings.maxListeners || 100,
+          // Translation settings
+          enableTranslation: data.roomSettings.enableTranslation ?? true,
+          sourceLanguage: data.roomSettings.sourceLanguage || "ko",
+          environmentPreset: data.roomSettings.environmentPreset || "general",
+          customEnvironmentDescription: data.roomSettings.customEnvironmentDescription || "",
+          customGlossary: data.roomSettings.customGlossary || null,
+          enableStreaming: data.roomSettings.enableStreaming ?? true,
         });
       }
 
@@ -443,6 +505,57 @@ export default function Speaker() {
       });
     });
 
+    // Listen for translation-text (new system)
+    socketRef.current.on("translation-text", (data: any) => {
+      console.log(`[Frontend] 🌐 Translation received:`, {
+        language: data.targetLanguage,
+        text: data.text.substring(0, 50) + '...',
+        isPartial: data.isPartial,
+        isHistory: data.isHistory
+      });
+
+      setTranscripts((prev) => {
+        const newTranscript = {
+          type: "translation",
+          targetLanguage: data.targetLanguage,
+          text: data.text,
+          originalText: data.originalText,
+          isPartial: data.isPartial || false,
+          contextSummary: data.contextSummary,
+          timestamp: data.timestamp,
+          isHistory: data.isHistory || false,
+        };
+
+        // Handle partial vs final translations
+        if (newTranscript.isPartial) {
+          // Update last partial translation for this language
+          const lastIndex = prev.length - 1;
+          if (
+            lastIndex >= 0 &&
+            prev[lastIndex].type === "translation" &&
+            prev[lastIndex].targetLanguage === data.targetLanguage &&
+            prev[lastIndex].isPartial
+          ) {
+            return [...prev.slice(0, -1), newTranscript];
+          }
+          return [...prev, newTranscript];
+        } else {
+          // Final translation: replace last partial if exists
+          const lastIndex = prev.length - 1;
+          if (
+            lastIndex >= 0 &&
+            prev[lastIndex].type === "translation" &&
+            prev[lastIndex].targetLanguage === data.targetLanguage &&
+            prev[lastIndex].isPartial
+          ) {
+            return [...prev.slice(0, -1), newTranscript];
+          }
+          return [...prev, newTranscript];
+        }
+      });
+    });
+
+    // Keep old translation-batch for backwards compatibility
     socketRef.current.on("translation-batch", (data: any) => {
       setTranscripts((prev) => {
         // Don't split into sentences - keep as a single batch for better readability
@@ -903,6 +1016,31 @@ export default function Speaker() {
               {transcripts.length} 항목
             </span>
           </div>
+
+          {/* Language Filter Tabs */}
+          {roomSettings.enableTranslation && roomSettings.targetLanguages.length > 0 && (
+            <div className={styles.languageTabs}>
+              <button
+                className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`}
+                onClick={() => setSelectedLanguage(null)}
+              >
+                전체
+              </button>
+              {roomSettings.targetLanguages.map((langCode) => {
+                const lang = TARGET_LANGUAGES.find(l => l.code === langCode);
+                return (
+                  <button
+                    key={langCode}
+                    className={`${styles.languageTab} ${selectedLanguage === langCode ? styles.active : ""}`}
+                    onClick={() => setSelectedLanguage(langCode)}
+                  >
+                    {lang?.name || langCode}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className={styles.translationContent} ref={translationListRef}>
             {transcripts.length === 0 ? (
               <div className={styles.emptyState}>
@@ -920,43 +1058,65 @@ export default function Speaker() {
               </div>
             ) : (
               <div className={styles.translationList}>
-                {transcripts.map((item, index) => (
-                  <div key={index} className={styles.translationCard}>
-                    {item.type === "stt" ? (
-                      <div className={styles.sttCard}>
-                        <div className={styles.sttBadge}>
-                          {(item as any).isFinal ? "음성 인식" : "인식 중..."}
+                {transcripts
+                  .filter((item) => {
+                    // Hide STT blocks - only show translations
+                    if (item.type === "stt") return false;
+
+                    // Hide partial translations
+                    if (item.type === "translation" && item.isPartial) return false;
+
+                    // Filter by selected language
+                    if (selectedLanguage === null) return true;
+                    if (item.type === "translation" && item.targetLanguage) {
+                      return item.targetLanguage === selectedLanguage;
+                    }
+                    // Old translation-batch format
+                    return true;
+                  })
+                  .map((item, index) => (
+                    <div key={index} className={styles.translationCard}>
+                      {item.targetLanguage ? (
+                        // New translation-text format
+                        <div className={styles.translationCardContent}>
+                          <div className={styles.translationBadge}>
+                            {TARGET_LANGUAGES.find(l => l.code === item.targetLanguage)?.name || item.targetLanguage}
+                            {item.isPartial && " (진행 중...)"}
+                          </div>
+                          <div className={styles.translationTexts}>
+                            {item.originalText && (
+                              <>
+                                <p className={styles.koreanTextLarge}>
+                                  {item.originalText}
+                                </p>
+                                <div className={styles.divider}></div>
+                              </>
+                            )}
+                            <p className={`${styles.englishTextLarge} ${item.isPartial ? styles.partialText : ""}`}>
+                              {item.text}
+                              {item.isPartial && (
+                                <span className={styles.partialIndicator}> ...</span>
+                              )}
+                            </p>
+                          </div>
                         </div>
-                        <p
-                          className={`${styles.sttTextLarge} ${
-                            !(item as any).isFinal ? styles.partialText : ""
-                          }`}
-                        >
-                          {item.text}
-                          {!(item as any).isFinal && (
-                            <span className={styles.partialIndicator}>
-                              {" "}
-                              ...
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className={styles.translationCardContent}>
-                        <div className={styles.translationBadge}>번역</div>
-                        <div className={styles.translationTexts}>
-                          <p className={styles.koreanTextLarge}>
-                            {item.korean}
-                          </p>
-                          <div className={styles.divider}></div>
-                          <p className={styles.englishTextLarge}>
-                            {item.english}
-                          </p>
+                      ) : (
+                        // Old translation-batch format
+                        <div className={styles.translationCardContent}>
+                          <div className={styles.translationBadge}>번역</div>
+                          <div className={styles.translationTexts}>
+                            <p className={styles.koreanTextLarge}>
+                              {item.korean}
+                            </p>
+                            <div className={styles.divider}></div>
+                            <p className={styles.englishTextLarge}>
+                              {item.english}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      )}
+                    </div>
+                  ))}
               </div>
             )}
           </div>
@@ -1062,53 +1222,161 @@ export default function Speaker() {
                 </div>
               )}
 
-              {/* Target Languages */}
+              {/* ===== Translation Settings ===== */}
               <div className={styles.settingGroup}>
-                <label>번역 언어 (영어만 지원)</label>
-                <div className={styles.languageGrid}>
-                  {TARGET_LANGUAGES.map((lang) => {
-                    const isEnglish = lang.code === "en";
-                    const isDisabled = !isEnglish;
-                    return (
-                      <label
-                        key={lang.code}
-                        className={`${styles.checkbox} ${
-                          isDisabled ? styles.disabled : ""
-                        }`}
-                        title={isDisabled ? "현재 영어만 지원됩니다" : ""}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={roomSettings.targetLanguages.includes(
-                            lang.code
-                          )}
-                          disabled={isDisabled}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setRoomSettings({
-                                ...roomSettings,
-                                targetLanguages: [
-                                  ...roomSettings.targetLanguages,
-                                  lang.code,
-                                ],
-                              });
-                            } else {
-                              setRoomSettings({
-                                ...roomSettings,
-                                targetLanguages:
-                                  roomSettings.targetLanguages.filter(
-                                    (l) => l !== lang.code
-                                  ),
-                              });
-                            }
-                          }}
-                        />
-                        <span>{lang.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <input
+                    type="checkbox"
+                    checked={roomSettings.enableTranslation}
+                    onChange={(e) =>
+                      setRoomSettings({
+                        ...roomSettings,
+                        enableTranslation: e.target.checked,
+                      })
+                    }
+                  />
+                  <span style={{ fontWeight: "bold" }}>실시간 번역 활성화</span>
+                </label>
+                <p style={{ fontSize: "0.8125rem", color: "#94a3b8", marginTop: "0.5rem" }}>
+                  💡 GPT + Google Translate를 사용한 고품질 다국어 번역
+                </p>
               </div>
+
+              {roomSettings.enableTranslation && (
+                <>
+                  {/* Source Language */}
+                  <div className={styles.settingGroup}>
+                    <label>출발 언어</label>
+                    <select
+                      value={roomSettings.sourceLanguage}
+                      onChange={(e) =>
+                        setRoomSettings({
+                          ...roomSettings,
+                          sourceLanguage: e.target.value,
+                        })
+                      }
+                      className={styles.select}
+                    >
+                      {SOURCE_LANGUAGES.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Environment Preset */}
+                  <div className={styles.settingGroup}>
+                    <label>번역 환경</label>
+                    <select
+                      value={roomSettings.environmentPreset}
+                      onChange={(e) =>
+                        setRoomSettings({
+                          ...roomSettings,
+                          environmentPreset: e.target.value,
+                        })
+                      }
+                      className={styles.select}
+                    >
+                      {ENVIRONMENT_PRESETS.map((preset) => (
+                        <option key={preset.value} value={preset.value}>
+                          {preset.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p style={{ fontSize: "0.8125rem", color: "#94a3b8", marginTop: "0.5rem" }}>
+                      💡 환경에 맞는 전문 용어와 맥락을 적용합니다
+                    </p>
+                  </div>
+
+                  {/* Custom Environment Description */}
+                  {roomSettings.environmentPreset === "custom" && (
+                    <div className={styles.settingGroup}>
+                      <label>사용자 지정 환경 설명</label>
+                      <textarea
+                        value={roomSettings.customEnvironmentDescription}
+                        onChange={(e) =>
+                          setRoomSettings({
+                            ...roomSettings,
+                            customEnvironmentDescription: e.target.value,
+                          })
+                        }
+                        className={styles.textarea}
+                        placeholder="예: 스타트업 투자 발표회, 의학 세미나, 법률 상담 등..."
+                        rows={3}
+                      />
+                    </div>
+                  )}
+
+                  {/* Target Languages */}
+                  <div className={styles.settingGroup}>
+                    <label>번역 언어 선택</label>
+                    <div className={styles.languageGrid}>
+                      {TARGET_LANGUAGES.map((lang) => {
+                        // Disable source language
+                        const isDisabled = lang.code === roomSettings.sourceLanguage;
+                        return (
+                          <label
+                            key={lang.code}
+                            className={`${styles.checkbox} ${
+                              isDisabled ? styles.disabled : ""
+                            }`}
+                            title={isDisabled ? "출발 언어는 번역 대상에서 제외됩니다" : ""}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={roomSettings.targetLanguages.includes(
+                                lang.code
+                              )}
+                              disabled={isDisabled}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setRoomSettings({
+                                    ...roomSettings,
+                                    targetLanguages: [
+                                      ...roomSettings.targetLanguages,
+                                      lang.code,
+                                    ],
+                                  });
+                                } else {
+                                  setRoomSettings({
+                                    ...roomSettings,
+                                    targetLanguages:
+                                      roomSettings.targetLanguages.filter(
+                                        (l) => l !== lang.code
+                                      ),
+                                  });
+                                }
+                              }}
+                            />
+                            <span>{lang.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Streaming */}
+                  <div className={styles.settingGroup}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <input
+                        type="checkbox"
+                        checked={roomSettings.enableStreaming}
+                        onChange={(e) =>
+                          setRoomSettings({
+                            ...roomSettings,
+                            enableStreaming: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>스트리밍 번역 (점진적 표시)</span>
+                    </label>
+                    <p style={{ fontSize: "0.8125rem", color: "#94a3b8", marginTop: "0.5rem" }}>
+                      💡 번역이 완성되기 전에 중간 결과를 실시간으로 보여줍니다
+                    </p>
+                  </div>
+                </>
+              )}
 
               {/* Password */}
               <div className={styles.settingGroup}>

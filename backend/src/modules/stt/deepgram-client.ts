@@ -25,6 +25,12 @@ export class DeepgramClient extends STTProvider {
   private connection: any;
   private isReady: boolean = false;
 
+  // Sentence buffering
+  private sentenceBuffer: string[] = [];
+  private flushTimer: NodeJS.Timeout | null = null;
+  private readonly FLUSH_TIMEOUT_MS = 800; // 0.8초 후 자동 flush (속도 최적화: 1000ms→800ms)
+  private readonly SENTENCE_ENDINGS = /[.!?。！？]/; // 문장 종결 부호 (한국어 + 영어)
+
   constructor(roomId: string, config: DeepgramConfig) {
     super(roomId);
 
@@ -68,9 +74,9 @@ export class DeepgramClient extends STTProvider {
         // 실시간 결과
         interim_results: this.config.interimResults,
 
-        // 발화 끝점 감지 - 긴 문장 지원
-        endpointing: 1000,           // 발화 끝 감지 시간 (ms) - 500ms로 증가
-        utterance_end_ms: 3000,     // 발화 종료 판단 시간 (ms) - 2초로 증가 (긴 문장 지원)
+        // 발화 끝점 감지 - 속도 최적화 (화자 정지 시 즉시 번역)
+        endpointing: 100,          // 발화 끝 감지 시간 (안정성 유지)
+        utterance_end_ms: 1200,    // 발화 종료 판단 시간 (속도 최적화: 1500ms→1200ms)
 
         // VAD (Voice Activity Detection)
         vad_events: true,           // 음성 활동 감지 이벤트
@@ -108,8 +114,6 @@ export class DeepgramClient extends STTProvider {
 
       this.connection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
         try {
-          console.log(`[Deepgram][${this.roomId}] 📨 Raw transcript data:`, JSON.stringify(data).substring(0, 200));
-
           const transcript = data.channel?.alternatives?.[0]?.transcript;
           if (transcript && transcript.trim() !== '') {
             const isFinal = data.is_final || false;
@@ -117,13 +121,18 @@ export class DeepgramClient extends STTProvider {
 
             console.log(`[Deepgram][${this.roomId}] ${isFinal ? '✅ FINAL' : '⏳ INTERIM'} "${transcript}" (confidence: ${(confidence * 100).toFixed(1)}%)`);
 
-            this.emit('transcript', {
-              text: transcript,
-              confidence,
-              final: isFinal,
-            });
-          } else {
-            console.log(`[Deepgram][${this.roomId}] ⚠️  Empty transcript received`);
+            // Interim results: emit immediately for real-time display
+            if (!isFinal) {
+              this.emit('transcript', {
+                text: transcript,
+                confidence,
+                final: false,
+              });
+              return;
+            }
+
+            // Final results: buffer and emit complete sentences
+            this.addToSentenceBuffer(transcript, confidence);
           }
         } catch (err) {
           console.error(`[Deepgram][${this.roomId}] ❌ Error processing transcript:`, err);
@@ -212,9 +221,74 @@ export class DeepgramClient extends STTProvider {
   }
 
   /**
+   * Sentence Buffering - Add transcript to buffer
+   */
+  private addToSentenceBuffer(transcript: string, confidence: number): void {
+    console.log(`[Deepgram][${this.roomId}] 📝 Adding to buffer: "${transcript}"`);
+
+    this.sentenceBuffer.push(transcript);
+
+    // Reset flush timer
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+    }
+
+    // Check if sentence is complete (ends with punctuation)
+    const hasSentenceEnding = this.SENTENCE_ENDINGS.test(transcript);
+
+    if (hasSentenceEnding) {
+      console.log(`[Deepgram][${this.roomId}] ✅ Sentence ending detected - flushing immediately`);
+      this.flushSentenceBuffer(confidence);
+    } else {
+      // Set timer to flush after timeout
+      console.log(`[Deepgram][${this.roomId}] ⏰ No sentence ending - will flush in ${this.FLUSH_TIMEOUT_MS}ms`);
+      this.flushTimer = setTimeout(() => {
+        console.log(`[Deepgram][${this.roomId}] ⏰ Flush timeout reached - flushing buffer`);
+        this.flushSentenceBuffer(confidence);
+      }, this.FLUSH_TIMEOUT_MS);
+    }
+  }
+
+  /**
+   * Flush sentence buffer - emit complete sentence
+   */
+  private flushSentenceBuffer(confidence: number): void {
+    if (this.sentenceBuffer.length === 0) {
+      return;
+    }
+
+    // Clear timer
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    // Combine all buffered transcripts
+    const completeSentence = this.sentenceBuffer.join(' ').trim();
+
+    console.log(`[Deepgram][${this.roomId}] 🚀 Flushing buffer: "${completeSentence}" (${this.sentenceBuffer.length} parts)`);
+
+    // Emit complete sentence
+    this.emit('transcript', {
+      text: completeSentence,
+      confidence,
+      final: true,
+    });
+
+    // Clear buffer
+    this.sentenceBuffer = [];
+  }
+
+  /**
    * End stream (flush)
    */
   endStream(): void {
+    // Flush any remaining buffer
+    if (this.sentenceBuffer.length > 0) {
+      console.log(`[Deepgram][${this.roomId}] 🔚 End stream - flushing remaining buffer`);
+      this.flushSentenceBuffer(1.0);
+    }
+
     if (this.connection) {
       try {
         this.connection.finish();
@@ -229,6 +303,18 @@ export class DeepgramClient extends STTProvider {
    */
   disconnect(): void {
     console.log(`[Deepgram][${this.roomId}] 🔌 Disconnecting...`);
+
+    // Flush any remaining buffer
+    if (this.sentenceBuffer.length > 0) {
+      console.log(`[Deepgram][${this.roomId}] 🔚 Disconnect - flushing remaining buffer`);
+      this.flushSentenceBuffer(1.0);
+    }
+
+    // Clear timer
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
 
     if (this.connection) {
       try {

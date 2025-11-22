@@ -37,7 +37,7 @@ export class RoomSettings extends Model {
   @Column(DataType.STRING)
   declare targetLanguages: string;
 
-  @Default('general')
+  @Default('church')
   @Column(DataType.STRING)
   declare promptTemplate: string;
 
@@ -61,7 +61,7 @@ export class RoomSettings extends Model {
   @Column(DataType.STRING(10))
   declare sourceLanguage: string;
 
-  @Default('general')
+  @Default('church')
   @Column(DataType.STRING(20))
   declare environmentPreset: string;
 

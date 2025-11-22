@@ -175,14 +175,15 @@ export default function ListenerRoom() {
       setPassword(""); // Clear password after successful join
 
       // Set available languages from room settings
-      if (data.roomSettings?.targetLanguages) {
+      const targetLanguages = data.roomSettings?.targetLanguagesArray || data.roomSettings?.targetLanguages;
+      if (targetLanguages) {
         // targetLanguages might be a comma-separated string or an array
         let languages: string[];
-        if (typeof data.roomSettings.targetLanguages === 'string') {
-          languages = data.roomSettings.targetLanguages.split(',').map((lang: string) => lang.trim());
+        if (typeof targetLanguages === 'string') {
+          languages = targetLanguages.split(',').map((lang: string) => lang.trim());
           console.log("📋 Parsed languages from string:", languages);
-        } else if (Array.isArray(data.roomSettings.targetLanguages)) {
-          languages = data.roomSettings.targetLanguages;
+        } else if (Array.isArray(targetLanguages)) {
+          languages = targetLanguages;
           console.log("📋 Using languages array:", languages);
         } else {
           languages = ['en'];
@@ -227,6 +228,57 @@ export default function ListenerRoom() {
       });
     });
 
+    // Listen for translation-text (new system)
+    socketRef.current.on("translation-text", (data: any) => {
+      console.log(`[Listener] 🌐 Translation received:`, {
+        language: data.targetLanguage,
+        text: data.text.substring(0, 50) + '...',
+        isPartial: data.isPartial,
+        isHistory: data.isHistory
+      });
+
+      setTranscripts((prev) => {
+        const newTranscript = {
+          type: "translation",
+          targetLanguage: data.targetLanguage,
+          text: data.text,
+          originalText: data.originalText,
+          isPartial: data.isPartial || false,
+          contextSummary: data.contextSummary,
+          timestamp: data.timestamp,
+          isHistory: data.isHistory || false,
+        };
+
+        // Handle partial vs final translations
+        if (newTranscript.isPartial) {
+          // Update last partial translation for this language
+          const lastIndex = prev.length - 1;
+          if (
+            lastIndex >= 0 &&
+            prev[lastIndex].type === "translation" &&
+            prev[lastIndex].targetLanguage === data.targetLanguage &&
+            prev[lastIndex].isPartial
+          ) {
+            return [...prev.slice(0, -1), newTranscript];
+          }
+          return [...prev, newTranscript];
+        } else {
+          // Final translation: replace last partial if exists
+          const lastIndex = prev.length - 1;
+          if (
+            lastIndex >= 0 &&
+            prev[lastIndex].type === "translation" &&
+            prev[lastIndex].targetLanguage === data.targetLanguage &&
+            prev[lastIndex].isPartial
+          ) {
+            return [...prev.slice(0, -1), newTranscript];
+          }
+          return [...prev, newTranscript];
+        }
+      });
+    });
+
+    // Keep old translation-batch for backwards compatibility
     socketRef.current.on("translation-batch", (data: any) => {
       // Don't split into sentences - keep as a single batch for better readability
       const newTranscript = {
@@ -370,9 +422,21 @@ export default function ListenerRoom() {
     transcripts.forEach((item) => {
       if (item.type === "translation") {
         data += `[${formatTime(item.timestamp)}]\n`;
-        data += `한국어: ${item.korean}\n`;
-        const translation = item.translations?.[selectedLanguage] || item.translations?.en || item.english || "";
-        data += `${langName}: ${translation}\n\n`;
+
+        // New translation-text format
+        if (item.targetLanguage) {
+          if (item.targetLanguage === selectedLanguage && !item.isPartial) {
+            if (item.originalText) {
+              data += `원문: ${item.originalText}\n`;
+            }
+            data += `${langName}: ${item.text}\n\n`;
+          }
+        } else {
+          // Old translation-batch format
+          data += `한국어: ${item.korean}\n`;
+          const translation = item.translations?.[selectedLanguage] || item.translations?.en || item.english || "";
+          data += `${langName}: ${translation}\n\n`;
+        }
       }
     });
 
@@ -565,24 +629,50 @@ export default function ListenerRoom() {
             </div>
           ) : (
             <>
-              {transcripts.map((item, index) => (
-                <div key={index} className={styles.transcriptCard}>
-                  {item.type === "stt" ? (
-                    <>
-                      <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
-                      <div className={`${styles.sttText} ${!(item as any).isFinal ? styles.partialText : ''}`}>
-                        {item.text}
-                        {!(item as any).isFinal && <span className={styles.partialIndicator}> ...</span>}
-                      </div>
-                    </>
-                  ) : item.type === "translation" ? (
-                    <>
-                      <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
-                      <div className={styles.korean}>{item.korean}</div>
-                      <div className={styles.divider}></div>
-                      <div className={styles.english}>
-                        {item.translations?.[selectedLanguage] || item.translations?.en || item.english || ""}
-                      </div>
+              {transcripts
+                .filter((item) => {
+                  // Hide STT blocks - only show translations
+                  if (item.type === "stt") return false;
+
+                  // Hide partial translations
+                  if (item.type === "translation" && item.isPartial) return false;
+
+                  // Filter by selected language (for new translation-text format)
+                  if (item.type === "translation" && item.targetLanguage) {
+                    return item.targetLanguage === selectedLanguage;
+                  }
+
+                  // Old translation-batch format - always show
+                  return true;
+                })
+                .map((item, index) => (
+                  <div key={index} className={styles.transcriptCard}>
+                    {item.type === "translation" ? (
+                      <>
+                        <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
+                        {/* New translation-text format */}
+                        {item.targetLanguage ? (
+                          <>
+                            {item.originalText && (
+                              <>
+                                <div className={styles.korean}>{item.originalText}</div>
+                                <div className={styles.divider}></div>
+                              </>
+                            )}
+                            <div className={styles.english}>
+                              {item.text}
+                            </div>
+                          </>
+                        ) : (
+                        /* Old translation-batch format */
+                        <>
+                          <div className={styles.korean}>{item.korean}</div>
+                          <div className={styles.divider}></div>
+                          <div className={styles.english}>
+                            {item.translations?.[selectedLanguage] || item.translations?.en || item.english || ""}
+                          </div>
+                        </>
+                      )}
                     </>
                   ) : null}
                 </div>
