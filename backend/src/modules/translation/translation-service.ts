@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { buildTranslationPrompt, EnvironmentPreset } from './presets';
 
 interface TranslationConfig {
   apiKey: string;
@@ -84,7 +85,117 @@ export class TranslationService {
     return translations.filter(t => t !== null) as string[];
   }
 
-  // Translate with context for better accuracy
+  /**
+   * 프리셋 기반 문맥 번역 (신규)
+   * - 슬라이딩 윈도우 + 요약 기반
+   * - 프리셋 시스템 활용
+   */
+  async translateWithPreset(
+    currentText: string,
+    recentContext: string,
+    summary: string,
+    sourceLanguage: string,
+    targetLanguage: string,
+    environmentPreset: EnvironmentPreset,
+    customEnvironmentDescription?: string,
+    customGlossary?: Record<string, string>
+  ): Promise<string | null> {
+    try {
+      // 프리셋 기반 프롬프트 생성
+      const systemPrompt = buildTranslationPrompt(
+        sourceLanguage,
+        targetLanguage,
+        environmentPreset,
+        customEnvironmentDescription,
+        customGlossary
+      );
+
+      // 컨텍스트 변수 치환
+      const userPrompt = systemPrompt
+        .replace('{summary}', summary || '(No summary yet)')
+        .replace('{recentContext}', recentContext || '(No recent context)')
+        .replace('{currentText}', currentText);
+
+      const response = await this.openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_completion_tokens: 3000
+      });
+
+      const translation = response.choices[0]?.message?.content?.trim();
+      return translation || null;
+    } catch (error) {
+      console.error('[Translation] Preset-based translation error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 스트리밍 번역 (신규)
+   * - 점진적 번역 표시
+   */
+  async translateWithStreaming(
+    currentText: string,
+    recentContext: string,
+    summary: string,
+    sourceLanguage: string,
+    targetLanguage: string,
+    environmentPreset: EnvironmentPreset,
+    customEnvironmentDescription?: string,
+    customGlossary?: Record<string, string>,
+    onChunk?: (chunk: string) => void
+  ): Promise<string | null> {
+    try {
+      const systemPrompt = buildTranslationPrompt(
+        sourceLanguage,
+        targetLanguage,
+        environmentPreset,
+        customEnvironmentDescription,
+        customGlossary
+      );
+
+      const userPrompt = systemPrompt
+        .replace('{summary}', summary || '(No summary yet)')
+        .replace('{recentContext}', recentContext || '(No recent context)')
+        .replace('{currentText}', currentText);
+
+      const stream = await this.openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_completion_tokens: 3000,
+        stream: true
+      });
+
+      let fullTranslation = '';
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content || '';
+        if (content) {
+          fullTranslation += content;
+          if (onChunk) {
+            onChunk(content);
+          }
+        }
+      }
+
+      return fullTranslation.trim() || null;
+    } catch (error) {
+      console.error('[Translation] Streaming translation error:', error);
+      return null;
+    }
+  }
+
+  // Translate with context for better accuracy (기존 함수 - 하위 호환성 유지)
   async translateWithContext(
     currentText: string,
     fullContext: string,

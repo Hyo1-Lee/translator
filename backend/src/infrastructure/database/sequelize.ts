@@ -9,6 +9,7 @@ import {
   RoomSettings,
   Listener,
   SttText,
+  TranslationText,
   Transcript,
   SavedTranscript,
 } from '../../models';
@@ -53,6 +54,7 @@ sequelize.addModels([
   RoomSettings,
   Listener,
   SttText,
+  TranslationText,
   Transcript,
   SavedTranscript,
 ]);

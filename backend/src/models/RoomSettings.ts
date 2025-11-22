@@ -32,6 +32,7 @@ export class RoomSettings extends Model {
   @Column(DataType.STRING)
   declare roomTitle: string | null;
 
+  // 기존 필드 (하위 호환성 유지)
   @Default('en')
   @Column(DataType.STRING)
   declare targetLanguages: string;
@@ -54,6 +55,28 @@ export class RoomSettings extends Model {
   @Default(100)
   @Column(DataType.INTEGER)
   declare maxListeners: number;
+
+  // 새로운 번역 기능 필드
+  @Default('ko')
+  @Column(DataType.STRING(10))
+  declare sourceLanguage: string;
+
+  @Default('general')
+  @Column(DataType.STRING(20))
+  declare environmentPreset: string;
+
+  @Column(DataType.TEXT)
+  declare customEnvironmentDescription: string | null;
+
+  @Column(DataType.JSON)
+  declare customGlossary: Record<string, string> | null;
+
+  @Column(DataType.JSON)
+  declare targetLanguagesArray: string[] | null;
+
+  @Default(true)
+  @Column(DataType.BOOLEAN)
+  declare enableStreaming: boolean;
 
   // Relations
   @BelongsTo(() => Room)
