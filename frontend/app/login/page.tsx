@@ -47,7 +47,7 @@ export default function LoginPage() {
       } else {
         setError(data.message || 'Failed to check email');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
@@ -69,7 +69,7 @@ export default function LoginPage() {
       } else {
         setError(data.message || 'Failed to send verification code');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to send verification code');
     }
   };
@@ -94,7 +94,7 @@ export default function LoginPage() {
       } else {
         setError(data.message || 'Invalid verification code');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
@@ -138,7 +138,7 @@ export default function LoginPage() {
       } else {
         setError(data.message || 'Signup failed');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
@@ -165,7 +165,7 @@ export default function LoginPage() {
       } else {
         setError(data.message || 'Login failed');
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);

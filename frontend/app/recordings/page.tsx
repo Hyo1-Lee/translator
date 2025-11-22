@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -9,12 +9,19 @@ import styles from './page.module.css';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
+interface Transcript {
+  id: string;
+  timestamp: string;
+  korean: string;
+  english: string;
+}
+
 interface Recording {
   id: string;
   roomCode: string;
   roomName: string;
   duration: number;
-  transcripts: any[];
+  transcripts: Transcript[];
   createdAt: string;
 }
 
@@ -25,19 +32,7 @@ export default function RecordingsPage() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, isLoading, router]);
-
-  useEffect(() => {
-    if (user && accessToken) {
-      fetchRecordings();
-    }
-  }, [user, accessToken]);
-
-  const fetchRecordings = async () => {
+  const fetchRecordings = useCallback(async () => {
     try {
       const response = await fetch(`${BACKEND_URL}/api/v1/recordings/list`, {
         headers: {
@@ -55,7 +50,19 @@ export default function RecordingsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [accessToken, toast]);
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isLoading, router]);
+
+  useEffect(() => {
+    if (user && accessToken) {
+      fetchRecordings();
+    }
+  }, [user, accessToken, fetchRecordings]);
 
   const deleteRecording = async (id: string) => {
     if (!confirm('이 녹음을 삭제하시겠습니까?')) return;

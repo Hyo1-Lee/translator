@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -85,21 +85,75 @@ interface RoomSettings {
   enableStreaming: boolean;
 }
 
-export default function Speaker() {
+interface Transcript {
+  id?: string;
+  type?: string;
+  text?: string;
+  translations?: Record<string, string>;
+  timestamp?: string;
+  isFinal?: boolean;
+  targetLanguage?: string;
+  originalText?: string;
+  isPartial?: boolean;
+  contextSummary?: string;
+  isHistory?: boolean;
+  korean?: string;
+  english?: string;
+  batchId?: string;
+}
+
+interface SocketData {
+  roomId?: string;
+  roomCode?: string;
+  message?: string;
+  count?: number;
+  text?: string;
+  language?: string;
+  translations?: Record<string, string>;
+  transcripts?: Transcript[];
+  isRejoined?: boolean;
+  roomSettings?: {
+    roomTitle?: string;
+    promptTemplate?: string;
+    customPrompt?: string;
+    targetLanguagesArray?: string[];
+    maxListeners?: number;
+    enableTranslation?: boolean;
+    sourceLanguage?: string;
+    environmentPreset?: string;
+    customEnvironmentDescription?: string;
+    customGlossary?: Record<string, string> | null;
+    enableStreaming?: boolean;
+  };
+  timestamp?: string;
+  isFinal?: boolean;
+  targetLanguage?: string;
+  originalText?: string;
+  isPartial?: boolean;
+  contextSummary?: string;
+  isHistory?: boolean;
+  korean?: string;
+  english?: string;
+  batchId?: string;
+}
+
+function SpeakerContent() {
   const { user, accessToken } = useAuth();
   const router = useRouter();
-  const { addToast } = useToast();
+  const toast = useToast();
   const searchParams = useSearchParams();
 
   // State management
   const [roomId, setRoomId] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [listenerCount, setListenerCount] = useState(0);
-  const [status, setStatus] = useState("준비");
+  // Status for debugging - not currently displayed in UI
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_status, setStatus] = useState("준비");
   const [audioLevel, setAudioLevel] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
   const [speakerName, setSpeakerName] = useState("");
-  const [transcripts, setTranscripts] = useState<any[]>([]);
+  const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
 
@@ -124,7 +178,7 @@ export default function Speaker() {
   });
 
   // Refs
-  const socketRef = useRef<any>(null);
+  const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const translationListRef = useRef<HTMLDivElement>(null);
 
@@ -319,7 +373,7 @@ export default function Speaker() {
       }
 
       // Rejoin specific room from URL parameter (from dashboard)
-      if (roomParam) {
+      if (roomParam && socketRef.current) {
         const name = user?.name || "Speaker";
         setSpeakerName(name);
         socketRef.current.emit("create-room", {
@@ -337,7 +391,7 @@ export default function Speaker() {
 
       // Check for saved room in localStorage
       const savedRoom = loadSavedRoom();
-      if (savedRoom && savedRoom.roomCode) {
+      if (savedRoom && savedRoom.roomCode && socketRef.current) {
         // Try to rejoin existing room
         const name = savedRoom.speakerName || user?.name || "Speaker";
         setSpeakerName(name);
@@ -373,7 +427,7 @@ export default function Speaker() {
 
       // Try to rejoin room if we have saved room info
       const savedRoom = loadSavedRoom();
-      if (savedRoom && savedRoom.roomCode && roomId) {
+      if (savedRoom && savedRoom.roomCode && roomId && socketRef.current) {
         const name = savedRoom.speakerName || user?.name || "Speaker";
         socketRef.current.emit("create-room", {
           name,
@@ -397,11 +451,11 @@ export default function Speaker() {
       alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
-    socketRef.current.on("room-created", (data: any) => {
+    socketRef.current.on("room-created", (data: SocketData) => {
       console.log("[Room] Room created:", data.roomId);
-      setRoomId(data.roomId);
-      saveRoomInfo(data.roomId, speakerName);
-      generateQRCode(data.roomId);
+      setRoomId(data.roomId || "");
+      saveRoomInfo(data.roomId || "", speakerName);
+      generateQRCode(data.roomId || "");
 
       // Update roomSettings from server response
       if (data.roomSettings) {
@@ -434,9 +488,9 @@ export default function Speaker() {
       }
     });
 
-    socketRef.current.on("room-rejoined", (data: any) => {
-      setRoomId(data.roomId);
-      generateQRCode(data.roomId);
+    socketRef.current.on("room-rejoined", (data: SocketData) => {
+      setRoomId(data.roomId || "");
+      generateQRCode(data.roomId || "");
 
       // Update roomSettings from server response
       if (data.roomSettings) {
@@ -465,12 +519,12 @@ export default function Speaker() {
       setStatus("방 재연결됨");
     });
 
-    socketRef.current.on("listener-count", (data: any) => {
-      setListenerCount(data.count);
+    socketRef.current.on("listener-count", (data: SocketData) => {
+      setListenerCount(data.count || 0);
     });
 
     // Listen for transcripts
-    socketRef.current.on("stt-text", (data: any) => {
+    socketRef.current.on("stt-text", (data: SocketData) => {
       // Log final transcripts only
       if (data.isFinal !== false) {
         console.log(`[Frontend] ✅ Received: "${data.text}"`);
@@ -506,10 +560,10 @@ export default function Speaker() {
     });
 
     // Listen for translation-text (new system)
-    socketRef.current.on("translation-text", (data: any) => {
+    socketRef.current.on("translation-text", (data: SocketData) => {
       console.log(`[Frontend] 🌐 Translation received:`, {
         language: data.targetLanguage,
-        text: data.text.substring(0, 50) + '...',
+        text: (data.text || '').substring(0, 50) + '...',
         isPartial: data.isPartial,
         isHistory: data.isHistory
       });
@@ -556,14 +610,14 @@ export default function Speaker() {
     });
 
     // Keep old translation-batch for backwards compatibility
-    socketRef.current.on("translation-batch", (data: any) => {
+    socketRef.current.on("translation-batch", (data: SocketData) => {
       setTranscripts((prev) => {
         // Don't split into sentences - keep as a single batch for better readability
-        const newTranscript = {
+        const newTranscript: Transcript = {
           type: "translation",
           korean: data.korean,
           english: data.english,
-          translations: data.translations || { en: data.english },
+          translations: data.translations || (data.english ? { en: data.english } : {}),
           timestamp: data.timestamp,
           isHistory: data.isHistory || false,
           batchId: data.batchId,
@@ -578,9 +632,9 @@ export default function Speaker() {
       });
     });
 
-    socketRef.current.on("error", (data: any) => {
+    socketRef.current.on("error", (data: SocketData) => {
       console.error("Socket error:", data);
-      setStatus(`오류: ${data.message}`);
+      setStatus(`오류: ${data.message || 'Unknown error'}`);
     });
 
     return () => {
@@ -589,6 +643,7 @@ export default function Speaker() {
         socketRef.current.disconnect();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loadSavedRoom, saveRoomInfo, generateQRCode, splitIntoSentences]);
 
   // Start recording
@@ -669,8 +724,8 @@ export default function Speaker() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    if (addToast) {
-      addToast("녹음 파일이 다운로드되었습니다", "success");
+    if (toast) {
+      toast.success("녹음 파일이 다운로드되었습니다");
     }
   };
 
@@ -1474,6 +1529,7 @@ export default function Speaker() {
             <div className={styles.qrFullscreen}>
               <h1>{roomSettings.roomTitle || "번역 세션"}</h1>
               <p className={styles.roomCodeLarge}>{roomId}</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrCodeUrl} alt="Room QR Code" />
               <p className={styles.instruction}>
                 QR 코드를 스캔하여 세션에 참여하세요
@@ -1486,5 +1542,13 @@ export default function Speaker() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function Speaker() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SpeakerContent />
+    </Suspense>
   );
 }

@@ -156,6 +156,7 @@ function ListenerContent() {
         socketRef.current.disconnect();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlRoom]);
 
   // Join room

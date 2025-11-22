@@ -8,7 +8,6 @@ import io from "socket.io-client";
 import styles from "./listener.module.css";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
-const STORAGE_KEY = "listener_preferences";
 
 const LANGUAGE_MAP: Record<string, string> = {
   ko: "한국어",
@@ -28,11 +27,52 @@ const LANGUAGE_MAP: Record<string, string> = {
   hi: "हिन्दी",
 };
 
+interface Transcript {
+  type?: string;
+  text?: string;
+  translations?: Record<string, string>;
+  timestamp?: string;
+  isFinal?: boolean;
+  targetLanguage?: string;
+  originalText?: string;
+  isPartial?: boolean;
+  isHistory?: boolean;
+  korean?: string;
+  english?: string;
+  batchId?: string;
+}
+
+interface SocketData {
+  roomId?: string;
+  message?: string;
+  speakerName?: string;
+  sessionTitle?: string;
+  availableLanguages?: string[];
+  transcripts?: Transcript[];
+  text?: string;
+  timestamp?: string;
+  isFinal?: boolean;
+  targetLanguage?: string;
+  originalText?: string;
+  isPartial?: boolean;
+  contextSummary?: string;
+  isHistory?: boolean;
+  korean?: string;
+  english?: string;
+  translations?: Record<string, string>;
+  batchId?: string;
+  roomSettings?: {
+    roomTitle?: string;
+    targetLanguagesArray?: string[];
+    targetLanguages?: string | string[];
+  };
+}
+
 export default function ListenerRoom() {
   const params = useParams();
   const router = useRouter();
   const { user, accessToken } = useAuth();
-  const { addToast } = useToast();
+  const toast = useToast();
 
   const roomCode = (params.roomCode as string)?.toUpperCase();
 
@@ -40,7 +80,7 @@ export default function ListenerRoom() {
   const [isJoined, setIsJoined] = useState(false);
   const [speakerName, setSpeakerName] = useState("");
   const [sessionTitle, setSessionTitle] = useState("");
-  const [transcripts, setTranscripts] = useState<any[]>([]);
+  const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [fontSize, setFontSize] = useState("medium");
@@ -52,7 +92,7 @@ export default function ListenerRoom() {
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  const socketRef = useRef<any>(null);
+  const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   // Format timestamp
@@ -137,8 +177,8 @@ export default function ListenerRoom() {
       setIsConnected(true);
 
       // Rejoin room after reconnection
-      if (isJoined) {
-        const name = listenerName || user?.name || "Guest";
+      if (isJoined && socketRef.current) {
+        const name = user?.name || "Guest";
         socketRef.current.emit("join-room", {
           roomId: roomCode,
           name,
@@ -155,18 +195,18 @@ export default function ListenerRoom() {
       alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
-    socketRef.current.on("password-required", (data: any) => {
+    socketRef.current.on("password-required", (data: SocketData) => {
       console.log("Password required for room:", data?.roomId || roomCode);
       setNeedsPassword(true);
       setPasswordError(""); // Clear any previous errors
     });
 
-    socketRef.current.on("room-joined", (data: any) => {
+    socketRef.current.on("room-joined", (data: SocketData) => {
       console.log("✅ Room joined successfully:", data);
-      setSpeakerName(data.speakerName);
+      setSpeakerName(data.speakerName || "");
 
       // Set session title (use roomTitle if available, otherwise use speakerName)
-      const title = data.roomSettings?.roomTitle || `${data.speakerName}의 세션`;
+      const title = data.roomSettings?.roomTitle || `${data.speakerName || 'Speaker'}의 세션`;
       setSessionTitle(title);
 
       setIsJoined(true);
@@ -198,7 +238,7 @@ export default function ListenerRoom() {
     });
 
     // Listen for STT text - ULTRA SIMPLE
-    socketRef.current.on("stt-text", (data: any) => {
+    socketRef.current.on("stt-text", (data: SocketData) => {
       setTranscripts((prev) => {
         const newTranscript = {
           type: "stt",
@@ -229,10 +269,10 @@ export default function ListenerRoom() {
     });
 
     // Listen for translation-text (new system)
-    socketRef.current.on("translation-text", (data: any) => {
+    socketRef.current.on("translation-text", (data: SocketData) => {
       console.log(`[Listener] 🌐 Translation received:`, {
         language: data.targetLanguage,
-        text: data.text.substring(0, 50) + '...',
+        text: (data.text || '').substring(0, 50) + '...',
         isPartial: data.isPartial,
         isHistory: data.isHistory
       });
@@ -279,13 +319,13 @@ export default function ListenerRoom() {
     });
 
     // Keep old translation-batch for backwards compatibility
-    socketRef.current.on("translation-batch", (data: any) => {
+    socketRef.current.on("translation-batch", (data: SocketData) => {
       // Don't split into sentences - keep as a single batch for better readability
-      const newTranscript = {
+      const newTranscript: Transcript = {
         type: "translation",
         korean: data.korean,
         english: data.english,
-        translations: data.translations || { en: data.english },
+        translations: data.translations || (data.english ? { en: data.english } : {}),
         timestamp: data.timestamp,
         isHistory: data.isHistory || false,
         batchId: data.batchId
@@ -294,7 +334,7 @@ export default function ListenerRoom() {
       setTranscripts((prev) => [...prev.slice(-99), newTranscript]);
     });
 
-    socketRef.current.on("error", (data: any) => {
+    socketRef.current.on("error", (data: SocketData) => {
       console.error("❌ Socket error:", data);
       if (data.message === "Incorrect password") {
         console.log("🔒 Incorrect password entered");
@@ -315,6 +355,7 @@ export default function ListenerRoom() {
         socketRef.current.disconnect();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, router, splitIntoSentences]);
 
   // Join room
@@ -329,11 +370,13 @@ export default function ListenerRoom() {
         hasPassword: !!finalPassword
       });
 
-      socketRef.current.emit("join-room", {
-        roomId: roomCode,
-        name,
-        password: finalPassword,
-      });
+      if (socketRef.current) {
+        socketRef.current.emit("join-room", {
+          roomId: roomCode,
+          name,
+          password: finalPassword,
+        });
+      }
     },
     [roomCode, user, password]
   );
@@ -371,18 +414,18 @@ export default function ListenerRoom() {
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      addToast('로그인이 필요합니다', 'error');
+      toast.error('로그인이 필요합니다');
       router.push('/login');
       return;
     }
 
     if (!roomCode) {
-      addToast('저장할 세션이 없습니다', 'error');
+      toast.error('저장할 세션이 없습니다');
       return;
     }
 
     if (transcripts.length === 0) {
-      addToast('저장할 번역 내용이 없습니다', 'error');
+      toast.error('저장할 번역 내용이 없습니다');
       return;
     }
 
@@ -404,13 +447,13 @@ export default function ListenerRoom() {
 
       const data = await response.json();
       if (data.success) {
-        addToast('세션이 저장되었습니다', 'success');
+        toast.success('세션이 저장되었습니다');
       } else {
-        addToast(data.message || '저장에 실패했습니다', 'error');
+        toast.error(data.message || '저장에 실패했습니다');
       }
     } catch (error) {
       console.error('Save recording error:', error);
-      addToast('저장 중 오류가 발생했습니다', 'error');
+      toast.error('저장 중 오류가 발생했습니다');
     }
   };
 
@@ -421,7 +464,8 @@ export default function ListenerRoom() {
 
     transcripts.forEach((item) => {
       if (item.type === "translation") {
-        data += `[${formatTime(item.timestamp)}]\n`;
+        const timestamp = item.timestamp ? (typeof item.timestamp === 'string' ? parseInt(item.timestamp) : item.timestamp) : Date.now();
+        data += `[${formatTime(timestamp)}]\n`;
 
         // New translation-text format
         if (item.targetLanguage) {
@@ -649,7 +693,7 @@ export default function ListenerRoom() {
                   <div key={index} className={styles.transcriptCard}>
                     {item.type === "translation" ? (
                       <>
-                        <div className={styles.timestamp}>{formatTime(item.timestamp)}</div>
+                        <div className={styles.timestamp}>{formatTime(item.timestamp ? (typeof item.timestamp === 'string' ? parseInt(item.timestamp) : item.timestamp) : Date.now())}</div>
                         {/* New translation-text format */}
                         {item.targetLanguage ? (
                           <>

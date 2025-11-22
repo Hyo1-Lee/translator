@@ -64,6 +64,7 @@ export default function RecordingDetailPage() {
     if (user && accessToken && params.id) {
       fetchRecording();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, accessToken, params.id]);
 
   const fetchRecording = async () => {
@@ -133,7 +134,7 @@ export default function RecordingDetailPage() {
       content += `Duration: ${formatDuration(recording.duration)}\n\n`;
       content += `=== Transcripts ===\n\n`;
 
-      recording.transcripts.forEach((t, index) => {
+      recording.transcripts.forEach((t) => {
         const timestamp = formatTimestamp(t.timestamp - recording.transcripts[0].timestamp);
         content += `[${timestamp}]\n`;
         content += `Korean: ${t.korean}\n`;

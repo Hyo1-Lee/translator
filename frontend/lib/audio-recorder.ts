@@ -4,7 +4,7 @@
  * Handles microphone access, audio processing, and streaming
  */
 
-import { processAudioChunk, AudioProcessConfig, DEFAULT_AUDIO_CONFIG, calculateRMS } from "./audio-utils";
+import { processAudioChunk, AudioProcessConfig, DEFAULT_AUDIO_CONFIG } from "./audio-utils";
 
 export interface AudioRecorderConfig {
   audioProcessConfig?: AudioProcessConfig;
@@ -52,13 +52,10 @@ export class AudioRecorder {
         audio: {
           channelCount: 1,
           sampleRate: 24000,
-          sampleSize: 16,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          latency: 0.01,
-          volume: 1.0,
-        } as any,
+        },
       });
 
       console.log("[AudioRecorder] ✅ Microphone access granted");
@@ -162,7 +159,11 @@ export class AudioRecorder {
   private async setupAudioProcessing(): Promise<void> {
     if (!this.stream) return;
 
-    this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) {
+      throw new Error("AudioContext not supported");
+    }
+    this.audioContext = new AudioContextConstructor();
     const source = this.audioContext.createMediaStreamSource(this.stream);
 
     // Analyser for audio level meter

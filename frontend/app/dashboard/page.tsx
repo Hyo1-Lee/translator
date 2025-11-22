@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useI18n } from "@/contexts/I18nContext";
@@ -18,6 +18,7 @@ interface Room {
   createdAt: string;
   endedAt: string | null;
   roomSettings: {
+    roomTitle?: string;
     targetLanguages: string;
     promptTemplate: string;
   } | null;
@@ -25,13 +26,6 @@ interface Room {
     listeners: number;
     transcripts: number;
   };
-}
-
-interface Stats {
-  totalRooms: number;
-  activeRooms: number;
-  totalTranscripts: number;
-  totalListeners: number;
 }
 
 interface SavedTranscript {
@@ -47,26 +41,13 @@ export default function Dashboard() {
   const { t } = useI18n();
 
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [savedTranscripts, setSavedTranscripts] = useState<SavedTranscript[]>(
     []
   );
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"rooms" | "transcripts">("rooms");
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push("/login");
-    }
-  }, [user, authLoading, router]);
-
-  useEffect(() => {
-    if (user && accessToken) {
-      fetchDashboardData();
-    }
-  }, [user, accessToken]);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -95,11 +76,11 @@ export default function Dashboard() {
         }
       }
 
+      // Stats endpoint available but not used in UI yet
       if (statsRes.ok) {
         const data = await statsRes.json();
-        if (data.success) {
-          setStats(data.data);
-        }
+        // Future: Display stats in dashboard
+        console.log('Dashboard stats:', data.data);
       }
 
       if (transcriptsRes.ok) {
@@ -113,7 +94,19 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user && accessToken) {
+      fetchDashboardData();
+    }
+  }, [user, accessToken, fetchDashboardData]);
 
   const deleteRoom = async (roomId: string) => {
     if (
@@ -210,7 +203,7 @@ export default function Dashboard() {
       content += `Total Transcripts: ${transcriptsData.length}\n`;
       content += "=".repeat(80) + "\n\n";
 
-      transcriptsData.forEach((item: any, index: number) => {
+      transcriptsData.forEach((item: { timestamp: string; korean: string; english: string }, index: number) => {
         const timestamp = new Date(item.timestamp).toLocaleString("ko-KR");
         content += `[${index + 1}] ${timestamp}\n`;
         content += `KR: ${item.korean}\n`;
