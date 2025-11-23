@@ -23,21 +23,44 @@ module.exports = {
         DB_PORT: process.env.DB_PORT,
         DB_NAME: process.env.DB_NAME,
         DB_USER: process.env.DB_USER,
-        DB_PASSWORD: process.env.DB_PASS,
+        DB_PASSWORD: process.env.DB_PASSWORD,
 
         // Frontend
         FRONTEND_URL: process.env.FRONTEND_URL,
         ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
 
-        // API Keys
+        // Groq API (LDS Church Translation)
+        GROQ_API_KEY: process.env.GROQ_API_KEY,
+        GROQ_MODEL: process.env.GROQ_MODEL,
+
+        // Translation Provider
+        TRANSLATION_PROVIDER: process.env.TRANSLATION_PROVIDER,
+        ENABLE_SMART_BATCH: process.env.ENABLE_SMART_BATCH,
+        BATCH_SIZE: process.env.BATCH_SIZE,
+
+        // OpenAI API (Fallback)
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+        OPENAI_MODEL: process.env.OPENAI_MODEL,
+
+        // Google Translate API
+        GOOGLE_TRANSLATE_API_KEY: process.env.GOOGLE_TRANSLATE_API_KEY,
+
+        // STT Configuration
+        STT_PROVIDER: process.env.STT_PROVIDER,
+        STT_PROMPT_TEMPLATE: process.env.STT_PROMPT_TEMPLATE,
+
+        // Deepgram STT
+        DEEPGRAM_API_KEY: process.env.DEEPGRAM_API_KEY,
+        DEEPGRAM_MODEL: process.env.DEEPGRAM_MODEL,
+        DEEPGRAM_LANGUAGE: process.env.DEEPGRAM_LANGUAGE,
+        DEEPGRAM_SMART_FORMAT: process.env.DEEPGRAM_SMART_FORMAT,
+        DEEPGRAM_PUNCTUATE: process.env.DEEPGRAM_PUNCTUATE,
+        DEEPGRAM_DIARIZE: process.env.DEEPGRAM_DIARIZE,
+
+        // ReturnZero STT (Legacy)
         RTZR_CLIENT_ID: process.env.RTZR_CLIENT_ID,
         RTZR_CLIENT_SECRET: process.env.RTZR_CLIENT_SECRET,
         RTZR_API_URL: process.env.RTZR_API_URL,
-
-        // STT
-        STT_PROVIDER: process.env.STT_PROVIDER,
-        STT_PROMPT_TEMPLATE: process.env.STT_PROMPT_TEMPLATE,
 
         // JWT
         JWT_SECRET: process.env.JWT_SECRET,
