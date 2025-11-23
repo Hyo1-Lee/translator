@@ -54,7 +54,9 @@ export class TranslationManager {
 
   // 문장 병합 버퍼 (종결 부호 없는 조각들을 모음)
   private sentenceMergeBuffer: Array<{ text: string; confidence?: number }> = [];
+  private sentenceMergeBufferTimer: NodeJS.Timeout | null = null;  // 버퍼 플러시 타이머
   private readonly SENTENCE_ENDINGS = /[.!?。！？]$/; // 문장 종결 부호
+  private readonly BUFFER_FLUSH_TIMEOUT_MS = 1500; // 버퍼 플러시 대기 시간 (1.5초)
 
   // 최대 대기 시간 추적 (타이머 무한 리셋 방지)
   private firstQueueItemTime: number | null = null;
@@ -99,6 +101,12 @@ export class TranslationManager {
 
         // 버퍼 비우기
         this.sentenceMergeBuffer = [];
+
+        // 버퍼 플러시 타이머 취소 (완전한 문장이 완성되었으므로)
+        if (this.sentenceMergeBufferTimer) {
+          clearTimeout(this.sentenceMergeBufferTimer);
+          this.sentenceMergeBufferTimer = null;
+        }
       }
 
       // 컨텍스트 버퍼 업데이트 (완전한 문장만)
@@ -121,19 +129,58 @@ export class TranslationManager {
       console.log(`[TranslationManager][${this.config.roomId}] 📎 Incomplete fragment, buffering: "${text.substring(0, 50)}..."`);
       this.sentenceMergeBuffer.push({ text, confidence });
 
-      // 버퍼가 너무 커지면 (5개 이상) 강제로 처리
+      // 버퍼 플러시 타이머 시작/리셋 (마지막 문장 처리를 위해!)
+      this.scheduleBufferFlush();
+
+      // 버퍼가 너무 커지면 (5개 이상) 즉시 강제로 처리
       if (this.sentenceMergeBuffer.length >= 5) {
         console.log(`[TranslationManager][${this.config.roomId}] ⚠️  Buffer overflow (${this.sentenceMergeBuffer.length} fragments), forcing merge`);
-
-        const forcedSentence = this.sentenceMergeBuffer.map(p => p.text).join(' ');
-        const confidences = this.sentenceMergeBuffer.filter(p => p.confidence !== undefined).map(p => p.confidence!);
-        const avgConfidence = confidences.length > 0 ? confidences.reduce((a, b) => a + b, 0) / confidences.length : undefined;
-
-        this.updateContext(forcedSentence);
-        this.translationQueue.push({ text: forcedSentence, confidence: avgConfidence });
-        this.sentenceMergeBuffer = [];
+        this.flushSentenceMergeBuffer();
         this.scheduleBatchProcessing(false);
       }
+    }
+  }
+
+  /**
+   * sentenceMergeBuffer 플러시 스케줄링
+   * 불완전한 문장 조각이 일정 시간 동안 완성되지 않으면 강제로 번역 큐에 추가
+   */
+  private scheduleBufferFlush(): void {
+    // 기존 타이머 취소
+    if (this.sentenceMergeBufferTimer) {
+      clearTimeout(this.sentenceMergeBufferTimer);
+    }
+
+    // 새로운 타이머 시작 (1.5초 후 플러시)
+    this.sentenceMergeBufferTimer = setTimeout(() => {
+      if (this.sentenceMergeBuffer.length > 0) {
+        console.log(`[TranslationManager][${this.config.roomId}] ⏰ Buffer flush timeout - processing ${this.sentenceMergeBuffer.length} incomplete fragments`);
+        this.flushSentenceMergeBuffer();
+        this.scheduleBatchProcessing(false);
+      }
+    }, this.BUFFER_FLUSH_TIMEOUT_MS);
+  }
+
+  /**
+   * sentenceMergeBuffer의 조각들을 번역 큐에 추가
+   */
+  private flushSentenceMergeBuffer(): void {
+    if (this.sentenceMergeBuffer.length === 0) return;
+
+    const forcedSentence = this.sentenceMergeBuffer.map(p => p.text).join(' ');
+    const confidences = this.sentenceMergeBuffer.filter(p => p.confidence !== undefined).map(p => p.confidence!);
+    const avgConfidence = confidences.length > 0 ? confidences.reduce((a, b) => a + b, 0) / confidences.length : undefined;
+
+    console.log(`[TranslationManager][${this.config.roomId}] 🔗 Flushing ${this.sentenceMergeBuffer.length} fragments: "${forcedSentence.substring(0, 80)}..."`);
+
+    this.updateContext(forcedSentence);
+    this.translationQueue.push({ text: forcedSentence, confidence: avgConfidence });
+    this.sentenceMergeBuffer = [];
+
+    // 타이머 정리
+    if (this.sentenceMergeBufferTimer) {
+      clearTimeout(this.sentenceMergeBufferTimer);
+      this.sentenceMergeBufferTimer = null;
     }
   }
 
@@ -521,22 +568,23 @@ export class TranslationManager {
     // 버퍼에 남아있는 조각들 강제 처리
     if (this.sentenceMergeBuffer.length > 0) {
       console.log(`[TranslationManager][${this.config.roomId}] 📦 Flushing ${this.sentenceMergeBuffer.length} remaining fragments`);
-      const finalSentence = this.sentenceMergeBuffer.map(p => p.text).join(' ');
-      const confidences = this.sentenceMergeBuffer.filter(p => p.confidence !== undefined).map(p => p.confidence!);
-      const avgConfidence = confidences.length > 0 ? confidences.reduce((a, b) => a + b, 0) / confidences.length : undefined;
-
-      this.translationQueue.push({ text: finalSentence, confidence: avgConfidence });
-      this.sentenceMergeBuffer = [];
+      this.flushSentenceMergeBuffer();
 
       // 즉시 처리
-      if (!this.isProcessing) {
+      if (!this.isProcessing && this.translationQueue.length > 0) {
         this.processTranslationBatch();
       }
     }
 
+    // 모든 타이머 정리
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;
+    }
+
+    if (this.sentenceMergeBufferTimer) {
+      clearTimeout(this.sentenceMergeBufferTimer);
+      this.sentenceMergeBufferTimer = null;
     }
 
     this.contextBuffer = [];
