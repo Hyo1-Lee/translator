@@ -178,7 +178,7 @@ function SpeakerContent() {
   });
 
   // Refs
-  const socketRef = useRef<ReturnType<typeof io> | null>(null);
+  const socketRef = useRef<(ReturnType<typeof io> & { __resumeRecording?: boolean }) | null>(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const translationListRef = useRef<HTMLDivElement>(null);
 
@@ -403,6 +403,8 @@ function SpeakerContent() {
           targetLanguages: ["en"],
           maxListeners: 100,
         });
+        // Don't show settings modal when rejoining
+        setShowSettingsModal(false);
       } else {
         // Show settings modal for new room
         setShowSettingsModal(true);
@@ -425,6 +427,15 @@ function SpeakerContent() {
       setIsConnected(true);
       setStatus("재연결됨");
 
+      // Stop recording temporarily to prevent unauthorized audio stream
+      const wasRecording = isRecording;
+      if (wasRecording) {
+        console.log("[Reconnect] ⏸️  Pausing recording during reconnection...");
+        audioRecorderRef.current?.stop();
+        setIsRecording(false);
+        setAudioLevel(0);
+      }
+
       // Try to rejoin room if we have saved room info
       const savedRoom = loadSavedRoom();
       if (savedRoom && savedRoom.roomCode && roomId && socketRef.current) {
@@ -437,6 +448,15 @@ function SpeakerContent() {
           targetLanguages: ["en"],
           maxListeners: 100,
         });
+
+        // Resume recording after room is re-established
+        if (wasRecording) {
+          console.log("[Reconnect] ▶️  Will resume recording after room-created...");
+          // Set a flag or use state to resume recording
+          if (socketRef.current) {
+            socketRef.current.__resumeRecording = true;
+          }
+        }
       }
     });
 
@@ -486,10 +506,21 @@ function SpeakerContent() {
       } else {
         setStatus("방 생성됨");
       }
+
+      // Resume recording if needed (after reconnection)
+      if (socketRef.current && socketRef.current.__resumeRecording) {
+        console.log("[Reconnect] ▶️  Resuming recording...");
+        socketRef.current.__resumeRecording = false;
+        // Wait a bit for socket to stabilize
+        setTimeout(() => {
+          startRecording();
+        }, 500);
+      }
     });
 
     socketRef.current.on("room-rejoined", (data: SocketData) => {
       setRoomId(data.roomId || "");
+      saveRoomInfo(data.roomId || "", speakerName);  // Save to localStorage
       generateQRCode(data.roomId || "");
 
       // Update roomSettings from server response
@@ -517,6 +548,16 @@ function SpeakerContent() {
       }
 
       setStatus("방 재연결됨");
+
+      // Resume recording if needed (after reconnection)
+      if (socketRef.current && socketRef.current.__resumeRecording) {
+        console.log("[Reconnect] ▶️  Resuming recording...");
+        socketRef.current.__resumeRecording = false;
+        // Wait a bit for socket to stabilize
+        setTimeout(() => {
+          startRecording();
+        }, 500);
+      }
     });
 
     socketRef.current.on("listener-count", (data: SocketData) => {

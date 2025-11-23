@@ -566,7 +566,13 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 2rem;
+  padding: 1rem;  /* Reduced from 2rem for mobile */
+}
+
+@media (min-width: 768px) {
+  .modalOverlay {
+    padding: 2rem;
+  }
 }
 
 .modal {
@@ -944,7 +950,33 @@
   }
 
   .modal {
-    padding: 1.5rem;
+    max-height: 95vh;  /* Increased from 90vh for more space */
+    border-radius: 1rem;  /* Smaller radius on mobile */
+  }
+
+  .modalHeader {
+    padding: 1.25rem 1.5rem 1rem;  /* Reduced padding on mobile */
+  }
+
+  .modalHeader h2 {
+    font-size: 1.375rem;  /* Smaller title on mobile */
+  }
+
+  .modalBody {
+    padding: 1.25rem 1.5rem;  /* Reduced padding on mobile */
+  }
+
+  .closeModalButton {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .settingGroup {
+    margin-bottom: 1.25rem;  /* Slightly reduced spacing on mobile */
+  }
+
+  .languageGrid {
+    grid-template-columns: 1fr;  /* Single column on small screens */
   }
 }
 
