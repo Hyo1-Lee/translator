@@ -5,6 +5,8 @@ import { RoomSettings } from '../../models/RoomSettings';
 import { Transcript } from '../../models/Transcript';
 import { Listener } from '../../models/Listener';
 import { SavedTranscript } from '../../models/SavedTranscript';
+import { SttText } from '../../models/SttText';
+import { TranslationText } from '../../models/TranslationText';
 
 export async function dashboardRoutes(fastify: FastifyInstance) {
   const authService = new AuthService();
@@ -189,10 +191,14 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Delete room (cascade will delete related data)
-      await Room.destroy({
-        where: { id: roomId },
-      });
+      // Delete room and related data in correct order to avoid foreign key constraint errors
+      // Order: TranslationText -> SttText -> Listener -> Transcript -> RoomSettings -> Room
+      await TranslationText.destroy({ where: { roomId } });
+      await SttText.destroy({ where: { roomId } });
+      await Listener.destroy({ where: { roomId } });
+      await Transcript.destroy({ where: { roomId } });
+      await RoomSettings.destroy({ where: { roomId } });
+      await Room.destroy({ where: { id: roomId } });
 
       return reply.send({
         success: true,
