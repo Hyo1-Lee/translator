@@ -53,3 +53,4 @@
   - OpenAI Realtime: backend/src/modules/stt/openai-realtime-client.ts
   - OpenAI Whisper: backend/src/modules/stt/openai-whisper-client.ts
   - 프롬프트 템플릿: backend/src/modules/stt/prompts/prompt-templates.ts
+  dd
