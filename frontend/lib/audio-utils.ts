@@ -12,8 +12,8 @@ export interface AudioProcessConfig {
 
 export const DEFAULT_AUDIO_CONFIG: AudioProcessConfig = {
   targetSampleRate: 16000,
-  rmsThreshold: 0.001,
-  amplification: 1.5,
+  rmsThreshold: 0.0008,  // Lowered from 0.001 to capture quieter sounds
+  amplification: 2.5,     // Increased from 1.5 for better microphone sensitivity
 };
 
 /**

@@ -18,6 +18,7 @@ export class AudioRecorder {
   private audioContext: AudioContext | null = null;
   private processor: ScriptProcessorNode | null = null;
   private analyser: AnalyserNode | null = null;
+  private gainNode: GainNode | null = null;
   private animationFrameId: number | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private recordedChunks: Blob[] = [];
@@ -25,6 +26,15 @@ export class AudioRecorder {
   private config: Required<AudioRecorderConfig>;
   private isRecording = false;
   private audioChunksSent = 0;
+
+  // Dynamic gain adjustment
+  private recentAudioLevels: number[] = [];
+  private readonly AUDIO_LEVEL_HISTORY_SIZE = 50;  // Track last 50 measurements (~1 second)
+  private readonly MIN_GAIN = 1.0;
+  private readonly MAX_GAIN = 4.0;
+  private readonly TARGET_AUDIO_LEVEL = 30;  // Target level (0-100 scale)
+  private readonly GAIN_ADJUSTMENT_INTERVAL = 1000;  // Adjust every 1 second
+  private gainAdjustmentTimer: NodeJS.Timeout | null = null;
 
   constructor(config: AudioRecorderConfig = {}) {
     this.config = {
@@ -97,6 +107,12 @@ export class AudioRecorder {
       this.animationFrameId = null;
     }
 
+    // Stop dynamic gain adjustment
+    if (this.gainAdjustmentTimer) {
+      clearInterval(this.gainAdjustmentTimer);
+      this.gainAdjustmentTimer = null;
+    }
+
     // Stop MediaRecorder
     if (this.mediaRecorder?.state !== "inactive") {
       this.mediaRecorder?.stop();
@@ -104,6 +120,8 @@ export class AudioRecorder {
     this.mediaRecorder = null;
 
     // Disconnect audio nodes
+    this.gainNode?.disconnect();
+    this.gainNode = null;
     this.processor?.disconnect();
     this.processor = null;
     this.analyser?.disconnect();
@@ -116,6 +134,9 @@ export class AudioRecorder {
     // Stop media stream
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
+
+    // Clear audio level history
+    this.recentAudioLevels = [];
 
     console.log("[AudioRecorder] ✅ Stopped");
   }
@@ -166,10 +187,15 @@ export class AudioRecorder {
     this.audioContext = new AudioContextConstructor();
     const source = this.audioContext.createMediaStreamSource(this.stream);
 
+    // GainNode for dynamic volume adjustment
+    this.gainNode = this.audioContext.createGain();
+    this.gainNode.gain.value = 2.0;  // Start with moderate gain
+    source.connect(this.gainNode);
+
     // Analyser for audio level meter
     this.analyser = this.audioContext.createAnalyser();
     this.analyser.fftSize = 256;
-    source.connect(this.analyser);
+    this.gainNode.connect(this.analyser);
 
     // ScriptProcessor for audio processing
     this.processor = this.audioContext.createScriptProcessor(2048, 1, 1);
@@ -195,6 +221,9 @@ export class AudioRecorder {
 
     this.analyser.connect(this.processor);
     this.processor.connect(this.audioContext.destination);
+
+    // Start dynamic gain adjustment
+    this.startDynamicGainAdjustment();
   }
 
   /**
@@ -217,9 +246,49 @@ export class AudioRecorder {
       const level = Math.min(100, Math.round(rms * 500));
       this.config.onAudioLevel(level);
 
+      // Track audio levels for dynamic gain adjustment
+      this.recentAudioLevels.push(level);
+      if (this.recentAudioLevels.length > this.AUDIO_LEVEL_HISTORY_SIZE) {
+        this.recentAudioLevels.shift();
+      }
+
       this.animationFrameId = requestAnimationFrame(updateAudioLevel);
     };
 
     updateAudioLevel();
+  }
+
+  /**
+   * Start dynamic gain adjustment based on audio levels
+   */
+  private startDynamicGainAdjustment(): void {
+    this.gainAdjustmentTimer = setInterval(() => {
+      if (!this.gainNode || this.recentAudioLevels.length < 10) return;
+
+      // Calculate average audio level
+      const avgLevel = this.recentAudioLevels.reduce((sum, level) => sum + level, 0) / this.recentAudioLevels.length;
+
+      // Current gain
+      const currentGain = this.gainNode.gain.value;
+
+      // Adjust gain based on average level
+      let newGain = currentGain;
+
+      if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.5) {
+        // Audio is too quiet, increase gain
+        newGain = Math.min(this.MAX_GAIN, currentGain * 1.1);
+        console.log(`[AudioRecorder] 🔊 Audio too quiet (${avgLevel.toFixed(1)}), increasing gain: ${currentGain.toFixed(2)} → ${newGain.toFixed(2)}`);
+      } else if (avgLevel > this.TARGET_AUDIO_LEVEL * 2.0) {
+        // Audio is too loud, decrease gain
+        newGain = Math.max(this.MIN_GAIN, currentGain * 0.9);
+        console.log(`[AudioRecorder] 🔉 Audio too loud (${avgLevel.toFixed(1)}), decreasing gain: ${currentGain.toFixed(2)} → ${newGain.toFixed(2)}`);
+      }
+
+      // Apply new gain smoothly
+      if (newGain !== currentGain) {
+        this.gainNode.gain.setValueAtTime(currentGain, this.audioContext!.currentTime);
+        this.gainNode.gain.linearRampToValueAtTime(newGain, this.audioContext!.currentTime + 0.5);
+      }
+    }, this.GAIN_ADJUSTMENT_INTERVAL);
   }
 }

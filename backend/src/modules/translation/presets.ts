@@ -269,41 +269,61 @@ export function buildTranslationPrompt(
 
 🏛️ YOUR EXPERTISE: You deeply understand LDS doctrine, scriptures (Book of Mormon, D&C, Pearl of Great Price), prophets (Joseph Smith to Russell M. Nelson), and sacred terminology (Atonement, priesthood, temple, sacrament).
 
-⚠️ CRITICAL: STT constantly errors LDS names/terms. Fix them aggressively using LDS context.
+⚠️ CRITICAL: STT constantly errors LDS names/terms. Fix them using LDS context when you are CERTAIN.
 
 ${Object.keys(glossary).length > 0 ? `🔑 KEY TERMS:\n${formatGlossary(glossary)}\n` : ''}
 
-🚨 COMMON STT ERRORS - FIX INSTANTLY:
+🚨 COMMON STT ERRORS - FIX ONLY IF CERTAIN:
 - "주작/조섭 스미스" → "Joseph Smith" (founder)
 - "앨몬/엘마" → "Alma" (prophet)
 - "몰멍평/몰몸경" → "Book of Mormon"
 - "고주/구주" → "Savior"
 - "성심" → "Holy Ghost" (NOT "heart")
 - "성전" → "temple" (NOT "castle")
-- ANY garbled prophet/scripture → Use LDS knowledge to fix
+
+⚡ CRITICAL OUTPUT RULES:
+1. NEVER add explanations, notes, or commentary in parentheses like "(Note: ...)"
+2. NEVER add meta-text about translation choices
+3. If uncertain about STT correction, translate the text as-is without inferring missing information
+4. Output ONLY the direct translation, nothing else
+5. Do NOT explain why you made certain translation choices
 
 📖 PROCESS:
 1. Read as LDS member
-2. Identify STT errors using LDS context
-3. Fix using glossary + doctrine
-4. Translate naturally (${tone})
-5. Output ONLY translation
+2. Identify OBVIOUS STT errors using LDS context
+3. Fix ONLY if you are 100% certain (e.g., "구주" is clearly "Savior")
+4. If uncertain or name is too garbled, translate literally without guessing
+5. Translate naturally (${tone})
+6. Output ONLY translation - NO notes, NO explanations
 
-🎯 EXAMPLES:
+🎯 GOOD EXAMPLES:
 
-"선지자주작스미스" → "prophet Joseph Smith" ✅ (NOT "Zechariah" ❌)
-"몰멍평의앨몬이" → "Alma in the Book of Mormon" ✅
+Input: "선지자주작스미스"
+Output: "prophet Joseph Smith" ✅
 
-💡 RULE: If garbled + religious → Use LDS context. Never translate literally. Fix first, then translate.
+Input: "몰멍평의앨몬이"
+Output: "Alma in the Book of Mormon" ✅
+
+❌ BAD EXAMPLES (DO NOT DO THIS):
+
+Input: "관원님"
+Output: "Heavenly Father (Note: 관원님 is likely a mistranslation...)" ❌ WRONG - NO NOTES!
+Correct: "Heavenly Father" ✅ (if certain) OR "Gwanwonnim" ✅ (if uncertain)
+
+💡 GOLDEN RULE:
+- Fix ONLY obvious errors (구주→Savior, 성전→temple)
+- If name/term is too garbled or uncertain → Translate literally or transliterate
+- NEVER add explanatory notes in your output
+- Output translation ONLY, nothing else
 
 CONTEXT:
 Summary: {summary}
 Recent: {recentContext}
 
-CURRENT (fix STT errors):
+CURRENT TEXT TO TRANSLATE:
 {currentText}
 
-TRANSLATION:`;
+YOUR TRANSLATION (translation only, no notes):`;
   }
 
   // 일반 프롬프트 (다른 preset들)
@@ -311,22 +331,26 @@ TRANSLATION:`;
 
 CONTEXT: ${environment}
 
-TASK: Translate the current segment, fixing STT errors and maintaining context.
+TASK: Translate the current segment, fixing ONLY obvious STT errors and maintaining context.
 
 ${Object.keys(glossary).length > 0 ? `KEY TERMS:\n${formatGlossary(glossary)}\n` : ''}
-RULES:
-1. Fix obvious STT errors using context
+CRITICAL RULES:
+1. Fix ONLY obvious STT errors using context
 2. Maintain ${tone} tone
-3. Translate concisely
-4. Output ONLY the translation, no explanations
+3. Translate concisely and faithfully to the source
+4. NEVER add explanatory notes, comments, or meta-text like "(Note: ...)"
+5. NEVER add parenthetical explanations about translation choices
+6. If uncertain about a word, translate it literally or transliterate it - DO NOT infer or guess
+7. Output ONLY the direct translation, nothing else
 
 CONTEXT:
 Summary: {summary}
 Recent: {recentContext}
 
-CURRENT: {currentText}
+CURRENT TEXT TO TRANSLATE:
+{currentText}
 
-OUTPUT: [translation only]`;
+YOUR TRANSLATION (translation only, no notes or explanations):`;
 }
 
 /**
