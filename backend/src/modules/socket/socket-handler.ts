@@ -6,6 +6,9 @@ import { TranslationService } from '../translation/translation-service';
 import { GoogleTranslateService } from '../translation/google-translate.service';
 import { TranslationManager, TranslationData } from '../translation/translation-manager';
 import { EnvironmentPreset } from '../translation/presets';
+import { sessionManager } from '../../services/session-manager';
+import { recordingStateService } from '../../services/recording-state-service';
+import { AuthenticatedSocket, attachUserIdToSocket } from '../../middleware/socket-auth';
 
 interface AudioStreamData {
   roomId: string;
@@ -39,10 +42,14 @@ export class SocketHandler {
     this.translationService = translationService;
     this.googleTranslateService = googleTranslateService;
     this.initialize();
+    // Initialize recording state service with Socket.IO instance
+    recordingStateService.setSocketIO(io);
   }
 
   private initialize(): void {
     this.io.on('connection', (socket: Socket) => {
+      // Attach userId for authentication (Phase 1)
+      attachUserIdToSocket(socket as AuthenticatedSocket);
       // Create or rejoin room (Speaker)
       socket.on('create-room', async (data) => {
         await this.handleCreateRoom(socket, data);
@@ -217,6 +224,12 @@ export class SocketHandler {
       if (room.roomSettings?.enableTranslation) {
         await this.sendTranslationHistory(socket, room.roomCode);
       }
+      // Register speaker socket for multi-device support (Phase 1)
+      await sessionManager.registerSpeakerSocket(room.id, socket.id);
+
+      // Sync current recording state to this speaker
+      await recordingStateService.syncRecordingState(room.id, socket.id);
+
 
       // Update listener count
       const listenerCount = await this.roomService.getListenerCount(room.roomCode);
@@ -288,6 +301,12 @@ export class SocketHandler {
         roomId: room.roomCode,
         roomSettings: room.roomSettings
       });
+      // Register speaker socket for multi-device support (Phase 1)
+      await sessionManager.registerSpeakerSocket(room.id, socket.id);
+
+      // Sync current recording state to this speaker
+      await recordingStateService.syncRecordingState(room.id, socket.id);
+
 
       await this.sendTranscriptHistory(socket, roomCode);
       if (room.roomSettings?.enableTranslation) {
@@ -630,7 +649,10 @@ export class SocketHandler {
         return;
       }
 
-      if (room.speakerId !== socket.id) {
+      // Verify speaker using userId (Phase 1)
+      const userId = (socket as AuthenticatedSocket).userId;
+      const isAuthorized = await sessionManager.validateSpeaker(room.id, userId || null);
+      if (!isAuthorized) {
         console.warn(`[Recording][${roomId}] ❌ Unauthorized (not speaker)`);
         return;
       }
@@ -679,6 +701,10 @@ export class SocketHandler {
           await this.createTranslationManager(roomId, room.roomSettings);
         }
       } catch (error) {
+      // Update recording state (Phase 1)
+      await recordingStateService.startRecording(room.id);
+      await sessionManager.updateHeartbeat(room.id);
+
         console.error(`[Recording][${roomId}] ❌ Failed to create STT client:`, error);
       }
 
@@ -701,10 +727,13 @@ export class SocketHandler {
       const room = await this.roomService.getRoom(roomId);
       if (!room) {
         console.warn(`[Recording][${roomId}] ❌ Room not found`);
+      // Verify speaker using userId (Phase 1)
+      const userId = (socket as AuthenticatedSocket).userId;
+      const isAuthorized = await sessionManager.validateSpeaker(room.id, userId || null);
+      if (!isAuthorized) {
+        console.warn(`[Recording][${roomId}] ❌ Unauthorized (not speaker)`);
         return;
       }
-
-      if (room.speakerId !== socket.id) {
         console.warn(`[Recording][${roomId}] ❌ Unauthorized (not speaker)`);
         return;
       }
@@ -714,6 +743,9 @@ export class SocketHandler {
       this.sttManager.removeClient(roomId);
       this.audioChunksReceived.delete(roomId);
       console.log(`[Recording][${roomId}] ✅ STT client closed`);
+      // Update recording state (Phase 1)
+      await recordingStateService.stopRecording(room.id);
+
 
     } catch (error) {
       console.error('[Recording] Stop error:', error);
@@ -862,6 +894,10 @@ export class SocketHandler {
         // Clean up STT ID cache
         this.sttIdCache.delete(speakerRoom.roomCode);
         console.log(`[Disconnect][${speakerRoom.roomCode}] 🧹 STT ID cache cleaned up`);
+
+        // Unregister speaker socket (Phase 1)
+        await sessionManager.unregisterSpeakerSocket(speakerRoom.id, socket.id);
+        console.log(`[Disconnect][${speakerRoom.roomCode}] 🧹 Speaker socket unregistered`);
       }
 
       await this.roomService.handleDisconnect(socket.id);

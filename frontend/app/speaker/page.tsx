@@ -352,6 +352,9 @@ function SpeakerContent() {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
+      auth: {
+        userId: user?.id || null,
+      },
     });
 
     socketRef.current.on("connect", () => {
@@ -408,6 +411,44 @@ function SpeakerContent() {
       } else {
         // Show settings modal for new room
         setShowSettingsModal(true);
+      }
+    });
+
+    // Recording state synchronization (Phase 1)
+    socketRef.current.on("recording-state-changed", (data: {
+      roomId: string;
+      isRecording: boolean;
+      timestamp: string;
+    }) => {
+      console.log(`[Phase1] Recording state changed: ${data.isRecording}`);
+
+      // 다른 디바이스에서 녹음 상태가 변경된 경우 UI 동기화
+      if (data.roomId === roomId) {
+        if (data.isRecording && !isRecording) {
+          // 다른 디바이스에서 녹음 시작
+          console.log("[Phase1] Another device started recording, syncing...");
+          // TODO: 필요시 녹음 시작 로직
+        } else if (!data.isRecording && isRecording) {
+          // 다른 디바이스에서 녹음 중지
+          console.log("[Phase1] Another device stopped recording, syncing...");
+          audioRecorderRef.current?.stop();
+          setIsRecording(false);
+          setAudioLevel(0);
+        }
+      }
+    });
+
+    socketRef.current.on("recording-state-synced", (data: {
+      roomId: string;
+      isRecording: boolean;
+      timestamp: string;
+    }) => {
+      console.log(`[Phase1] Recording state synced: ${data.isRecording}`);
+
+      // 재연결/새 디바이스 연결 시 현재 상태 동기화
+      if (data.isRecording && !isRecording) {
+        console.log("[Phase1] Syncing to recording state...");
+        // TODO: 필요시 UI 상태만 업데이트 (실제 녹음은 시작하지 않음)
       }
     });
 
