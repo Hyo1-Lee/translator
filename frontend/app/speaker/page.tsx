@@ -1304,6 +1304,8 @@ function SpeakerContent() {
                   }
                   className={styles.input}
                   placeholder="예: 홍길동 목사"
+                  autoComplete="off"
+                  data-form-type="other"
                 />
               </div>
 
@@ -1456,9 +1458,11 @@ function SpeakerContent() {
                     <label>번역 언어 선택</label>
                     <div className={styles.languageGrid}>
                       {TARGET_LANGUAGES.map((lang) => {
-                        // Disable source language
-                        const isDisabled =
+                        // Only allow English for now, disable others
+                        const isSourceLang =
                           lang.code === roomSettings.sourceLanguage;
+                        const isOnlyEnglishAllowed = lang.code !== "en";
+                        const isDisabled = isSourceLang || isOnlyEnglishAllowed;
                         return (
                           <label
                             key={lang.code}
@@ -1466,8 +1470,10 @@ function SpeakerContent() {
                               isDisabled ? styles.disabled : ""
                             }`}
                             title={
-                              isDisabled
+                              isSourceLang
                                 ? "출발 언어는 번역 대상에서 제외됩니다"
+                                : isOnlyEnglishAllowed
+                                ? "현재 영어만 지원됩니다"
                                 : ""
                             }
                           >
@@ -1498,10 +1504,24 @@ function SpeakerContent() {
                               }}
                             />
                             <span>{lang.name}</span>
+                            {isOnlyEnglishAllowed && (
+                              <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "0.25rem" }}>
+                                (준비중)
+                              </span>
+                            )}
                           </label>
                         );
                       })}
                     </div>
+                    <p
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "#94a3b8",
+                        marginTop: "0.5rem",
+                      }}
+                    >
+                      💡 현재 영어 번역만 지원됩니다. 다른 언어는 추후 지원 예정입니다.
+                    </p>
                   </div>
 
                   {/* Streaming */}
@@ -1569,6 +1589,8 @@ function SpeakerContent() {
                       ? "비밀번호 변경 (공백으로 두면 제거)"
                       : "비밀번호를 설정하지 않으면 누구나 입장 가능"
                   }
+                  autoComplete="new-password"
+                  data-form-type="other"
                 />
                 {roomSettings.password && (
                   <p
