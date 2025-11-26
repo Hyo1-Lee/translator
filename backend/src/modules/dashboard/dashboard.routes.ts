@@ -7,6 +7,7 @@ import { Listener } from '../../models/Listener';
 import { SavedTranscript } from '../../models/SavedTranscript';
 import { SttText } from '../../models/SttText';
 import { TranslationText } from '../../models/TranslationText';
+import { Op } from 'sequelize';
 
 export async function dashboardRoutes(fastify: FastifyInstance) {
   const authService = new AuthService();
@@ -227,13 +228,6 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
           id: roomId,
           userId,
         },
-        include: [
-          {
-            model: Transcript,
-            attributes: ['korean', 'english', 'timestamp'],
-            order: [['timestamp', 'ASC']]
-          }
-        ]
       });
 
       if (!room) {
@@ -243,12 +237,55 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Format transcripts as JSON string
-      const transcriptsData = (room as any).transcripts?.map((t: any) => ({
-        korean: t.korean,
-        english: t.english,
-        timestamp: t.timestamp
-      })) || [];
+      // Get STT texts for this room
+      const sttTexts = await SttText.findAll({
+        where: { roomId: room.id },
+        order: [['timestamp', 'ASC']]
+      });
+
+      // Get translations for this room (only final translations, not partial)
+      const translations = await TranslationText.findAll({
+        where: {
+          roomId: room.id,
+          isPartial: false
+        },
+        order: [['timestamp', 'ASC']]
+      });
+
+      // Build transcript data: group translations by originalText (STT)
+      const transcriptsData: Array<{
+        korean: string;
+        english: string;
+        translations: Record<string, string>;
+        timestamp: Date;
+      }> = [];
+
+      // Group translations by originalText
+      const translationsByOriginal = new Map<string, { translations: Record<string, string>, timestamp: Date }>();
+
+      for (const t of translations) {
+        const key = t.originalText;
+        if (!translationsByOriginal.has(key)) {
+          translationsByOriginal.set(key, { translations: {}, timestamp: t.timestamp });
+        }
+        const entry = translationsByOriginal.get(key)!;
+        entry.translations[t.targetLanguage] = t.translatedText;
+      }
+
+      // Convert to array format
+      for (const [originalText, data] of translationsByOriginal) {
+        transcriptsData.push({
+          korean: originalText,
+          english: data.translations['en'] || '',
+          translations: data.translations,
+          timestamp: data.timestamp
+        });
+      }
+
+      // Sort by timestamp
+      transcriptsData.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      console.log('[Dashboard] Saving session with', transcriptsData.length, 'transcripts from', sttTexts.length, 'STT texts and', translations.length, 'translations');
 
       const savedTranscript = await SavedTranscript.create({
         userId,

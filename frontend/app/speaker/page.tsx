@@ -178,7 +178,9 @@ function SpeakerContent() {
   });
 
   // Refs
-  const socketRef = useRef<(ReturnType<typeof io> & { __resumeRecording?: boolean }) | null>(null);
+  const socketRef = useRef<
+    (ReturnType<typeof io> & { __resumeRecording?: boolean }) | null
+  >(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const translationListRef = useRef<HTMLDivElement>(null);
 
@@ -287,7 +289,8 @@ function SpeakerContent() {
   const createRoom = useCallback(() => {
     if (!socketRef.current) return;
 
-    const name = user?.name || roomSettings.speakerName || speakerName || "Speaker";
+    const name =
+      user?.name || roomSettings.speakerName || speakerName || "Speaker";
     setSpeakerName(name);
 
     const dataToSend = {
@@ -415,42 +418,44 @@ function SpeakerContent() {
     });
 
     // Recording state synchronization (Phase 1)
-    socketRef.current.on("recording-state-changed", (data: {
-      roomId: string;
-      isRecording: boolean;
-      timestamp: string;
-    }) => {
-      console.log(`[Phase1] Recording state changed: ${data.isRecording}`);
+    socketRef.current.on(
+      "recording-state-changed",
+      (data: { roomId: string; isRecording: boolean; timestamp: string }) => {
+        console.log(`[Phase1] Recording state changed: ${data.isRecording}`);
 
-      // 다른 디바이스에서 녹음 상태가 변경된 경우 UI 동기화
-      if (data.roomId === roomId) {
-        if (data.isRecording && !isRecording) {
-          // 다른 디바이스에서 녹음 시작
-          console.log("[Phase1] Another device started recording, syncing...");
-          // TODO: 필요시 녹음 시작 로직
-        } else if (!data.isRecording && isRecording) {
-          // 다른 디바이스에서 녹음 중지
-          console.log("[Phase1] Another device stopped recording, syncing...");
-          audioRecorderRef.current?.stop();
-          setIsRecording(false);
-          setAudioLevel(0);
+        // 다른 디바이스에서 녹음 상태가 변경된 경우 UI 동기화
+        if (data.roomId === roomId) {
+          if (data.isRecording && !isRecording) {
+            // 다른 디바이스에서 녹음 시작
+            console.log(
+              "[Phase1] Another device started recording, syncing..."
+            );
+            // TODO: 필요시 녹음 시작 로직
+          } else if (!data.isRecording && isRecording) {
+            // 다른 디바이스에서 녹음 중지
+            console.log(
+              "[Phase1] Another device stopped recording, syncing..."
+            );
+            audioRecorderRef.current?.stop();
+            setIsRecording(false);
+            setAudioLevel(0);
+          }
         }
       }
-    });
+    );
 
-    socketRef.current.on("recording-state-synced", (data: {
-      roomId: string;
-      isRecording: boolean;
-      timestamp: string;
-    }) => {
-      console.log(`[Phase1] Recording state synced: ${data.isRecording}`);
+    socketRef.current.on(
+      "recording-state-synced",
+      (data: { roomId: string; isRecording: boolean; timestamp: string }) => {
+        console.log(`[Phase1] Recording state synced: ${data.isRecording}`);
 
-      // 재연결/새 디바이스 연결 시 현재 상태 동기화
-      if (data.isRecording && !isRecording) {
-        console.log("[Phase1] Syncing to recording state...");
-        // TODO: 필요시 UI 상태만 업데이트 (실제 녹음은 시작하지 않음)
+        // 재연결/새 디바이스 연결 시 현재 상태 동기화
+        if (data.isRecording && !isRecording) {
+          console.log("[Phase1] Syncing to recording state...");
+          // TODO: 필요시 UI 상태만 업데이트 (실제 녹음은 시작하지 않음)
+        }
       }
-    });
+    );
 
     socketRef.current.on("disconnect", (reason) => {
       console.log("Disconnected from server:", reason);
@@ -492,7 +497,9 @@ function SpeakerContent() {
 
         // Resume recording after room is re-established
         if (wasRecording) {
-          console.log("[Reconnect] ▶️  Will resume recording after room-created...");
+          console.log(
+            "[Reconnect] ▶️  Will resume recording after room-created..."
+          );
           // Set a flag or use state to resume recording
           if (socketRef.current) {
             socketRef.current.__resumeRecording = true;
@@ -536,7 +543,8 @@ function SpeakerContent() {
           enableTranslation: data.roomSettings.enableTranslation ?? true,
           sourceLanguage: data.roomSettings.sourceLanguage || "ko",
           environmentPreset: data.roomSettings.environmentPreset || "general",
-          customEnvironmentDescription: data.roomSettings.customEnvironmentDescription || "",
+          customEnvironmentDescription:
+            data.roomSettings.customEnvironmentDescription || "",
           customGlossary: data.roomSettings.customGlossary || null,
           enableStreaming: data.roomSettings.enableStreaming ?? true,
         });
@@ -561,7 +569,7 @@ function SpeakerContent() {
 
     socketRef.current.on("room-rejoined", (data: SocketData) => {
       setRoomId(data.roomId || "");
-      saveRoomInfo(data.roomId || "", speakerName);  // Save to localStorage
+      saveRoomInfo(data.roomId || "", speakerName); // Save to localStorage
       generateQRCode(data.roomId || "");
 
       // Update roomSettings from server response
@@ -582,7 +590,8 @@ function SpeakerContent() {
           enableTranslation: data.roomSettings.enableTranslation ?? true,
           sourceLanguage: data.roomSettings.sourceLanguage || "ko",
           environmentPreset: data.roomSettings.environmentPreset || "general",
-          customEnvironmentDescription: data.roomSettings.customEnvironmentDescription || "",
+          customEnvironmentDescription:
+            data.roomSettings.customEnvironmentDescription || "",
           customGlossary: data.roomSettings.customGlossary || null,
           enableStreaming: data.roomSettings.enableStreaming ?? true,
         });
@@ -645,9 +654,9 @@ function SpeakerContent() {
     socketRef.current.on("translation-text", (data: SocketData) => {
       console.log(`[Frontend] 🌐 Translation received:`, {
         language: data.targetLanguage,
-        text: (data.text || '').substring(0, 50) + '...',
+        text: (data.text || "").substring(0, 50) + "...",
         isPartial: data.isPartial,
-        isHistory: data.isHistory
+        isHistory: data.isHistory,
       });
 
       setTranscripts((prev) => {
@@ -699,7 +708,8 @@ function SpeakerContent() {
           type: "translation",
           korean: data.korean,
           english: data.english,
-          translations: data.translations || (data.english ? { en: data.english } : {}),
+          translations:
+            data.translations || (data.english ? { en: data.english } : {}),
           timestamp: data.timestamp,
           isHistory: data.isHistory || false,
           batchId: data.batchId,
@@ -716,7 +726,7 @@ function SpeakerContent() {
 
     socketRef.current.on("error", (data: SocketData) => {
       console.error("Socket error:", data);
-      setStatus(`오류: ${data.message || 'Unknown error'}`);
+      setStatus(`오류: ${data.message || "Unknown error"}`);
     });
 
     return () => {
@@ -737,7 +747,10 @@ function SpeakerContent() {
       audioRecorderRef.current = new AudioRecorder({
         onAudioData: (base64Audio) => {
           if (socketRef.current?.connected && roomId) {
-            socketRef.current.emit("audio-stream", { roomId, audio: base64Audio });
+            socketRef.current.emit("audio-stream", {
+              roomId,
+              audio: base64Audio,
+            });
           }
         },
         onAudioLevel: (level) => {
@@ -788,28 +801,6 @@ function SpeakerContent() {
     console.log("[Recording] ✅ Stopped");
   };
 
-  // Download recording
-  const downloadRecording = () => {
-    const blob = audioRecorderRef.current?.getRecordedBlob();
-
-    if (!blob) {
-      alert("녹음된 내용이 없습니다.");
-      return;
-    }
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `recording_${roomId}_${new Date().toISOString().replace(/:/g, "-")}.webm`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    if (toast) {
-      toast.success("녹음 파일이 다운로드되었습니다");
-    }
-  };
 
   // Create new room
   const createNewRoom = () => {
@@ -1105,26 +1096,6 @@ function SpeakerContent() {
               저장
             </button>
             <button
-              onClick={downloadRecording}
-              className={styles.compactActionButton}
-              disabled={!audioRecorderRef.current?.getRecordedBlob()}
-              title="녹음 다운로드"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              다운로드
-            </button>
-            <button
               onClick={createNewRoom}
               className={styles.compactActionButton}
               title="새 방"
@@ -1155,28 +1126,35 @@ function SpeakerContent() {
           </div>
 
           {/* Language Filter Tabs */}
-          {roomSettings.enableTranslation && roomSettings.targetLanguages.length > 0 && (
-            <div className={styles.languageTabs}>
-              <button
-                className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`}
-                onClick={() => setSelectedLanguage(null)}
-              >
-                전체
-              </button>
-              {roomSettings.targetLanguages.map((langCode) => {
-                const lang = TARGET_LANGUAGES.find(l => l.code === langCode);
-                return (
-                  <button
-                    key={langCode}
-                    className={`${styles.languageTab} ${selectedLanguage === langCode ? styles.active : ""}`}
-                    onClick={() => setSelectedLanguage(langCode)}
-                  >
-                    {lang?.name || langCode}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {roomSettings.enableTranslation &&
+            roomSettings.targetLanguages.length > 0 && (
+              <div className={styles.languageTabs}>
+                <button
+                  className={`${styles.languageTab} ${
+                    selectedLanguage === null ? styles.active : ""
+                  }`}
+                  onClick={() => setSelectedLanguage(null)}
+                >
+                  전체
+                </button>
+                {roomSettings.targetLanguages.map((langCode) => {
+                  const lang = TARGET_LANGUAGES.find(
+                    (l) => l.code === langCode
+                  );
+                  return (
+                    <button
+                      key={langCode}
+                      className={`${styles.languageTab} ${
+                        selectedLanguage === langCode ? styles.active : ""
+                      }`}
+                      onClick={() => setSelectedLanguage(langCode)}
+                    >
+                      {lang?.name || langCode}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
           <div className={styles.translationContent} ref={translationListRef}>
             {transcripts.length === 0 ? (
@@ -1201,7 +1179,8 @@ function SpeakerContent() {
                     if (item.type === "stt") return false;
 
                     // Hide partial translations
-                    if (item.type === "translation" && item.isPartial) return false;
+                    if (item.type === "translation" && item.isPartial)
+                      return false;
 
                     // Filter by selected language
                     if (selectedLanguage === null) return true;
@@ -1216,10 +1195,12 @@ function SpeakerContent() {
                       {item.targetLanguage ? (
                         // New translation-text format
                         <div className={styles.translationCardContent}>
-                          <div className={styles.translationBadge}>
-                            {TARGET_LANGUAGES.find(l => l.code === item.targetLanguage)?.name || item.targetLanguage}
-                            {item.isPartial && " (진행 중...)"}
-                          </div>
+                          {item.isPartial && (
+                            <div className={styles.translationBadge}>
+                              진행 중...
+                            </div>
+                          )}
+
                           <div className={styles.translationTexts}>
                             {item.originalText && (
                               <>
@@ -1229,10 +1210,17 @@ function SpeakerContent() {
                                 <div className={styles.divider}></div>
                               </>
                             )}
-                            <p className={`${styles.englishTextLarge} ${item.isPartial ? styles.partialText : ""}`}>
+                            <p
+                              className={`${styles.englishTextLarge} ${
+                                item.isPartial ? styles.partialText : ""
+                              }`}
+                            >
                               {item.text}
                               {item.isPartial && (
-                                <span className={styles.partialIndicator}> ...</span>
+                                <span className={styles.partialIndicator}>
+                                  {" "}
+                                  ...
+                                </span>
                               )}
                             </p>
                           </div>
@@ -1361,7 +1349,13 @@ function SpeakerContent() {
 
               {/* ===== Translation Settings ===== */}
               <div className={styles.settingGroup}>
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={roomSettings.enableTranslation}
@@ -1374,7 +1368,13 @@ function SpeakerContent() {
                   />
                   <span style={{ fontWeight: "bold" }}>실시간 번역 활성화</span>
                 </label>
-                <p style={{ fontSize: "0.8125rem", color: "#94a3b8", marginTop: "0.5rem" }}>
+                <p
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "#94a3b8",
+                    marginTop: "0.5rem",
+                  }}
+                >
                   💡 GPT + Google Translate를 사용한 고품질 다국어 번역
                 </p>
               </div>
@@ -1421,7 +1421,13 @@ function SpeakerContent() {
                         </option>
                       ))}
                     </select>
-                    <p style={{ fontSize: "0.8125rem", color: "#94a3b8", marginTop: "0.5rem" }}>
+                    <p
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "#94a3b8",
+                        marginTop: "0.5rem",
+                      }}
+                    >
                       💡 환경에 맞는 전문 용어와 맥락을 적용합니다
                     </p>
                   </div>
@@ -1451,14 +1457,19 @@ function SpeakerContent() {
                     <div className={styles.languageGrid}>
                       {TARGET_LANGUAGES.map((lang) => {
                         // Disable source language
-                        const isDisabled = lang.code === roomSettings.sourceLanguage;
+                        const isDisabled =
+                          lang.code === roomSettings.sourceLanguage;
                         return (
                           <label
                             key={lang.code}
                             className={`${styles.checkbox} ${
                               isDisabled ? styles.disabled : ""
                             }`}
-                            title={isDisabled ? "출발 언어는 번역 대상에서 제외됩니다" : ""}
+                            title={
+                              isDisabled
+                                ? "출발 언어는 번역 대상에서 제외됩니다"
+                                : ""
+                            }
                           >
                             <input
                               type="checkbox"
@@ -1495,7 +1506,13 @@ function SpeakerContent() {
 
                   {/* Streaming */}
                   <div className={styles.settingGroup}>
-                    <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={roomSettings.enableStreaming}
@@ -1508,7 +1525,13 @@ function SpeakerContent() {
                       />
                       <span>스트리밍 번역 (점진적 표시)</span>
                     </label>
-                    <p style={{ fontSize: "0.8125rem", color: "#94a3b8", marginTop: "0.5rem" }}>
+                    <p
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "#94a3b8",
+                        marginTop: "0.5rem",
+                      }}
+                    >
                       💡 번역이 완성되기 전에 중간 결과를 실시간으로 보여줍니다
                     </p>
                   </div>

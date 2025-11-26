@@ -20,8 +20,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
   gap: 1rem;
 }
@@ -155,13 +155,13 @@
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   background: rgba(30, 41, 59, 0.5);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 1.25rem;
-  margin-bottom: 1.5rem;
+  border-radius: 1rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.1),
@@ -360,6 +360,94 @@
   margin-left: auto;
 }
 
+/* Fullscreen Button */
+.fullscreenBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.625rem;
+  position: relative;
+  background: rgba(59, 130, 246, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    0 4px 16px rgba(59, 130, 246, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  width: auto;
+  min-width: 40px;
+  height: 40px;
+}
+
+.fullscreenBtn:hover {
+  background: rgba(59, 130, 246, 0.25);
+  transform: scale(1.05);
+  box-shadow:
+    0 8px 24px rgba(59, 130, 246, 0.25),
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* Fullscreen exit button (positioned in fullscreen mode) */
+.fullscreenExitBtn {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  background: rgba(59, 130, 246, 0.25);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 0.875rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  box-shadow:
+    0 8px 32px rgba(59, 130, 246, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+}
+
+.fullscreenExitBtn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    transparent 100%
+  );
+  border-radius: 0.875rem 0.875rem 0 0;
+  pointer-events: none;
+}
+
+.fullscreenExitBtn:hover {
+  background: rgba(59, 130, 246, 0.35);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow:
+    0 12px 40px rgba(59, 130, 246, 0.5),
+    0 6px 20px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+}
+
 /* Transcript Container */
 .transcriptContainer {
   flex: 1;
@@ -371,10 +459,27 @@
   border-radius: 1.25rem;
   padding: 1.5rem;
   overflow-y: auto;
-  max-height: calc(100vh - 250px);
+  max-height: calc(100vh - 200px);
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fullscreen mode */
+.transcriptContainer.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 100vh;
+  border-radius: 0;
+  z-index: 9999;
+  padding: 2rem;
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
 }
 
 .transcriptContainer::before {
