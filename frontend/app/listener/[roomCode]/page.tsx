@@ -699,17 +699,35 @@ export default function ListenerRoom() {
             <span>자동 스크롤</span>
           </label>
 
-          {user && (
-            <button
-              onClick={saveRecording}
-              className={styles.saveBtn}
-              disabled={transcripts.length === 0}
-              title={
-                transcripts.length === 0
-                  ? "저장할 내용이 없습니다"
-                  : "세션 저장"
-              }
-            >
+          <div className={styles.actionButtons}>
+            {user && (
+              <button
+                onClick={saveRecording}
+                className={styles.saveBtn}
+                disabled={transcripts.length === 0}
+                title={
+                  transcripts.length === 0
+                    ? "저장할 내용이 없습니다"
+                    : "세션 저장"
+                }
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                저장
+              </button>
+            )}
+
+            <button onClick={exportTranscripts} className={styles.exportBtn}>
               <svg
                 width="18"
                 height="18"
@@ -718,54 +736,38 @@ export default function ListenerRoom() {
                 stroke="currentColor"
                 strokeWidth="2"
               >
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" />
-                <polyline points="7 3 7 8 15 8" />
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              저장
+              내보내기
             </button>
-          )}
 
-          <button onClick={exportTranscripts} className={styles.exportBtn}>
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className={styles.fullscreenBtn}
+              title={isFullscreen ? "전체화면 나가기" : "전체화면"}
             >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            내보내기
-          </button>
-
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className={styles.fullscreenBtn}
-            title={isFullscreen ? "전체화면 나가기" : "전체화면"}
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              {isFullscreen ? (
-                <>
-                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-                </>
-              ) : (
-                <>
-                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-                </>
-              )}
-            </svg>
-          </button>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                {isFullscreen ? (
+                  <>
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                  </>
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Fullscreen exit button - Outside of transcript container */}
