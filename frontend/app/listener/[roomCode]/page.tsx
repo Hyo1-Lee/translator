@@ -7,7 +7,8 @@ import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
 import styles from "./listener.module.css";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
 const LANGUAGE_MAP: Record<string, string> = {
   ko: "한국어",
@@ -84,8 +85,11 @@ export default function ListenerRoom() {
   const [isConnected, setIsConnected] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [fontSize, setFontSize] = useState("medium");
-  const [availableLanguages, setAvailableLanguages] = useState<string[]>(['en']);
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>([
+    "en",
+  ]);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Password state
   const [needsPassword, setNeedsPassword] = useState(false);
@@ -107,28 +111,28 @@ export default function ListenerRoom() {
 
   // Split text into sentences
   const splitIntoSentences = useCallback((text: string): string[] => {
-    if (!text || text.trim() === '') return [];
+    if (!text || text.trim() === "") return [];
 
     // More sophisticated sentence splitting for Korean and English
     // Split on sentence-ending punctuation followed by space or end of string
     const sentences = text.split(/([.!?]+(?:\s+|$))/g);
 
     const result: string[] = [];
-    let currentSentence = '';
+    let currentSentence = "";
 
     for (let i = 0; i < sentences.length; i++) {
       const part = sentences[i];
 
       // Skip empty parts
-      if (!part || part.trim() === '') continue;
+      if (!part || part.trim() === "") continue;
 
       // If this is punctuation, add to current sentence and finalize
       if (/^[.!?]+(?:\s+|$)/.test(part)) {
-        currentSentence += part.replace(/\s+$/, ''); // Remove trailing space from punctuation
+        currentSentence += part.replace(/\s+$/, ""); // Remove trailing space from punctuation
         if (currentSentence.trim().length > 0) {
           result.push(currentSentence.trim());
         }
-        currentSentence = '';
+        currentSentence = "";
       } else {
         // Regular text - accumulate
         currentSentence += part;
@@ -150,6 +154,18 @@ export default function ListenerRoom() {
       transcriptEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [transcripts, autoScroll]);
+
+  // ESC key to exit fullscreen
+  useEffect(() => {
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleEscKey);
+    return () => window.removeEventListener("keydown", handleEscKey);
+  }, [isFullscreen]);
 
   // Initialize socket
   useEffect(() => {
@@ -206,7 +222,9 @@ export default function ListenerRoom() {
       setSpeakerName(data.speakerName || "");
 
       // Set session title (use roomTitle if available, otherwise use speakerName)
-      const title = data.roomSettings?.roomTitle || `${data.speakerName || 'Speaker'}의 세션`;
+      const title =
+        data.roomSettings?.roomTitle ||
+        `${data.speakerName || "Speaker"}의 세션`;
       setSessionTitle(title);
 
       setIsJoined(true);
@@ -215,19 +233,25 @@ export default function ListenerRoom() {
       setPassword(""); // Clear password after successful join
 
       // Set available languages from room settings
-      const targetLanguages = data.roomSettings?.targetLanguagesArray || data.roomSettings?.targetLanguages;
+      const targetLanguages =
+        data.roomSettings?.targetLanguagesArray ||
+        data.roomSettings?.targetLanguages;
       if (targetLanguages) {
         // targetLanguages might be a comma-separated string or an array
         let languages: string[];
-        if (typeof targetLanguages === 'string') {
-          languages = targetLanguages.split(',').map((lang: string) => lang.trim());
+        if (typeof targetLanguages === "string") {
+          languages = targetLanguages
+            .split(",")
+            .map((lang: string) => lang.trim());
           console.log("📋 Parsed languages from string:", languages);
         } else if (Array.isArray(targetLanguages)) {
           languages = targetLanguages;
           console.log("📋 Using languages array:", languages);
         } else {
-          languages = ['en'];
-          console.warn("⚠️ Invalid targetLanguages format, defaulting to ['en']");
+          languages = ["en"];
+          console.warn(
+            "⚠️ Invalid targetLanguages format, defaulting to ['en']"
+          );
         }
 
         if (languages.length > 0) {
@@ -272,9 +296,9 @@ export default function ListenerRoom() {
     socketRef.current.on("translation-text", (data: SocketData) => {
       console.log(`[Listener] 🌐 Translation received:`, {
         language: data.targetLanguage,
-        text: (data.text || '').substring(0, 50) + '...',
+        text: (data.text || "").substring(0, 50) + "...",
         isPartial: data.isPartial,
-        isHistory: data.isHistory
+        isHistory: data.isHistory,
       });
 
       setTranscripts((prev) => {
@@ -325,10 +349,11 @@ export default function ListenerRoom() {
         type: "translation",
         korean: data.korean,
         english: data.english,
-        translations: data.translations || (data.english ? { en: data.english } : {}),
+        translations:
+          data.translations || (data.english ? { en: data.english } : {}),
         timestamp: data.timestamp,
         isHistory: data.isHistory || false,
-        batchId: data.batchId
+        batchId: data.batchId,
       };
 
       setTranscripts((prev) => [...prev.slice(-99), newTranscript]);
@@ -367,7 +392,7 @@ export default function ListenerRoom() {
       console.log("🔑 Attempting to join room:", {
         roomCode,
         name,
-        hasPassword: !!finalPassword
+        hasPassword: !!finalPassword,
       });
 
       if (socketRef.current) {
@@ -414,57 +439,66 @@ export default function ListenerRoom() {
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      toast.error('로그인이 필요합니다');
-      router.push('/login');
+      toast.error("로그인이 필요합니다");
+      router.push("/login");
       return;
     }
 
     if (!roomCode) {
-      toast.error('저장할 세션이 없습니다');
+      toast.error("저장할 세션이 없습니다");
       return;
     }
 
     if (transcripts.length === 0) {
-      toast.error('저장할 번역 내용이 없습니다');
+      toast.error("저장할 번역 내용이 없습니다");
       return;
     }
 
-    const roomName = prompt('세션 이름을 입력하세요', sessionTitle || `Session ${roomCode}`);
+    const roomName = prompt(
+      "세션 이름을 입력하세요",
+      sessionTitle || `Session ${roomCode}`
+    );
     if (!roomName) return;
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/v1/recordings/save`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           roomCode: roomCode,
-          roomName
-        })
+          roomName,
+        }),
       });
 
       const data = await response.json();
       if (data.success) {
-        toast.success('세션이 저장되었습니다');
+        toast.success("세션이 저장되었습니다");
       } else {
-        toast.error(data.message || '저장에 실패했습니다');
+        toast.error(data.message || "저장에 실패했습니다");
       }
     } catch (error) {
-      console.error('Save recording error:', error);
-      toast.error('저장 중 오류가 발생했습니다');
+      console.error("Save recording error:", error);
+      toast.error("저장 중 오류가 발생했습니다");
     }
   };
 
   // Export transcripts
   const exportTranscripts = () => {
     const langName = LANGUAGE_MAP[selectedLanguage] || selectedLanguage;
-    let data = `Session: ${sessionTitle || speakerName}\nRoom: ${roomCode}\nSpeaker: ${speakerName}\nLanguage: ${langName}\nDate: ${new Date().toLocaleString()}\n\n`;
+    let data = `Session: ${
+      sessionTitle || speakerName
+    }\nRoom: ${roomCode}\nSpeaker: ${speakerName}\nLanguage: ${langName}\nDate: ${new Date().toLocaleString()}\n\n`;
 
     transcripts.forEach((item) => {
       if (item.type === "translation") {
-        const timestamp = item.timestamp ? (typeof item.timestamp === 'string' ? parseInt(item.timestamp) : item.timestamp) : Date.now();
+        const timestamp = item.timestamp
+          ? typeof item.timestamp === "string"
+            ? parseInt(item.timestamp)
+            : item.timestamp
+          : Date.now();
         data += `[${formatTime(timestamp)}]\n`;
 
         // New translation-text format
@@ -478,7 +512,11 @@ export default function ListenerRoom() {
         } else {
           // Old translation-batch format
           data += `한국어: ${item.korean}\n`;
-          const translation = item.translations?.[selectedLanguage] || item.translations?.en || item.english || "";
+          const translation =
+            item.translations?.[selectedLanguage] ||
+            item.translations?.en ||
+            item.english ||
+            "";
           data += `${langName}: ${translation}\n\n`;
         }
       }
@@ -488,7 +526,9 @@ export default function ListenerRoom() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transcript_${roomCode}_${selectedLanguage}_${new Date().toISOString().split("T")[0]}.txt`;
+    a.download = `transcript_${roomCode}_${selectedLanguage}_${
+      new Date().toISOString().split("T")[0]
+    }.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -497,11 +537,19 @@ export default function ListenerRoom() {
   if (needsPassword && !isJoined) {
     console.log("🔒 Rendering password modal for room:", roomCode);
     console.log("🔒 Current password state:", password ? "***" : "(empty)");
-    console.log("🔒 Socket connected:", !!socketRef.current, "isConnected:", isConnected);
+    console.log(
+      "🔒 Socket connected:",
+      !!socketRef.current,
+      "isConnected:",
+      isConnected
+    );
 
     return (
       <main className={styles.main}>
-        <div className={styles.modalOverlay} onClick={(e) => e.stopPropagation()}>
+        <div
+          className={styles.modalOverlay}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
             <h2>🔒 비밀번호 필요</h2>
             <p>이 방은 비밀번호로 보호되어 있습니다</p>
@@ -576,13 +624,17 @@ export default function ListenerRoom() {
               <div className={styles.roomInfo}>
                 <span className={styles.roomLabel}>방:</span>
                 <span className={styles.roomCode}>{roomCode}</span>
-                {speakerName && <span className={styles.speaker}>| {speakerName}</span>}
+                {speakerName && (
+                  <span className={styles.speaker}>| {speakerName}</span>
+                )}
               </div>
             </div>
           </div>
           <div className={styles.headerRight}>
             <div className={styles.statusBadge}>
-              <span className={isConnected ? styles.connected : styles.disconnected}>
+              <span
+                className={isConnected ? styles.connected : styles.disconnected}
+              >
                 {isConnected ? "● 연결됨" : "○ 연결 끊김"}
               </span>
             </div>
@@ -596,19 +648,25 @@ export default function ListenerRoom() {
             <div className={styles.fontButtons}>
               <button
                 onClick={() => setFontSize("small")}
-                className={`${styles.fontBtn} ${fontSize === "small" ? styles.active : ""}`}
+                className={`${styles.fontBtn} ${
+                  fontSize === "small" ? styles.active : ""
+                }`}
               >
                 작게
               </button>
               <button
                 onClick={() => setFontSize("medium")}
-                className={`${styles.fontBtn} ${fontSize === "medium" ? styles.active : ""}`}
+                className={`${styles.fontBtn} ${
+                  fontSize === "medium" ? styles.active : ""
+                }`}
               >
                 보통
               </button>
               <button
                 onClick={() => setFontSize("large")}
-                className={`${styles.fontBtn} ${fontSize === "large" ? styles.active : ""}`}
+                className={`${styles.fontBtn} ${
+                  fontSize === "large" ? styles.active : ""
+                }`}
               >
                 크게
               </button>
@@ -633,7 +691,11 @@ export default function ListenerRoom() {
           )}
 
           <label className={styles.checkbox}>
-            <input type="checkbox" checked={autoScroll} onChange={() => setAutoScroll(!autoScroll)} />
+            <input
+              type="checkbox"
+              checked={autoScroll}
+              onChange={() => setAutoScroll(!autoScroll)}
+            />
             <span>자동 스크롤</span>
           </label>
 
@@ -642,34 +704,103 @@ export default function ListenerRoom() {
               onClick={saveRecording}
               className={styles.saveBtn}
               disabled={transcripts.length === 0}
-              title={transcripts.length === 0 ? "저장할 내용이 없습니다" : "세션 저장"}
+              title={
+                transcripts.length === 0
+                  ? "저장할 내용이 없습니다"
+                  : "세션 저장"
+              }
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
               </svg>
               저장
             </button>
           )}
 
           <button onClick={exportTranscripts} className={styles.exportBtn}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
             내보내기
           </button>
+
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className={styles.fullscreenBtn}
+            title={isFullscreen ? "전체화면 나가기" : "전체화면"}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              {isFullscreen ? (
+                <>
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                </>
+              ) : (
+                <>
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                </>
+              )}
+            </svg>
+          </button>
         </div>
 
+        {/* Fullscreen exit button - Outside of transcript container */}
+        {isFullscreen && (
+          <button
+            onClick={() => setIsFullscreen(false)}
+            className={styles.fullscreenExitBtn}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+            </svg>
+            전체화면 나가기
+          </button>
+        )}
+
         {/* Transcripts */}
-        <div className={`${styles.transcriptContainer} ${styles[fontSize]}`}>
+        <div
+          className={`${styles.transcriptContainer} ${styles[fontSize]} ${
+            isFullscreen ? styles.fullscreen : ""
+          }`}
+        >
           {transcripts.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>💬</div>
               <p className={styles.emptyTitle}>아직 번역 내용이 없습니다</p>
-              <p className={styles.emptyText}>연사가 발언을 시작하면 여기에 실시간으로 표시됩니다</p>
+              <p className={styles.emptyText}>
+                연사가 발언을 시작하면 여기에 실시간으로 표시됩니다
+              </p>
             </div>
           ) : (
             <>
@@ -679,7 +810,8 @@ export default function ListenerRoom() {
                   if (item.type === "stt") return false;
 
                   // Hide partial translations
-                  if (item.type === "translation" && item.isPartial) return false;
+                  if (item.type === "translation" && item.isPartial)
+                    return false;
 
                   // Filter by selected language (for new translation-text format)
                   if (item.type === "translation" && item.targetLanguage) {
@@ -693,34 +825,45 @@ export default function ListenerRoom() {
                   <div key={index} className={styles.transcriptCard}>
                     {item.type === "translation" ? (
                       <>
-                        <div className={styles.timestamp}>{formatTime(item.timestamp ? (typeof item.timestamp === 'string' ? parseInt(item.timestamp) : item.timestamp) : Date.now())}</div>
+                        <div className={styles.timestamp}>
+                          {formatTime(
+                            item.timestamp
+                              ? typeof item.timestamp === "string"
+                                ? parseInt(item.timestamp)
+                                : item.timestamp
+                              : Date.now()
+                          )}
+                        </div>
                         {/* New translation-text format */}
                         {item.targetLanguage ? (
                           <>
                             {item.originalText && (
                               <>
-                                <div className={styles.korean}>{item.originalText}</div>
+                                <div className={styles.korean}>
+                                  {item.originalText}
+                                </div>
                                 <div className={styles.divider}></div>
                               </>
                             )}
-                            <div className={styles.english}>
-                              {item.text}
-                            </div>
+                            <div className={styles.english}>{item.text}</div>
                           </>
                         ) : (
-                        /* Old translation-batch format */
-                        <>
-                          <div className={styles.korean}>{item.korean}</div>
-                          <div className={styles.divider}></div>
-                          <div className={styles.english}>
-                            {item.translations?.[selectedLanguage] || item.translations?.en || item.english || ""}
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : null}
-                </div>
-              ))}
+                          /* Old translation-batch format */
+                          <>
+                            <div className={styles.korean}>{item.korean}</div>
+                            <div className={styles.divider}></div>
+                            <div className={styles.english}>
+                              {item.translations?.[selectedLanguage] ||
+                                item.translations?.en ||
+                                item.english ||
+                                ""}
+                            </div>
+                          </>
+                        )}
+                      </>
+                    ) : null}
+                  </div>
+                ))}
               <div ref={transcriptEndRef} />
             </>
           )}

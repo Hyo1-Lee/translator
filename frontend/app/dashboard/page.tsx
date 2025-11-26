@@ -80,7 +80,7 @@ export default function Dashboard() {
       if (statsRes.ok) {
         const data = await statsRes.json();
         // Future: Display stats in dashboard
-        console.log('Dashboard stats:', data.data);
+        console.log("Dashboard stats:", data.data);
       }
 
       if (transcriptsRes.ok) {
@@ -203,12 +203,32 @@ export default function Dashboard() {
       content += `Total Transcripts: ${transcriptsData.length}\n`;
       content += "=".repeat(80) + "\n\n";
 
-      transcriptsData.forEach((item: { timestamp: string; korean: string; english: string }, index: number) => {
-        const timestamp = new Date(item.timestamp).toLocaleString("ko-KR");
-        content += `[${index + 1}] ${timestamp}\n`;
-        content += `KR: ${item.korean}\n`;
-        content += `EN: ${item.english}\n\n`;
-      });
+      transcriptsData.forEach(
+        (
+          item: {
+            timestamp: string;
+            korean: string;
+            english: string;
+            translations?: Record<string, string>;
+          },
+          index: number
+        ) => {
+          const timestamp = new Date(item.timestamp).toLocaleString("ko-KR");
+          content += `[${index + 1}] ${timestamp}\n`;
+          content += `KR: ${item.korean}\n`;
+          content += `EN: ${item.english}\n`;
+
+          // Add other translations if available
+          if (item.translations && typeof item.translations === "object") {
+            Object.entries(item.translations).forEach(([lang, text]) => {
+              if (lang !== "en" && text) {
+                content += `${lang.toUpperCase()}: ${text}\n`;
+              }
+            });
+          }
+          content += "\n";
+        }
+      );
 
       // Create and download file
       const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
@@ -437,20 +457,6 @@ export default function Dashboard() {
                                   <polyline points="12 6 12 12 16 14" />
                                 </svg>
                                 {formatDate(room.createdAt)}
-                              </span>
-                              <span className={styles.metaItem}>
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                >
-                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                                  <polyline points="14 2 14 8 20 8" />
-                                </svg>
-                                {room._count?.transcripts ?? 0} transcripts
                               </span>
                             </div>
                           </div>

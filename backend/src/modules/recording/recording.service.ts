@@ -2,6 +2,8 @@ import { Room } from '../../models/Room';
 import { Transcript } from '../../models/Transcript';
 import { SavedTranscript } from '../../models/SavedTranscript';
 import { RoomSettings } from '../../models/RoomSettings';
+import { TranslationText } from '../../models/TranslationText';
+import { SttText } from '../../models/SttText';
 
 export interface SaveRecordingOptions {
   userId: string;
@@ -45,14 +47,70 @@ export class RecordingService {
       throw new Error('Room not found');
     }
 
-    // Format transcripts
-    const transcripts = room.transcripts || [];
-    const formattedTranscripts = transcripts.map((t: any) => ({
-      korean: t.korean,
-      english: t.english,
-      translations: t.translations ? JSON.parse(t.translations) : { en: t.english },
-      timestamp: t.timestamp.getTime()
-    }));
+    // Get all STT texts (original transcriptions)
+    const sttTexts = await SttText.findAll({
+      where: { roomId: room.id },
+      order: [['timestamp', 'ASC']]
+    });
+
+    // Get all translation texts
+    const translationTexts = await TranslationText.findAll({
+      where: { roomId: room.id },
+      order: [['timestamp', 'ASC']]
+    });
+
+    console.log(`[SaveRecording][${roomCode}] Found ${sttTexts.length} STT texts and ${translationTexts.length} translations`);
+
+    // Format transcripts - combine STT and translations in old format
+    const formattedTranscripts: any[] = [];
+
+    // Group translations by STT text ID for accurate matching
+    const translationsBySttId = new Map<string, any[]>();
+    translationTexts.forEach(t => {
+      if (!t.isPartial && t.sttTextId) {
+        if (!translationsBySttId.has(t.sttTextId)) {
+          translationsBySttId.set(t.sttTextId, []);
+        }
+        translationsBySttId.get(t.sttTextId)?.push(t);
+      }
+    });
+
+    // Process all STT texts and their translations
+    sttTexts.forEach(stt => {
+      const translations: Record<string, string> = {};
+      const sttTranslations = translationsBySttId.get(stt.id) || [];
+
+      sttTranslations.forEach(t => {
+        translations[t.targetLanguage] = t.translatedText;
+      });
+
+      const english = translations['en'] || '';
+
+      // Only include if there's at least one translation
+      if (sttTranslations.length > 0) {
+        formattedTranscripts.push({
+          korean: stt.text,
+          english,
+          translations,
+          timestamp: stt.timestamp.getTime()
+        });
+
+        console.log(`[SaveRecording][${roomCode}] Formatted: "${stt.text}" -> en: "${english}"`);
+      }
+    });
+
+    // If no STT/Translation data, fall back to old Transcript format
+    if (formattedTranscripts.length === 0) {
+      const transcripts = room.transcripts || [];
+      transcripts.forEach((t: any) => {
+        formattedTranscripts.push({
+          korean: t.korean,
+          english: t.english,
+          translations: t.translations ? JSON.parse(t.translations) : { en: t.english },
+          timestamp: t.timestamp.getTime()
+        });
+      });
+    }
 
     // Save to database
     const savedTranscript = await SavedTranscript.create({

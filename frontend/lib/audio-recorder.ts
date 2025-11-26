@@ -20,8 +20,6 @@ export class AudioRecorder {
   private analyser: AnalyserNode | null = null;
   private gainNode: GainNode | null = null;
   private animationFrameId: number | null = null;
-  private mediaRecorder: MediaRecorder | null = null;
-  private recordedChunks: Blob[] = [];
 
   private config: Required<AudioRecorderConfig>;
   private isRecording = false;
@@ -70,16 +68,14 @@ export class AudioRecorder {
 
       console.log("[AudioRecorder] ✅ Microphone access granted");
 
-      // Setup MediaRecorder for local recording
-      await this.setupMediaRecorder();
-
       // Setup AudioContext for STT processing
       await this.setupAudioProcessing();
 
-      // Start audio level monitoring
+      this.isRecording = true;
+
+      // Start audio level monitoring (AFTER setupAudioProcessing and setting isRecording)
       this.startAudioLevelMonitoring();
 
-      this.isRecording = true;
       console.log("[AudioRecorder] ✅ Recording started");
     } catch (error) {
       console.error("[AudioRecorder] ❌ Failed to start:", error);
@@ -113,12 +109,6 @@ export class AudioRecorder {
       this.gainAdjustmentTimer = null;
     }
 
-    // Stop MediaRecorder
-    if (this.mediaRecorder?.state !== "inactive") {
-      this.mediaRecorder?.stop();
-    }
-    this.mediaRecorder = null;
-
     // Disconnect audio nodes
     this.gainNode?.disconnect();
     this.gainNode = null;
@@ -139,39 +129,6 @@ export class AudioRecorder {
     this.recentAudioLevels = [];
 
     console.log("[AudioRecorder] ✅ Stopped");
-  }
-
-  /**
-   * Get recorded audio blob
-   */
-  getRecordedBlob(): Blob | null {
-    if (this.recordedChunks.length === 0) {
-      return null;
-    }
-    return new Blob(this.recordedChunks, { type: "audio/webm" });
-  }
-
-  /**
-   * Setup MediaRecorder for local file recording
-   */
-  private async setupMediaRecorder(): Promise<void> {
-    if (!this.stream) return;
-
-    const mimeType =
-      ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"].find((type) =>
-        MediaRecorder.isTypeSupported(type)
-      ) || "audio/webm";
-
-    this.mediaRecorder = new MediaRecorder(this.stream, { mimeType });
-    this.mediaRecorder.ondataavailable = (e) => {
-      if (e.data?.size > 0) {
-        this.recordedChunks.push(e.data);
-      }
-    };
-    this.mediaRecorder.onstart = () => {
-      this.recordedChunks = [];
-    };
-    this.mediaRecorder.start(100);
   }
 
   /**
