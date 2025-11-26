@@ -71,6 +71,18 @@ export class Room extends Model {
   @Column(DataType.DATE)
   declare endedAt: Date | null;
 
+  // Recording state fields (Phase 1)
+  @Default(false)
+  @Column(DataType.BOOLEAN)
+  declare isRecording: boolean;
+
+  @Default('[]')
+  @Column(DataType.JSON)
+  declare activeSpeakerSockets: string[];
+
+  @Column(DataType.DATE)
+  declare lastHeartbeat: Date | null;
+
   // Relations
   @BelongsTo(() => User)
   declare user: User | null;
