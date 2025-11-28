@@ -158,6 +158,7 @@ function SpeakerContent() {
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -286,6 +287,17 @@ function SpeakerContent() {
       localStorage.removeItem(STORAGE_KEY);
     }
   }, []);
+
+  // ESC key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen]);
 
   // Create room with settings
   const createRoom = useCallback(() => {
@@ -1160,16 +1172,62 @@ function SpeakerContent() {
         </div>
 
         {/* Right Panel - Real-time Translation */}
-        <div className={styles.rightPanel}>
+        <div
+          className={`${styles.rightPanel} ${
+            isFullscreen ? styles.fullscreen : ""
+          }`}
+        >
           <div className={styles.translationHeader}>
             <h3>실시간 번역</h3>
-            <span className={styles.translationCount}>
-              {transcripts.length} 항목
-            </span>
+            <div className={styles.translationHeaderRight}>
+              <span className={styles.translationCount}>
+                {transcripts.length} 항목
+              </span>
+              <button
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className={styles.fullscreenBtn}
+                title={isFullscreen ? "전체화면 나가기" : "전체화면"}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  {isFullscreen ? (
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                  ) : (
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                  )}
+                </svg>
+              </button>
+            </div>
           </div>
 
+          {/* Fullscreen exit button */}
+          {isFullscreen && (
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className={styles.fullscreenExitBtn}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+              </svg>
+              전체화면 나가기
+            </button>
+          )}
+
           {/* Language Filter Tabs */}
-          {roomSettings.enableTranslation &&
+          {/* {roomSettings.enableTranslation &&
             roomSettings.targetLanguages.length > 0 && (
               <div className={styles.languageTabs}>
                 <button
@@ -1197,7 +1255,7 @@ function SpeakerContent() {
                   );
                 })}
               </div>
-            )}
+            )} */}
 
           <div className={styles.translationContent} ref={translationListRef}>
             {transcripts.length === 0 ? (

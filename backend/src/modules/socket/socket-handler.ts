@@ -704,11 +704,11 @@ export class SocketHandler {
         if (room.roomSettings?.enableTranslation && !this.translationManagers.has(roomId)) {
           await this.createTranslationManager(roomId, room.roomSettings);
         }
-      } catch (error) {
-      // Update recording state (Phase 1)
-      await recordingStateService.startRecording(room.id);
-      await sessionManager.updateHeartbeat(room.id);
 
+        // Update recording state (Phase 1)
+        await recordingStateService.startRecording(room.id);
+        await sessionManager.updateHeartbeat(room.id);
+      } catch (error) {
         console.error(`[Recording][${roomId}] ❌ Failed to create STT client:`, error);
       }
 

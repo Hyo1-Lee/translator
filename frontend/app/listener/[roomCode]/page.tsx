@@ -88,7 +88,7 @@ export default function ListenerRoom() {
   const [availableLanguages, setAvailableLanguages] = useState<string[]>([
     "en",
   ]);
-  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Password state
@@ -487,10 +487,11 @@ export default function ListenerRoom() {
 
   // Export transcripts
   const exportTranscripts = () => {
-    const langName = LANGUAGE_MAP[selectedLanguage] || selectedLanguage;
+    const exportLang = selectedLanguage || "en";
+    const langName = LANGUAGE_MAP[exportLang] || exportLang;
     let data = `Session: ${
       sessionTitle || speakerName
-    }\nRoom: ${roomCode}\nSpeaker: ${speakerName}\nLanguage: ${langName}\nDate: ${new Date().toLocaleString()}\n\n`;
+    }\nRoom: ${roomCode}\nSpeaker: ${speakerName}\nLanguage: ${selectedLanguage === null ? "전체" : langName}\nDate: ${new Date().toLocaleString()}\n\n`;
 
     transcripts.forEach((item) => {
       if (item.type === "translation") {
@@ -503,17 +504,19 @@ export default function ListenerRoom() {
 
         // New translation-text format
         if (item.targetLanguage) {
-          if (item.targetLanguage === selectedLanguage && !item.isPartial) {
+          // If "전체" selected, export all; otherwise filter by selected language
+          if ((selectedLanguage === null || item.targetLanguage === selectedLanguage) && !item.isPartial) {
             if (item.originalText) {
               data += `원문: ${item.originalText}\n`;
             }
-            data += `${langName}: ${item.text}\n\n`;
+            const targetLangName = LANGUAGE_MAP[item.targetLanguage] || item.targetLanguage;
+            data += `${targetLangName}: ${item.text}\n\n`;
           }
         } else {
           // Old translation-batch format
           data += `한국어: ${item.korean}\n`;
           const translation =
-            item.translations?.[selectedLanguage] ||
+            (selectedLanguage && item.translations?.[selectedLanguage]) ||
             item.translations?.en ||
             item.english ||
             "";
@@ -526,7 +529,7 @@ export default function ListenerRoom() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transcript_${roomCode}_${selectedLanguage}_${
+    a.download = `transcript_${roomCode}_${selectedLanguage || "all"}_${
       new Date().toISOString().split("T")[0]
     }.txt`;
     a.click();
@@ -673,20 +676,30 @@ export default function ListenerRoom() {
             </div>
           </div>
 
-          {availableLanguages.length > 1 && (
+          {availableLanguages.length > 0 && (
             <div className={styles.controlItem}>
               <label className={styles.label}>번역 언어</label>
-              <select
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className={styles.languageSelect}
-              >
+              <div className={styles.languageTabs}>
+                <button
+                  className={`${styles.languageTab} ${
+                    selectedLanguage === null ? styles.active : ""
+                  }`}
+                  onClick={() => setSelectedLanguage(null)}
+                >
+                  전체
+                </button>
                 {availableLanguages.map((lang) => (
-                  <option key={lang} value={lang}>
+                  <button
+                    key={lang}
+                    className={`${styles.languageTab} ${
+                      selectedLanguage === lang ? styles.active : ""
+                    }`}
+                    onClick={() => setSelectedLanguage(lang)}
+                  >
                     {LANGUAGE_MAP[lang] || lang}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
           )}
 
@@ -815,6 +828,9 @@ export default function ListenerRoom() {
                   if (item.type === "translation" && item.isPartial)
                     return false;
 
+                  // If "전체" selected (null), show all translations
+                  if (selectedLanguage === null) return true;
+
                   // Filter by selected language (for new translation-text format)
                   if (item.type === "translation" && item.targetLanguage) {
                     return item.targetLanguage === selectedLanguage;
@@ -855,7 +871,7 @@ export default function ListenerRoom() {
                             <div className={styles.korean}>{item.korean}</div>
                             <div className={styles.divider}></div>
                             <div className={styles.english}>
-                              {item.translations?.[selectedLanguage] ||
+                              {(selectedLanguage && item.translations?.[selectedLanguage]) ||
                                 item.translations?.en ||
                                 item.english ||
                                 ""}
