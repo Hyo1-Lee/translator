@@ -105,6 +105,7 @@ interface Transcript {
 interface SocketData {
   roomId?: string;
   roomCode?: string;
+  roomStatus?: string;
   message?: string;
   count?: number;
   text?: string;
@@ -156,6 +157,7 @@ function SpeakerContent() {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -520,10 +522,22 @@ function SpeakerContent() {
     });
 
     socketRef.current.on("room-created", (data: SocketData) => {
-      console.log("[Room] Room created:", data.roomId);
+      console.log(
+        "[Room] Room created:",
+        data.roomId,
+        "status:",
+        data.roomStatus
+      );
       setRoomId(data.roomId || "");
       saveRoomInfo(data.roomId || "", speakerName);
       generateQRCode(data.roomId || "");
+
+      // Check if room is in read-only mode (ENDED status)
+      const readOnly = data.roomStatus === "ENDED";
+      setIsReadOnly(readOnly);
+      if (readOnly) {
+        console.log("[Room] 📖 Read-only mode (ended session)");
+      }
 
       // Update roomSettings from server response
       if (data.roomSettings) {
@@ -550,7 +564,9 @@ function SpeakerContent() {
         });
       }
 
-      if (data.isRejoined) {
+      if (readOnly) {
+        setStatus("기록 보기 모드");
+      } else if (data.isRejoined) {
         setStatus("방 재입장");
       } else {
         setStatus("방 생성됨");
@@ -568,9 +584,22 @@ function SpeakerContent() {
     });
 
     socketRef.current.on("room-rejoined", (data: SocketData) => {
+      console.log(
+        "[Room] Room rejoined:",
+        data.roomId,
+        "status:",
+        data.roomStatus
+      );
       setRoomId(data.roomId || "");
       saveRoomInfo(data.roomId || "", speakerName); // Save to localStorage
       generateQRCode(data.roomId || "");
+
+      // Check if room is in read-only mode (ENDED status)
+      const readOnly = data.roomStatus === "ENDED";
+      setIsReadOnly(readOnly);
+      if (readOnly) {
+        console.log("[Room] 📖 Read-only mode (ended session)");
+      }
 
       // Update roomSettings from server response
       if (data.roomSettings) {
@@ -597,7 +626,7 @@ function SpeakerContent() {
         });
       }
 
-      setStatus("방 재연결됨");
+      setStatus(readOnly ? "기록 보기 모드" : "방 재연결됨");
 
       // Resume recording if needed (after reconnection)
       if (socketRef.current && socketRef.current.__resumeRecording) {
@@ -800,7 +829,6 @@ function SpeakerContent() {
 
     console.log("[Recording] ✅ Stopped");
   };
-
 
   // Create new room
   const createNewRoom = () => {
@@ -1010,7 +1038,22 @@ function SpeakerContent() {
 
           {/* Controls */}
           <div className={styles.compactControls}>
-            {!isRecording ? (
+            {isReadOnly ? (
+              <div className={styles.readOnlyBadge}>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                기록 보기 모드 (종료된 세션)
+              </div>
+            ) : !isRecording ? (
               <button
                 onClick={startRecording}
                 className={styles.compactStartButton}
@@ -1169,7 +1212,7 @@ function SpeakerContent() {
                 >
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                <p>녹음을 시작하면 실시간 번역이 여기에 표시됩니다</p>
+                <p>{`녹음을 시작하면 \n실시간 번역이 여기에 표시됩니다`}</p>
               </div>
             ) : (
               <div className={styles.translationList}>
@@ -1505,7 +1548,13 @@ function SpeakerContent() {
                             />
                             <span>{lang.name}</span>
                             {isOnlyEnglishAllowed && (
-                              <span style={{ fontSize: "0.75rem", color: "#64748b", marginLeft: "0.25rem" }}>
+                              <span
+                                style={{
+                                  fontSize: "0.75rem",
+                                  color: "#64748b",
+                                  marginLeft: "0.25rem",
+                                }}
+                              >
                                 (준비중)
                               </span>
                             )}
@@ -1520,7 +1569,8 @@ function SpeakerContent() {
                         marginTop: "0.5rem",
                       }}
                     >
-                      💡 현재 영어 번역만 지원됩니다. 다른 언어는 추후 지원 예정입니다.
+                      💡 현재 영어 번역만 지원됩니다. 다른 언어는 추후 지원
+                      예정입니다.
                     </p>
                   </div>
 

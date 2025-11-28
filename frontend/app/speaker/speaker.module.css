@@ -1398,6 +1398,25 @@
   transform: none;
 }
 
+.readOnlyBadge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  background: rgba(100, 116, 139, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.875rem;
+  color: #94a3b8;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  backdrop-filter: blur(20px);
+}
+
+.readOnlyBadge svg {
+  opacity: 0.8;
+}
+
 .compactStopButton {
   background: rgba(239, 68, 68, 0.2);
   color: white;
@@ -1578,8 +1597,9 @@
 .emptyState p {
   font-size: 1rem;
   margin: 0;
-  max-width: 300px;
-  white-space: nowrap;
+  max-width: 280px;
+  white-space: pre-line;
+  line-height: 1.5;
 }
 
 .translationList {
