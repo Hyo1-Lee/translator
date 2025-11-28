@@ -462,30 +462,39 @@ export default function Dashboard() {
                           </div>
 
                           <div className={styles.roomActions}>
-                            {(room.status === "ACTIVE" ||
-                              room.status === "PAUSED") && (
-                              <button
-                                onClick={() =>
-                                  router.push(`/speaker?room=${room.roomCode}`)
-                                }
-                                className={styles.actionButtonPrimary}
+                            <button
+                              onClick={() =>
+                                router.push(`/speaker?room=${room.roomCode}`)
+                              }
+                              className={
+                                room.status === "ENDED"
+                                  ? styles.actionButton
+                                  : styles.actionButtonPrimary
+                              }
+                            >
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
                               >
-                                <svg
-                                  width="16"
-                                  height="16"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                >
-                                  <circle cx="12" cy="12" r="10" />
-                                  <polygon points="10 8 16 12 10 16 10 8" />
-                                </svg>
-                                {room.status === "ACTIVE"
-                                  ? t("dashboard.resume")
-                                  : "재입장"}
-                              </button>
-                            )}
+                                {room.status === "ENDED" ? (
+                                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                                ) : (
+                                  <>
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polygon points="10 8 16 12 10 16 10 8" />
+                                  </>
+                                )}
+                              </svg>
+                              {room.status === "ENDED"
+                                ? "기록 보기"
+                                : room.status === "ACTIVE"
+                                ? t("dashboard.resume")
+                                : "재입장"}
+                            </button>
                             {(room._count?.transcripts ?? 0) > 0 && (
                               <button
                                 onClick={() =>

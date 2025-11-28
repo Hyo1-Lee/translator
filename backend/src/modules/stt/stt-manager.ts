@@ -52,9 +52,18 @@ export class STTManager {
     _targetLanguages?: string[] // Unused
   ): Promise<void> {
     // Check if client already exists
-    if (this.clients.has(roomId)) {
-      console.log(`[STT Manager][${roomId}] ♻️  Client already exists, reusing`);
-      return;
+    const existingClient = this.clients.get(roomId);
+    if (existingClient) {
+      // Check if existing client is still active
+      if (existingClient.isActive()) {
+        console.log(`[STT Manager][${roomId}] ♻️  Client already exists and active, reusing`);
+        return;
+      } else {
+        // Client exists but is dead - remove it and create new one
+        console.log(`[STT Manager][${roomId}] ⚠️  Client exists but inactive, removing and recreating...`);
+        existingClient.disconnect();
+        this.clients.delete(roomId);
+      }
     }
 
     console.log(`[STT Manager][${roomId}] 🔨 Creating Deepgram client...`);

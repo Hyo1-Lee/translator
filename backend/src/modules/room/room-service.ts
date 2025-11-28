@@ -238,16 +238,24 @@ export class RoomService {
     const room = await Room.findOne({
       where: {
         speakerId,
-        status: { [Op.in]: [RoomStatus.ACTIVE, RoomStatus.PAUSED] }
+        status: { [Op.in]: [RoomStatus.ACTIVE, RoomStatus.PAUSED, RoomStatus.ENDED] }
       }
     });
 
     if (room) {
-      // Update speaker socket ID and reactivate room
-      await room.update({
-        speakerId: newSocketId,
-        status: RoomStatus.ACTIVE
-      });
+      // For ENDED rooms, only update socket ID (keep status as ENDED for read-only access)
+      if (room.status === RoomStatus.ENDED) {
+        await room.update({
+          speakerId: newSocketId
+          // Don't change status - keep it as ENDED
+        });
+      } else {
+        // Update speaker socket ID and reactivate room
+        await room.update({
+          speakerId: newSocketId,
+          status: RoomStatus.ACTIVE
+        });
+      }
 
       return await Room.findByPk(room.id, {
         include: [RoomSettings]

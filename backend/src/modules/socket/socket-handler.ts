@@ -121,8 +121,10 @@ export class SocketHandler {
       // Check if speaker wants to rejoin existing room
       if (existingRoomCode) {
         const existingRoom = await this.roomService.getRoom(existingRoomCode);
-        if (existingRoom && existingRoom.status !== 'ENDED') {
-          console.log(`[Room] ♻️  Rejoining existing room: ${existingRoomCode}`);
+        if (existingRoom) {
+          // Allow rejoining ENDED rooms for viewing history (read-only mode)
+          const isEndedRoom = existingRoom.status === 'ENDED';
+          console.log(`[Room] ♻️  Rejoining existing room: ${existingRoomCode}${isEndedRoom ? ' (read-only, ended)' : ''}`);
 
           // Update speaker socket ID
           room = await this.roomService.reconnectSpeaker(existingRoom.speakerId, socket.id);
@@ -215,6 +217,7 @@ export class SocketHandler {
       // Send room info to speaker
       socket.emit('room-created', {
         roomId: room.roomCode,
+        roomStatus: room.status,
         roomSettings: room.roomSettings,
         isRejoined: !!existingRoomCode
       });
@@ -299,6 +302,7 @@ export class SocketHandler {
 
       socket.emit('room-rejoined', {
         roomId: room.roomCode,
+        roomStatus: room.status,
         roomSettings: room.roomSettings
       });
       // Register speaker socket for multi-device support (Phase 1)
@@ -700,11 +704,11 @@ export class SocketHandler {
         if (room.roomSettings?.enableTranslation && !this.translationManagers.has(roomId)) {
           await this.createTranslationManager(roomId, room.roomSettings);
         }
-      } catch (error) {
-      // Update recording state (Phase 1)
-      await recordingStateService.startRecording(room.id);
-      await sessionManager.updateHeartbeat(room.id);
 
+        // Update recording state (Phase 1)
+        await recordingStateService.startRecording(room.id);
+        await sessionManager.updateHeartbeat(room.id);
+      } catch (error) {
         console.error(`[Recording][${roomId}] ❌ Failed to create STT client:`, error);
       }
 
