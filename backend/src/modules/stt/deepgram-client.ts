@@ -31,9 +31,12 @@ export class DeepgramClient extends STTProvider {
   // Sentence buffering
   private sentenceBuffer: string[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
-  private readonly FLUSH_TIMEOUT_MS = 2000; // 2초 후 자동 flush (문장 완성도 우선)
+  private readonly FLUSH_TIMEOUT_MS = 500; // 0.5초 후 자동 flush
   private readonly SENTENCE_ENDINGS = /[.!?。！？]/; // 문장 종결 부호 (한국어 + 영어)
-  private readonly MIN_SENTENCE_LENGTH = 20; // 최소 문장 길이 (너무 짧은 문장 방지)
+
+  // 마지막 INTERIM 결과 저장 (disconnect 시 처리용)
+  private lastInterimText: string = '';
+  private lastInterimConfidence: number = 0;
 
   // Keywords for the current session
   private keywords: KeywordConfig[] = [];
@@ -88,10 +91,10 @@ export class DeepgramClient extends STTProvider {
         // 실시간 결과
         interim_results: this.config.interimResults,
 
-        // 발화 끝점 감지 - 문장 완성도 우선 (길게 설정)
-        // ⚠️ 너무 짧으면 숨 쉬는 순간에도 문장이 끊김
-        endpointing: 500,           // 발화 끝 감지 시간 (500ms - 충분한 여유)
-        utterance_end_ms: 2500,     // 발화 종료 판단 시간 (2.5초 - 문장 완성 대기)
+        // 발화 끝점 감지 - 균형 설정
+        // ⚠️ 너무 길면 여러 문장이 합쳐짐, 너무 짧으면 문장 중간에 끊김
+        endpointing: 800,           // 발화 끝 감지 시간 (380ms - 균형점)
+        utterance_end_ms: 1200,     // 발화 종료 판단 시간 (1.2초)
 
         // VAD (Voice Activity Detection)
         vad_events: true,           // 음성 활동 감지 이벤트
@@ -152,8 +155,25 @@ export class DeepgramClient extends STTProvider {
 
             console.log(`[Deepgram][${this.roomId}] ${isFinal ? '✅ FINAL' : '⏳ INTERIM'} "${transcript}" (confidence: ${(confidence * 100).toFixed(1)}%)`);
 
-            // Interim results: emit immediately for real-time display
+            // Interim results: emit for real-time display + 타이머 리셋 (말하는 중 신호)
             if (!isFinal) {
+              // 마지막 INTERIM 저장 (FINAL 없이 disconnect 되면 이걸 사용)
+              this.lastInterimText = transcript;
+              this.lastInterimConfidence = confidence;
+
+              // INTERIM이 오면 타이머 리셋 - "아직 말하는 중"이라는 신호
+              // 이렇게 해야 Deepgram 응답이 느려도 문장 중간에 끊기지 않음
+              if (this.flushTimer) {
+                clearTimeout(this.flushTimer);
+                this.flushTimer = setTimeout(() => {
+                  const buffer = this.sentenceBuffer.join(' ').trim();
+                  if (buffer.length > 0) {
+                    console.log(`[Deepgram][${this.roomId}] 📝 Flush reason: timeout after interim (${buffer.length} chars)`);
+                    this.flushSentenceBuffer(this.lastInterimConfidence);
+                  }
+                }, this.FLUSH_TIMEOUT_MS);
+              }
+
               this.emit('transcript', {
                 text: transcript,
                 confidence,
@@ -163,6 +183,10 @@ export class DeepgramClient extends STTProvider {
             }
 
             // Final results: buffer and emit complete sentences
+            // FINAL이 오면 lastInterim 클리어 (이미 처리됨)
+            this.lastInterimText = '';
+            this.lastInterimConfidence = 0;
+
             this.addToSentenceBuffer(transcript, confidence);
           }
         } catch (err) {
@@ -252,12 +276,11 @@ export class DeepgramClient extends STTProvider {
   }
 
   /**
-   * Sentence Buffering - Add transcript to buffer with smart flushing
+   * Sentence Buffering - Add transcript to buffer with simple flushing
    *
-   * 문장 완성도를 우선시하는 보수적인 버퍼링 전략:
-   * - Deepgram이 punctuate:false이므로 온점이 없음
-   * - 한국어 문장 어미 패턴으로 완성 여부 판단
-   * - 최소 길이 미달 시 계속 버퍼링
+   * 단순화된 버퍼링 전략:
+   * - Deepgram의 endpointing이 문장 단위를 결정
+   * - 우리는 타이머 기반으로 빠르게 flush만 수행
    */
   private addToSentenceBuffer(transcript: string, confidence: number): void {
     this.sentenceBuffer.push(transcript);
@@ -270,25 +293,23 @@ export class DeepgramClient extends STTProvider {
     // Get current buffer content
     const currentBuffer = this.sentenceBuffer.join(' ').trim();
 
-    // 문장 완성 조건 체크 (보수적으로 판단)
+    // 문장 완성 조건 체크
     const isComplete = isCompleteSentence(currentBuffer);
-    const isLongEnough = currentBuffer.length >= this.MIN_SENTENCE_LENGTH;
     const isTooLong = currentBuffer.length > 200; // 너무 길면 강제 flush
 
     // Flush 조건:
-    // 1. 문장이 완성됨 AND 최소 길이 충족
+    // 1. 문장이 완성됨
     // 2. 버퍼가 너무 김 (200자 초과)
-    const shouldFlushNow = (isComplete && isLongEnough) || isTooLong;
+    const shouldFlushNow = isComplete || isTooLong;
 
     if (shouldFlushNow) {
       console.log(`[Deepgram][${this.roomId}] 📝 Flush reason: ${isTooLong ? 'too long' : 'complete sentence'} (${currentBuffer.length} chars)`);
       this.flushSentenceBuffer(confidence);
     } else {
-      // Set timer to flush after timeout (fallback for incomplete sentences)
-      // ⚠️ MIN_SENTENCE_LENGTH 조건 제거: 마지막 문장이 짧아도 반드시 flush해야 함
+      // Set timer to flush after timeout
       this.flushTimer = setTimeout(() => {
         const buffer = this.sentenceBuffer.join(' ').trim();
-        if (buffer.length > 0) {  // 내용이 있으면 무조건 flush
+        if (buffer.length > 0) {
           console.log(`[Deepgram][${this.roomId}] 📝 Flush reason: timeout (${buffer.length} chars)`);
           this.flushSentenceBuffer(confidence);
         }
@@ -342,6 +363,14 @@ export class DeepgramClient extends STTProvider {
    * End stream (flush)
    */
   endStream(): void {
+    // 마지막 INTERIM이 있으면 FINAL로 처리
+    if (this.lastInterimText) {
+      console.log(`[Deepgram][${this.roomId}] 🔚 End stream - processing last interim: "${this.lastInterimText}"`);
+      this.sentenceBuffer.push(this.lastInterimText);
+      this.lastInterimText = '';
+      this.lastInterimConfidence = 0;
+    }
+
     // Flush any remaining buffer
     if (this.sentenceBuffer.length > 0) {
       console.log(`[Deepgram][${this.roomId}] 🔚 End stream - flushing remaining buffer`);
@@ -362,6 +391,14 @@ export class DeepgramClient extends STTProvider {
    */
   disconnect(): void {
     console.log(`[Deepgram][${this.roomId}] 🔌 Disconnecting...`);
+
+    // 마지막 INTERIM이 있으면 FINAL로 처리 (FINAL 없이 disconnect 된 경우)
+    if (this.lastInterimText) {
+      console.log(`[Deepgram][${this.roomId}] 🔚 Processing last interim as final: "${this.lastInterimText}"`);
+      this.sentenceBuffer.push(this.lastInterimText);
+      this.lastInterimText = '';
+      this.lastInterimConfidence = 0;
+    }
 
     // Flush any remaining buffer
     if (this.sentenceBuffer.length > 0) {
