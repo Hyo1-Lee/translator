@@ -1774,3 +1774,494 @@
 .languageTab.active:hover {
   background: rgba(59, 130, 246, 0.3);
 }
+
+/* Microphone Selection Modal - Mobile Bottom Sheet Style */
+.micModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn 0.2s ease;
+}
+
+@media (min-width: 768px) {
+  .micModalOverlay {
+    align-items: center;
+  }
+}
+
+.micModal {
+  background: rgba(30, 41, 59, 0.98);
+  backdrop-filter: blur(40px) saturate(150%);
+  -webkit-backdrop-filter: blur(40px) saturate(150%);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1.5rem 1.5rem 0 0;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 -10px 50px -12px rgba(0, 0, 0, 0.6);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 768px) {
+  .micModal {
+    max-width: 500px;
+    border-radius: 1.5rem;
+    max-height: 90vh;
+    animation: modalFadeIn 0.3s ease;
+  }
+
+  @keyframes modalFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+.micModalHandle {
+  display: flex;
+  justify-content: center;
+  padding: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .micModalHandle {
+    display: none;
+  }
+}
+
+.micModalHandleBar {
+  width: 40px;
+  height: 4px;
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+
+.micModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.micModalTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.micModalTitle svg {
+  color: #60a5fa;
+}
+
+.micModalTitle h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+
+.micModalCloseButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.micModalCloseButton:hover {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: white;
+}
+
+.micModalBody {
+  padding: 1rem 1.5rem 1.5rem;
+  overflow-y: auto;
+  max-height: calc(80vh - 100px);
+}
+
+@media (min-width: 768px) {
+  .micModalBody {
+    max-height: calc(90vh - 100px);
+  }
+}
+
+/* Current Mic Info */
+.currentMicInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.currentMicIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 0.625rem;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.currentMicDetails {
+  flex: 1;
+  min-width: 0;
+}
+
+.currentMicLabel {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-bottom: 0.25rem;
+}
+
+.currentMicName {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Mic List */
+.micListSection {
+  margin-bottom: 1.25rem;
+}
+
+.micListLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.micList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.micItem {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  text-align: left;
+}
+
+.micItem:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(148, 163, 184, 0.2);
+  transform: translateX(4px);
+}
+
+.micItem.selected {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.micItem.selected:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.micItemIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 0.625rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.micItem.selected .micItemIcon {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.micItem.external .micItemIcon {
+  background: rgba(34, 197, 94, 0.1);
+  color: #4ade80;
+}
+
+.micItemInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.micItemName {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.micItemBadges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.micBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.micBadge.default {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.micBadge.external {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.micItemCheck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: #60a5fa;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.micItem.selected .micItemCheck {
+  opacity: 1;
+}
+
+/* External Mic Mode Toggle */
+.externalMicModeSection {
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.externalMicModeToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  cursor: pointer;
+}
+
+.toggleSwitch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 9999px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggleSwitch.active {
+  background: rgba(34, 197, 94, 0.6);
+}
+
+.toggleSwitch::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+.toggleSwitch.active::after {
+  transform: translateX(20px);
+}
+
+.externalMicModeInfo {
+  flex: 1;
+}
+
+.externalMicModeLabel {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+
+.externalMicModeDesc {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+/* Mic Refresh Button */
+.micRefreshButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.875rem;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.micRefreshButton:hover {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.micRefreshButton svg {
+  transition: transform 0.3s;
+}
+
+.micRefreshButton:hover svg {
+  transform: rotate(180deg);
+}
+
+/* Empty Mic List */
+.emptyMicList {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.emptyMicList svg {
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.emptyMicList p {
+  font-size: 0.9375rem;
+  margin: 0 0 0.5rem;
+}
+
+.emptyMicList span {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+/* Mic Button in Controls */
+.micSelectButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.micSelectButton:hover {
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.micSelectButton.hasExternal {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+}
+
+.micSelectButton.hasExternal:hover {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.micSelectButtonIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.micSelectButtonText {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.micSelectButtonArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}

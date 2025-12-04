@@ -8,6 +8,13 @@ import io from "socket.io-client";
 import QRCode from "qrcode";
 import { AudioRecorder } from "@/lib/audio-recorder";
 import { BackgroundSessionManager } from "@/lib/background-session";
+import {
+  getMicrophoneDevices,
+  saveMicrophoneSettings,
+  loadMicrophoneSettings,
+  onDeviceChange,
+  MicrophoneDevice,
+} from "@/lib/microphone-manager";
 import styles from "./speaker.module.css";
 
 // Constants
@@ -163,6 +170,14 @@ function SpeakerContent() {
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+
+  // Microphone selection
+  const [showMicModal, setShowMicModal] = useState(false);
+  const [micDevices, setMicDevices] = useState<MicrophoneDevice[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
+  const [useExternalMicMode, setUseExternalMicMode] = useState(false);
+  const [currentMicLabel, setCurrentMicLabel] = useState<string>("기본 마이크");
+
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     roomTitle: "",
     speakerName: "",
@@ -252,6 +267,87 @@ function SpeakerContent() {
     // If no sentences found, return the whole text
     return result.length > 0 ? result : [text.trim()];
   }, []);
+
+  // Load microphone devices
+  const loadMicDevices = useCallback(async () => {
+    try {
+      const devices = await getMicrophoneDevices();
+      setMicDevices(devices);
+      console.log("[Microphone] Devices loaded:", devices.length);
+
+      // Auto-select external mic if available and no previous selection
+      if (!selectedMicId && devices.length > 0) {
+        const externalMic = devices.find((d) => d.isExternal);
+        if (externalMic) {
+          setSelectedMicId(externalMic.deviceId);
+          setUseExternalMicMode(true);
+          setCurrentMicLabel(externalMic.label);
+          saveMicrophoneSettings({
+            deviceId: externalMic.deviceId,
+            useExternalMicMode: true,
+          });
+          console.log("[Microphone] Auto-selected external mic:", externalMic.label);
+          toast.info(`외부 마이크 감지: ${externalMic.label}`);
+        }
+      }
+    } catch (error) {
+      console.error("[Microphone] Error loading devices:", error);
+    }
+  }, [selectedMicId, toast]);
+
+  // Handle microphone selection
+  const handleMicSelect = useCallback((device: MicrophoneDevice) => {
+    setSelectedMicId(device.deviceId);
+    setCurrentMicLabel(device.label);
+
+    // Auto-enable external mic mode for external devices
+    const newExternalMode = device.isExternal;
+    setUseExternalMicMode(newExternalMode);
+
+    // Save settings
+    saveMicrophoneSettings({
+      deviceId: device.deviceId,
+      useExternalMicMode: newExternalMode,
+    });
+
+    console.log("[Microphone] Selected:", device.label, "External mode:", newExternalMode);
+    setShowMicModal(false);
+  }, []);
+
+  // Initialize microphone settings on mount
+  useEffect(() => {
+    // Load saved settings
+    const savedSettings = loadMicrophoneSettings();
+    if (savedSettings) {
+      setSelectedMicId(savedSettings.deviceId);
+      setUseExternalMicMode(savedSettings.useExternalMicMode);
+    }
+
+    // Load devices
+    loadMicDevices();
+
+    // Listen for device changes
+    const cleanup = onDeviceChange(() => {
+      loadMicDevices();
+    });
+
+    return cleanup;
+  }, [loadMicDevices]);
+
+  // Update current mic label when devices change
+  useEffect(() => {
+    if (selectedMicId && micDevices.length > 0) {
+      const selectedDevice = micDevices.find((d) => d.deviceId === selectedMicId);
+      if (selectedDevice) {
+        setCurrentMicLabel(selectedDevice.label);
+      } else {
+        // Selected device no longer available
+        setSelectedMicId(null);
+        setCurrentMicLabel("기본 마이크");
+        toast.info("선택한 마이크가 연결 해제되었습니다");
+      }
+    }
+  }, [micDevices, selectedMicId, toast]);
 
   // Load saved room info from localStorage
   const loadSavedRoom = useCallback(() => {
@@ -775,8 +871,10 @@ function SpeakerContent() {
     try {
       setStatus("마이크 요청 중...");
 
-      // Create audio recorder FIRST (to avoid AudioContext conflict)
+      // Create audio recorder with selected microphone
       audioRecorderRef.current = new AudioRecorder({
+        deviceId: selectedMicId || undefined,
+        useExternalMicMode: useExternalMicMode,
         onAudioData: (base64Audio) => {
           if (socketRef.current?.connected && roomId) {
             socketRef.current.emit("audio-stream", {
@@ -794,6 +892,8 @@ function SpeakerContent() {
           alert("마이크 접근 권한이 필요합니다.");
         },
       });
+
+      console.log("[Recording] Using microphone:", currentMicLabel, "External mode:", useExternalMicMode);
 
       // Start recording BEFORE background session (AudioContext priority)
       await audioRecorderRef.current.start();
@@ -1064,6 +1164,49 @@ function SpeakerContent() {
               </>
             )}
           </div>
+
+          {/* Microphone Selection Button */}
+          <button
+            onClick={() => {
+              loadMicDevices();
+              setShowMicModal(true);
+            }}
+            className={`${styles.micSelectButton} ${
+              micDevices.find((d) => d.deviceId === selectedMicId)?.isExternal
+                ? styles.hasExternal
+                : ""
+            }`}
+            disabled={isRecording}
+          >
+            <span className={styles.micSelectButtonIcon}>
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            </span>
+            <span className={styles.micSelectButtonText}>{currentMicLabel}</span>
+            <span className={styles.micSelectButtonArrow}>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </button>
 
           {/* Controls */}
           <div className={styles.compactControls}>
@@ -1743,6 +1886,219 @@ function SpeakerContent() {
               <p
                 className={styles.urlText}
               >{`${FRONTEND_URL}/listener/${roomId}`}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Microphone Selection Modal */}
+      {showMicModal && (
+        <div
+          className={styles.micModalOverlay}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowMicModal(false);
+          }}
+        >
+          <div className={styles.micModal}>
+            {/* Handle bar for mobile */}
+            <div className={styles.micModalHandle}>
+              <div className={styles.micModalHandleBar}></div>
+            </div>
+
+            <div className={styles.micModalHeader}>
+              <div className={styles.micModalTitle}>
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+                <h3>마이크 선택</h3>
+              </div>
+              <button
+                onClick={() => setShowMicModal(false)}
+                className={styles.micModalCloseButton}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className={styles.micModalBody}>
+              {/* Current Mic Info */}
+              <div className={styles.currentMicInfo}>
+                <div className={styles.currentMicIcon}>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  </svg>
+                </div>
+                <div className={styles.currentMicDetails}>
+                  <div className={styles.currentMicLabel}>현재 선택</div>
+                  <div className={styles.currentMicName}>{currentMicLabel}</div>
+                </div>
+              </div>
+
+              {/* External Mic Mode Toggle */}
+              <div className={styles.externalMicModeSection}>
+                <div
+                  className={styles.externalMicModeToggle}
+                  onClick={() => {
+                    const newMode = !useExternalMicMode;
+                    setUseExternalMicMode(newMode);
+                    saveMicrophoneSettings({
+                      deviceId: selectedMicId,
+                      useExternalMicMode: newMode,
+                    });
+                  }}
+                >
+                  <div
+                    className={`${styles.toggleSwitch} ${
+                      useExternalMicMode ? styles.active : ""
+                    }`}
+                  ></div>
+                  <div className={styles.externalMicModeInfo}>
+                    <div className={styles.externalMicModeLabel}>
+                      외부 마이크 모드
+                    </div>
+                    <div className={styles.externalMicModeDesc}>
+                      핀마이크/블루투스 사용 시 켜주세요. 에코 제거와 노이즈
+                      억제를 비활성화하여 더 선명한 음질을 제공합니다.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mic List */}
+              <div className={styles.micListSection}>
+                <div className={styles.micListLabel}>사용 가능한 마이크</div>
+                <div className={styles.micList}>
+                  {micDevices.length === 0 ? (
+                    <div className={styles.emptyMicList}>
+                      <svg
+                        width="48"
+                        height="48"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      >
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                      <p>마이크를 찾을 수 없습니다</p>
+                      <span>마이크 권한을 허용하거나 장치를 연결해주세요</span>
+                    </div>
+                  ) : (
+                    micDevices.map((device) => (
+                      <button
+                        key={device.deviceId}
+                        className={`${styles.micItem} ${
+                          selectedMicId === device.deviceId ? styles.selected : ""
+                        } ${device.isExternal ? styles.external : ""}`}
+                        onClick={() => handleMicSelect(device)}
+                      >
+                        <div className={styles.micItemIcon}>
+                          {device.isExternal ? (
+                            <svg
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                              <circle cx="18" cy="5" r="3" />
+                            </svg>
+                          ) : (
+                            <svg
+                              width="20"
+                              height="20"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className={styles.micItemInfo}>
+                          <div className={styles.micItemName}>{device.label}</div>
+                          <div className={styles.micItemBadges}>
+                            {device.isDefault && (
+                              <span className={`${styles.micBadge} ${styles.default}`}>
+                                기본
+                              </span>
+                            )}
+                            {device.isExternal && (
+                              <span className={`${styles.micBadge} ${styles.external}`}>
+                                외부
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className={styles.micItemCheck}>
+                          <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Refresh Button */}
+              <button onClick={loadMicDevices} className={styles.micRefreshButton}>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline points="23 4 23 10 17 10" />
+                  <polyline points="1 20 1 14 7 14" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+                마이크 목록 새로고침
+              </button>
             </div>
           </div>
         </div>

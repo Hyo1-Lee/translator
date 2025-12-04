@@ -7,6 +7,8 @@
 import { processAudioChunk, AudioProcessConfig, DEFAULT_AUDIO_CONFIG } from "./audio-utils";
 
 export interface AudioRecorderConfig {
+  deviceId?: string;  // 특정 마이크 장치 ID
+  useExternalMicMode?: boolean;  // 외부 마이크 모드 (echoCancellation 등 비활성화)
   audioProcessConfig?: AudioProcessConfig;
   onAudioData?: (base64Audio: string) => void;
   onAudioLevel?: (level: number) => void;
@@ -21,7 +23,14 @@ export class AudioRecorder {
   private gainNode: GainNode | null = null;
   private animationFrameId: number | null = null;
 
-  private config: Required<AudioRecorderConfig>;
+  private config: {
+    deviceId?: string;
+    useExternalMicMode: boolean;
+    audioProcessConfig: AudioProcessConfig;
+    onAudioData: (base64Audio: string) => void;
+    onAudioLevel: (level: number) => void;
+    onError: (error: Error) => void;
+  };
   private isRecording = false;
   private audioChunksSent = 0;
 
@@ -36,6 +45,8 @@ export class AudioRecorder {
 
   constructor(config: AudioRecorderConfig = {}) {
     this.config = {
+      deviceId: config.deviceId,
+      useExternalMicMode: config.useExternalMicMode || false,
       audioProcessConfig: config.audioProcessConfig || DEFAULT_AUDIO_CONFIG,
       onAudioData: config.onAudioData || (() => {}),
       onAudioLevel: config.onAudioLevel || (() => {}),
@@ -54,19 +65,52 @@ export class AudioRecorder {
 
     try {
       console.log("[AudioRecorder] 🎤 Starting...");
+      console.log("[AudioRecorder] Config:", {
+        deviceId: this.config.deviceId || "(default)",
+        useExternalMicMode: this.config.useExternalMicMode,
+      });
+
+      // Build audio constraints
+      const audioConstraints: MediaTrackConstraints = {
+        channelCount: 1,
+        sampleRate: 24000,
+      };
+
+      // Add deviceId if specified
+      if (this.config.deviceId) {
+        audioConstraints.deviceId = { exact: this.config.deviceId };
+      }
+
+      // External mic mode: disable processing for better quality
+      // Internal mic mode: enable processing to reduce background noise
+      if (this.config.useExternalMicMode) {
+        audioConstraints.echoCancellation = false;
+        audioConstraints.noiseSuppression = false;
+        audioConstraints.autoGainControl = false;
+        console.log("[AudioRecorder] 🎙️ External mic mode: audio processing disabled");
+      } else {
+        audioConstraints.echoCancellation = true;
+        audioConstraints.noiseSuppression = true;
+        audioConstraints.autoGainControl = true;
+        console.log("[AudioRecorder] 📱 Internal mic mode: audio processing enabled");
+      }
 
       // Request microphone access
       this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 24000,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: audioConstraints,
       });
 
-      console.log("[AudioRecorder] ✅ Microphone access granted");
+      // Log actual track settings
+      const audioTrack = this.stream.getAudioTracks()[0];
+      if (audioTrack) {
+        const settings = audioTrack.getSettings();
+        console.log("[AudioRecorder] ✅ Microphone access granted:", {
+          label: audioTrack.label,
+          deviceId: settings.deviceId,
+          sampleRate: settings.sampleRate,
+          channelCount: settings.channelCount,
+        });
+      }
 
       // Setup AudioContext for STT processing
       await this.setupAudioProcessing();
