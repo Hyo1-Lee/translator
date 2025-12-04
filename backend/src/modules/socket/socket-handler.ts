@@ -614,10 +614,10 @@ export class SocketHandler {
         settings.enableStreaming !== undefined;
 
       if (translationSettingsChanged) {
-        // Clean up existing TranslationManager
+        // Clean up existing TranslationManager (await으로 마지막 번역 완료 보장)
         const existingManager = this.translationManagers.get(roomId);
         if (existingManager) {
-          existingManager.cleanup();
+          await existingManager.cleanup();
           this.translationManagers.delete(roomId);
           console.log(`[Settings][${roomId}] 🧹 Cleaned up old TranslationManager`);
         }
@@ -888,10 +888,10 @@ export class SocketHandler {
         this.sttManager.removeClient(speakerRoom.roomCode);
         this.audioChunksReceived.delete(speakerRoom.roomCode);
 
-        // Clean up TranslationManager
+        // Clean up TranslationManager (await으로 마지막 번역 완료 보장)
         const translationManager = this.translationManagers.get(speakerRoom.roomCode);
         if (translationManager) {
-          translationManager.cleanup();
+          await translationManager.cleanup();
           this.translationManagers.delete(speakerRoom.roomCode);
           console.log(`[Disconnect][${speakerRoom.roomCode}] 🧹 TranslationManager cleaned up`);
         }

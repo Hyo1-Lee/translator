@@ -1,5 +1,7 @@
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 import { STTProvider } from './stt-provider.interface';
+import { getKeywords, toKeyterms, KeywordConfig } from './keywords-config';
+import { processTranscript, isCompleteSentence, formatForDisplay } from './text-processor';
 
 /**
  * Deepgram Configuration
@@ -13,6 +15,7 @@ interface DeepgramConfig {
   smartFormat?: boolean;
   punctuate?: boolean;
   interimResults?: boolean;
+  promptTemplate?: string;  // Template for keywords (church, medical, etc.)
 }
 
 /**
@@ -28,8 +31,12 @@ export class DeepgramClient extends STTProvider {
   // Sentence buffering
   private sentenceBuffer: string[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
-  private readonly FLUSH_TIMEOUT_MS = 800; // 0.8초 후 자동 flush (속도 최적화: 1000ms→800ms)
+  private readonly FLUSH_TIMEOUT_MS = 2000; // 2초 후 자동 flush (문장 완성도 우선)
   private readonly SENTENCE_ENDINGS = /[.!?。！？]/; // 문장 종결 부호 (한국어 + 영어)
+  private readonly MIN_SENTENCE_LENGTH = 20; // 최소 문장 길이 (너무 짧은 문장 방지)
+
+  // Keywords for the current session
+  private keywords: KeywordConfig[] = [];
 
   constructor(roomId: string, config: DeepgramConfig) {
     super(roomId);
@@ -40,10 +47,13 @@ export class DeepgramClient extends STTProvider {
       smartFormat: true,
       punctuate: true,
       interimResults: true,
+      promptTemplate: 'general',
       ...config,
     };
 
-    console.log(`[Deepgram][${roomId}] 🚀 Initializing...`);
+    // Load keywords based on prompt template
+    this.keywords = getKeywords(this.config.promptTemplate || 'general');
+    console.log(`[Deepgram][${roomId}] 🚀 Initializing with template: ${this.config.promptTemplate}, keywords: ${this.keywords.length}`);
   }
 
   /**
@@ -67,16 +77,21 @@ export class DeepgramClient extends STTProvider {
         model: this.config.model,
         language: this.config.language,
 
-        // 포맷팅 설정 - 띄어쓰기 및 구두점
-        smart_format: true,
-        punctuate: true,
+        // 포맷팅 설정
+        // ⚠️ smart_format과 punctuate는 한국어에서 제대로 작동하지 않음
+        // - 띄어쓰기 안됨
+        // - 문장 중간에 온점 추가됨
+        // → 후처리에서 직접 처리
+        smart_format: false,
+        punctuate: false,
 
         // 실시간 결과
         interim_results: this.config.interimResults,
 
-        // 발화 끝점 감지 - 속도 최적화 (화자 정지 시 즉시 번역)
-        endpointing: 100,          // 발화 끝 감지 시간 (안정성 유지)
-        utterance_end_ms: 1200,    // 발화 종료 판단 시간 (속도 최적화: 1500ms→1200ms)
+        // 발화 끝점 감지 - 문장 완성도 우선 (길게 설정)
+        // ⚠️ 너무 짧으면 숨 쉬는 순간에도 문장이 끊김
+        endpointing: 500,           // 발화 끝 감지 시간 (500ms - 충분한 여유)
+        utterance_end_ms: 2500,     // 발화 종료 판단 시간 (2.5초 - 문장 완성 대기)
 
         // VAD (Voice Activity Detection)
         vad_events: true,           // 음성 활동 감지 이벤트
@@ -84,11 +99,27 @@ export class DeepgramClient extends STTProvider {
         // 한국어 특화 설정
         filler_words: false,        // 필러 단어 제거 (어, 음 등)
 
+        // 숫자 형식
+        numerals: true,             // 숫자를 텍스트가 아닌 숫자로 표시
+
         // 오디오 포맷
         encoding: 'linear16',
         sample_rate: 16000,
         channels: 1,
       };
+
+      // NOTE: Nova-3 모델은 keywords 파라미터를 지원하지 않음 (HTTP 400 에러 발생)
+      // Nova-3는 자체적으로 매우 정확하므로 keywords 없이도 잘 작동함
+      // Enhanced/Nova-2 모델에서만 keywords 사용 가능
+      if (this.config.model !== 'nova-3' && this.keywords.length > 0) {
+        const keyterms = toKeyterms(this.keywords);
+        if (keyterms.length > 0) {
+          options.keywords = keyterms;
+          console.log(`[Deepgram][${this.roomId}] 📚 Added ${keyterms.length} keyterms for better recognition`);
+        }
+      } else if (this.keywords.length > 0) {
+        console.log(`[Deepgram][${this.roomId}] ℹ️ Keywords skipped (Nova-3 does not support keywords parameter)`);
+      }
 
       // Enhanced 모델을 위한 tier/version 추가
       if (this.config.tier) {
@@ -221,11 +252,14 @@ export class DeepgramClient extends STTProvider {
   }
 
   /**
-   * Sentence Buffering - Add transcript to buffer
+   * Sentence Buffering - Add transcript to buffer with smart flushing
+   *
+   * 문장 완성도를 우선시하는 보수적인 버퍼링 전략:
+   * - Deepgram이 punctuate:false이므로 온점이 없음
+   * - 한국어 문장 어미 패턴으로 완성 여부 판단
+   * - 최소 길이 미달 시 계속 버퍼링
    */
   private addToSentenceBuffer(transcript: string, confidence: number): void {
-    console.log(`[Deepgram][${this.roomId}] 📝 Adding to buffer: "${transcript}"`);
-
     this.sentenceBuffer.push(transcript);
 
     // Reset flush timer
@@ -233,24 +267,37 @@ export class DeepgramClient extends STTProvider {
       clearTimeout(this.flushTimer);
     }
 
-    // Check if sentence is complete (ends with punctuation)
-    const hasSentenceEnding = this.SENTENCE_ENDINGS.test(transcript);
+    // Get current buffer content
+    const currentBuffer = this.sentenceBuffer.join(' ').trim();
 
-    if (hasSentenceEnding) {
-      console.log(`[Deepgram][${this.roomId}] ✅ Sentence ending detected - flushing immediately`);
+    // 문장 완성 조건 체크 (보수적으로 판단)
+    const isComplete = isCompleteSentence(currentBuffer);
+    const isLongEnough = currentBuffer.length >= this.MIN_SENTENCE_LENGTH;
+    const isTooLong = currentBuffer.length > 200; // 너무 길면 강제 flush
+
+    // Flush 조건:
+    // 1. 문장이 완성됨 AND 최소 길이 충족
+    // 2. 버퍼가 너무 김 (200자 초과)
+    const shouldFlushNow = (isComplete && isLongEnough) || isTooLong;
+
+    if (shouldFlushNow) {
+      console.log(`[Deepgram][${this.roomId}] 📝 Flush reason: ${isTooLong ? 'too long' : 'complete sentence'} (${currentBuffer.length} chars)`);
       this.flushSentenceBuffer(confidence);
     } else {
-      // Set timer to flush after timeout
-      console.log(`[Deepgram][${this.roomId}] ⏰ No sentence ending - will flush in ${this.FLUSH_TIMEOUT_MS}ms`);
+      // Set timer to flush after timeout (fallback for incomplete sentences)
+      // ⚠️ MIN_SENTENCE_LENGTH 조건 제거: 마지막 문장이 짧아도 반드시 flush해야 함
       this.flushTimer = setTimeout(() => {
-        console.log(`[Deepgram][${this.roomId}] ⏰ Flush timeout reached - flushing buffer`);
-        this.flushSentenceBuffer(confidence);
+        const buffer = this.sentenceBuffer.join(' ').trim();
+        if (buffer.length > 0) {  // 내용이 있으면 무조건 flush
+          console.log(`[Deepgram][${this.roomId}] 📝 Flush reason: timeout (${buffer.length} chars)`);
+          this.flushSentenceBuffer(confidence);
+        }
       }, this.FLUSH_TIMEOUT_MS);
     }
   }
 
   /**
-   * Flush sentence buffer - emit complete sentence
+   * Flush sentence buffer - emit complete sentence with post-processing
    */
   private flushSentenceBuffer(confidence: number): void {
     if (this.sentenceBuffer.length === 0) {
@@ -264,13 +311,25 @@ export class DeepgramClient extends STTProvider {
     }
 
     // Combine all buffered transcripts
-    const completeSentence = this.sentenceBuffer.join(' ').trim();
+    const rawSentence = this.sentenceBuffer.join(' ').trim();
 
-    console.log(`[Deepgram][${this.roomId}] 🚀 Flushing buffer: "${completeSentence}" (${this.sentenceBuffer.length} parts)`);
+    // Apply text post-processing
+    const processedSentence = processTranscript(rawSentence);
 
-    // Emit complete sentence
+    // Skip if empty after processing
+    if (!processedSentence) {
+      this.sentenceBuffer = [];
+      return;
+    }
+
+    // Format for display
+    const displaySentence = formatForDisplay(processedSentence);
+
+    console.log(`[Deepgram][${this.roomId}] 🚀 Processed: "${displaySentence}" (raw: ${this.sentenceBuffer.length} parts)`);
+
+    // Emit processed sentence
     this.emit('transcript', {
-      text: completeSentence,
+      text: displaySentence,
       confidence,
       final: true,
     });

@@ -42,7 +42,7 @@ export class AudioRecorder {
   private readonly MIN_GAIN = 1.0;
   private readonly MAX_GAIN = 4.0;
   private readonly TARGET_AUDIO_LEVEL = 30;  // Target level (0-100 scale)
-  private readonly GAIN_ADJUSTMENT_INTERVAL = 1000;  // Adjust every 1 second
+  private readonly GAIN_ADJUSTMENT_INTERVAL = 500;  // Adjust every 0.5 second (faster response)
   private gainAdjustmentTimer: NodeJS.Timeout | null = null;
 
   constructor(config: AudioRecorderConfig = {}) {
@@ -67,12 +67,6 @@ export class AudioRecorder {
     }
 
     try {
-      console.log("[AudioRecorder] 🎤 Starting...");
-      console.log("[AudioRecorder] Config:", {
-        deviceId: this.config.deviceId || "(default)",
-        useExternalMicMode: this.config.useExternalMicMode,
-      });
-
       // Try multiple strategies to get the correct microphone
       this.stream = await this.tryGetMicrophoneStream();
 
@@ -83,27 +77,11 @@ export class AudioRecorder {
         const actualDeviceId = settings.deviceId || "";
         const actualLabel = audioTrack.label || "Unknown Microphone";
 
-        console.log("[AudioRecorder] ✅ Microphone access granted:", {
-          label: actualLabel,
-          deviceId: actualDeviceId,
-          requestedDeviceId: this.config.deviceId || "(default)",
-          matched: this.config.deviceId ? actualDeviceId === this.config.deviceId : true,
-          sampleRate: settings.sampleRate,
-          channelCount: settings.channelCount,
-        });
-
         // Notify about actual selected device
         this.config.onDeviceSelected({
           deviceId: actualDeviceId,
           label: actualLabel,
         });
-
-        // Warn if different device was selected
-        if (this.config.deviceId && actualDeviceId !== this.config.deviceId) {
-          console.warn("[AudioRecorder] ⚠️ Different microphone selected than requested!");
-          console.warn("[AudioRecorder] Requested:", this.config.deviceId);
-          console.warn("[AudioRecorder] Actual:", actualDeviceId, "-", actualLabel);
-        }
       }
 
       // Setup AudioContext for STT processing
@@ -113,10 +91,7 @@ export class AudioRecorder {
 
       // Start audio level monitoring (AFTER setupAudioProcessing and setting isRecording)
       this.startAudioLevelMonitoring();
-
-      console.log("[AudioRecorder] ✅ Recording started");
     } catch (error) {
-      console.error("[AudioRecorder] ❌ Failed to start:", error);
       this.config.onError(error as Error);
       throw error;
     }
@@ -127,11 +102,8 @@ export class AudioRecorder {
    */
   stop(): void {
     if (!this.isRecording) {
-      console.warn("[AudioRecorder] Not recording");
       return;
     }
-
-    console.log("[AudioRecorder] ⏹️ Stopping...");
 
     this.isRecording = false;
 
@@ -165,8 +137,6 @@ export class AudioRecorder {
 
     // Clear audio level history
     this.recentAudioLevels = [];
-
-    console.log("[AudioRecorder] ✅ Stopped");
   }
 
   /**
@@ -207,10 +177,7 @@ export class AudioRecorder {
 
       if (base64Audio) {
         this.config.onAudioData(base64Audio);
-
-        if (++this.audioChunksSent === 1) {
-          console.log("[AudioRecorder] ✅ First chunk sent");
-        }
+        this.audioChunksSent++;
       }
     };
 
@@ -272,11 +239,9 @@ export class AudioRecorder {
       if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.5) {
         // Audio is too quiet, increase gain
         newGain = Math.min(this.MAX_GAIN, currentGain * 1.1);
-        console.log(`[AudioRecorder] 🔊 Audio too quiet (${avgLevel.toFixed(1)}), increasing gain: ${currentGain.toFixed(2)} → ${newGain.toFixed(2)}`);
       } else if (avgLevel > this.TARGET_AUDIO_LEVEL * 2.0) {
         // Audio is too loud, decrease gain
         newGain = Math.max(this.MIN_GAIN, currentGain * 0.9);
-        console.log(`[AudioRecorder] 🔉 Audio too loud (${avgLevel.toFixed(1)}), decreasing gain: ${currentGain.toFixed(2)} → ${newGain.toFixed(2)}`);
       }
 
       // Apply new gain smoothly
@@ -303,81 +268,69 @@ export class AudioRecorder {
       baseConstraints.echoCancellation = false;
       baseConstraints.noiseSuppression = false;
       baseConstraints.autoGainControl = false;
-      console.log("[AudioRecorder] 🎙️ External mic mode: audio processing disabled");
     } else {
       baseConstraints.echoCancellation = true;
       baseConstraints.noiseSuppression = true;
       baseConstraints.autoGainControl = true;
-      console.log("[AudioRecorder] 📱 Internal mic mode: audio processing enabled");
     }
 
     // If no specific device requested, just use defaults
     if (!this.config.deviceId) {
-      console.log("[AudioRecorder] Using default microphone");
       return navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
     }
 
     // Strategy 1: Try with exact deviceId (strictest)
     try {
-      console.log("[AudioRecorder] Strategy 1: Trying exact deviceId...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...baseConstraints,
           deviceId: { exact: this.config.deviceId },
         },
       });
-      console.log("[AudioRecorder] Strategy 1: Success with exact deviceId");
       return stream;
-    } catch (error) {
-      console.warn("[AudioRecorder] Strategy 1 failed:", error);
+    } catch {
+      // Continue to next strategy
     }
 
     // Strategy 2: Try with ideal deviceId (more flexible)
     try {
-      console.log("[AudioRecorder] Strategy 2: Trying ideal deviceId...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...baseConstraints,
           deviceId: { ideal: this.config.deviceId },
         },
       });
-      console.log("[AudioRecorder] Strategy 2: Success with ideal deviceId");
       return stream;
-    } catch (error) {
-      console.warn("[AudioRecorder] Strategy 2 failed:", error);
+    } catch {
+      // Continue to next strategy
     }
 
     // Strategy 3: Try with deviceId as string (some browsers prefer this)
     try {
-      console.log("[AudioRecorder] Strategy 3: Trying deviceId as string...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...baseConstraints,
           deviceId: this.config.deviceId,
         },
       });
-      console.log("[AudioRecorder] Strategy 3: Success with deviceId string");
       return stream;
-    } catch (error) {
-      console.warn("[AudioRecorder] Strategy 3 failed:", error);
+    } catch {
+      // Continue to next strategy
     }
 
     // Strategy 4: Try without audio processing constraints (some devices don't support them)
     try {
-      console.log("[AudioRecorder] Strategy 4: Trying with minimal constraints...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: { ideal: this.config.deviceId },
         },
       });
-      console.log("[AudioRecorder] Strategy 4: Success with minimal constraints");
       return stream;
-    } catch (error) {
-      console.warn("[AudioRecorder] Strategy 4 failed:", error);
+    } catch {
+      // Continue to fallback
     }
 
     // Strategy 5: Fallback to default microphone
-    console.warn("[AudioRecorder] All strategies failed, falling back to default microphone");
     return navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
   }
 }

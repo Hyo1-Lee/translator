@@ -58,6 +58,10 @@ export class TranslationManager {
   private readonly SENTENCE_ENDINGS = /[.!?。！？]$/; // 문장 종결 부호
   private readonly BUFFER_FLUSH_TIMEOUT_MS = 1500; // 버퍼 플러시 대기 시간 (1.5초)
 
+  // 버퍼 최대 대기 시간 (타이머 무한 리셋 방지)
+  private firstBufferItemTime: number | null = null;
+  private readonly BUFFER_MAX_WAIT_TIME_MS = 3000; // 버퍼 최대 3초 대기
+
   // 최대 대기 시간 추적 (타이머 무한 리셋 방지)
   private firstQueueItemTime: number | null = null;
   private readonly MAX_WAIT_TIME_MS = 1000; // 최대 1초 대기 (속도 최적화: 1500ms→1000ms)
@@ -127,9 +131,24 @@ export class TranslationManager {
     } else {
       // 불완전한 문장 조각 - 버퍼에 모으기
       console.log(`[TranslationManager][${this.config.roomId}] 📎 Incomplete fragment, buffering: "${text.substring(0, 50)}..."`);
+
+      // 첫 번째 버퍼 아이템 시간 기록
+      if (this.firstBufferItemTime === null) {
+        this.firstBufferItemTime = Date.now();
+      }
+
       this.sentenceMergeBuffer.push({ text, confidence });
 
-      // 버퍼 플러시 타이머 시작/리셋 (마지막 문장 처리를 위해!)
+      // 최대 대기 시간 체크 (타이머 무한 리셋 방지!)
+      const bufferWaitTime = Date.now() - this.firstBufferItemTime;
+      if (bufferWaitTime >= this.BUFFER_MAX_WAIT_TIME_MS) {
+        console.log(`[TranslationManager][${this.config.roomId}] ⏰ Buffer max wait (${bufferWaitTime}ms) - forcing flush`);
+        this.flushSentenceMergeBuffer();
+        this.scheduleBatchProcessing(false);
+        return;
+      }
+
+      // 버퍼 플러시 타이머 시작/리셋
       this.scheduleBufferFlush();
 
       // 버퍼가 너무 커지면 (5개 이상) 즉시 강제로 처리
@@ -177,7 +196,8 @@ export class TranslationManager {
     this.translationQueue.push({ text: forcedSentence, confidence: avgConfidence });
     this.sentenceMergeBuffer = [];
 
-    // 타이머 정리
+    // 타이머 및 시간 추적 리셋
+    this.firstBufferItemTime = null;
     if (this.sentenceMergeBufferTimer) {
       clearTimeout(this.sentenceMergeBufferTimer);
       this.sentenceMergeBufferTimer = null;
@@ -514,8 +534,8 @@ export class TranslationManager {
   private updateContext(text: string): void {
     this.contextBuffer.push(text);
 
-    // 최대 10개 유지
-    if (this.contextBuffer.length > 10) {
+    // 최대 6개 유지 (실제 사용은 5개 - 메모리/토큰 최적화)
+    if (this.contextBuffer.length > 6) {
       this.contextBuffer.shift();
     }
 
@@ -560,23 +580,12 @@ export class TranslationManager {
   }
 
   /**
-   * 정리
+   * 정리 (async로 변경 - 마지막 번역 완료 보장)
    */
-  cleanup(): void {
+  async cleanup(): Promise<void> {
     console.log(`[TranslationManager][${this.config.roomId}] 🧹 Cleaning up...`);
 
-    // 버퍼에 남아있는 조각들 강제 처리
-    if (this.sentenceMergeBuffer.length > 0) {
-      console.log(`[TranslationManager][${this.config.roomId}] 📦 Flushing ${this.sentenceMergeBuffer.length} remaining fragments`);
-      this.flushSentenceMergeBuffer();
-
-      // 즉시 처리
-      if (!this.isProcessing && this.translationQueue.length > 0) {
-        this.processTranslationBatch();
-      }
-    }
-
-    // 모든 타이머 정리
+    // 모든 타이머 먼저 정리 (새로운 스케줄링 방지)
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;
@@ -587,12 +596,45 @@ export class TranslationManager {
       this.sentenceMergeBufferTimer = null;
     }
 
+    // 버퍼에 남아있는 조각들 강제 처리
+    if (this.sentenceMergeBuffer.length > 0) {
+      console.log(`[TranslationManager][${this.config.roomId}] 📦 Flushing ${this.sentenceMergeBuffer.length} remaining fragments`);
+      this.flushSentenceMergeBuffer();
+    }
+
+    // ⚠️ 중요: 남은 번역 큐를 완전히 처리할 때까지 대기!
+    if (this.translationQueue.length > 0) {
+      console.log(`[TranslationManager][${this.config.roomId}] ⏳ Processing ${this.translationQueue.length} remaining items before cleanup...`);
+
+      // isProcessing이 false가 될 때까지 대기 (최대 10초)
+      const maxWaitTime = 10000;
+      const startTime = Date.now();
+
+      while (this.isProcessing && (Date.now() - startTime) < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // 남은 큐 처리 (await으로 완료 보장!)
+      if (!this.isProcessing && this.translationQueue.length > 0) {
+        await this.processTranslationBatch();
+      }
+
+      // 다시 대기 (방금 시작한 배치 처리 완료 대기)
+      while (this.isProcessing && (Date.now() - startTime) < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    // 모든 처리 완료 후 정리
     this.contextBuffer = [];
     this.translationQueue = [];
+    this.sentenceMergeBuffer = [];
     this.summary = '';
     this.transcriptCount = 0;
     this.isProcessing = false;
+    this.firstQueueItemTime = null;
+    this.firstBufferItemTime = null;
 
-    console.log(`[TranslationManager][${this.config.roomId}] ✅ Cleaned up`);
+    console.log(`[TranslationManager][${this.config.roomId}] ✅ Cleaned up (all translations completed)`);
   }
 }

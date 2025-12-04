@@ -57,9 +57,13 @@ export class STTManager {
       return;
     }
 
-    console.log(`[STT Manager][${roomId}] 🔨 Creating Deepgram client...`);
+    console.log(`[STT Manager][${roomId}] 🔨 Creating Deepgram client with template: ${promptTemplate || 'general'}...`);
 
-    const client = new DeepgramClient(roomId, this.config.deepgram);
+    // Pass promptTemplate to DeepgramClient for keyword loading
+    const client = new DeepgramClient(roomId, {
+      ...this.config.deepgram,
+      promptTemplate: promptTemplate || this.config.defaultPromptTemplate || 'general',
+    });
 
     // Handle transcripts - ULTRA FAST PATH
     client.on('transcript', (result: any) => {

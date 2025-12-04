@@ -15,6 +15,7 @@ import {
   onDeviceChange,
   MicrophoneDevice,
 } from "@/lib/microphone-manager";
+import { getDisplayText } from "@/lib/text-display";
 import styles from "./speaker.module.css";
 
 // Constants
@@ -231,44 +232,6 @@ function SpeakerContent() {
     }
   }, []);
 
-  // Split text into sentences
-  const splitIntoSentences = useCallback((text: string): string[] => {
-    if (!text || text.trim() === "") return [];
-
-    // More sophisticated sentence splitting for Korean and English
-    // Split on sentence-ending punctuation followed by space or end of string
-    const sentences = text.split(/([.!?]+(?:\s+|$))/g);
-
-    const result: string[] = [];
-    let currentSentence = "";
-
-    for (let i = 0; i < sentences.length; i++) {
-      const part = sentences[i];
-
-      // Skip empty parts
-      if (!part || part.trim() === "") continue;
-
-      // If this is punctuation, add to current sentence and finalize
-      if (/^[.!?]+(?:\s+|$)/.test(part)) {
-        currentSentence += part.replace(/\s+$/, ""); // Remove trailing space from punctuation
-        if (currentSentence.trim().length > 0) {
-          result.push(currentSentence.trim());
-        }
-        currentSentence = "";
-      } else {
-        // Regular text - accumulate
-        currentSentence += part;
-      }
-    }
-
-    // Add any remaining text as a sentence
-    if (currentSentence.trim().length > 0) {
-      result.push(currentSentence.trim());
-    }
-
-    // If no sentences found, return the whole text
-    return result.length > 0 ? result : [text.trim()];
-  }, []);
 
   // Load microphone devices
   const loadMicDevices = useCallback(async () => {
@@ -745,15 +708,11 @@ function SpeakerContent() {
 
     // Listen for transcripts
     socketRef.current.on("stt-text", (data: SocketData) => {
-      // Log final transcripts only
-      if (data.isFinal !== false) {
-        console.log(`[Frontend] ✅ Received: "${data.text}"`);
-      }
-
       setTranscripts((prev) => {
+        const displayText = getDisplayText(data.text || "");
         const newTranscript = {
           type: "stt",
-          text: data.text,
+          text: displayText,
           timestamp: data.timestamp,
           isFinal: data.isFinal !== false,
         };
@@ -866,7 +825,7 @@ function SpeakerContent() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loadSavedRoom, saveRoomInfo, generateQRCode, splitIntoSentences]);
+  }, [user, loadSavedRoom, saveRoomInfo, generateQRCode]);
 
   // Start recording
   const startRecording = async () => {
@@ -1447,7 +1406,7 @@ function SpeakerContent() {
                             {item.originalText && (
                               <>
                                 <p className={styles.koreanTextLarge}>
-                                  {item.originalText}
+                                  {getDisplayText(item.originalText)}
                                 </p>
                                 <div className={styles.divider}></div>
                               </>
@@ -1457,7 +1416,7 @@ function SpeakerContent() {
                                 item.isPartial ? styles.partialText : ""
                               }`}
                             >
-                              {item.text}
+                              {getDisplayText(item.text || "")}
                               {item.isPartial && (
                                 <span className={styles.partialIndicator}>
                                   {" "}
@@ -1473,11 +1432,11 @@ function SpeakerContent() {
                           <div className={styles.translationBadge}>번역</div>
                           <div className={styles.translationTexts}>
                             <p className={styles.koreanTextLarge}>
-                              {item.korean}
+                              {getDisplayText(item.korean || "")}
                             </p>
                             <div className={styles.divider}></div>
                             <p className={styles.englishTextLarge}>
-                              {item.english}
+                              {getDisplayText(item.english || "")}
                             </p>
                           </div>
                         </div>

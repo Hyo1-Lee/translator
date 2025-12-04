@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
+import { getDisplayText } from "@/lib/text-display";
 import styles from "./listener.module.css";
 
 const BACKEND_URL =
@@ -107,45 +108,6 @@ export default function ListenerRoom() {
       minute: "2-digit",
       second: "2-digit",
     });
-  }, []);
-
-  // Split text into sentences
-  const splitIntoSentences = useCallback((text: string): string[] => {
-    if (!text || text.trim() === "") return [];
-
-    // More sophisticated sentence splitting for Korean and English
-    // Split on sentence-ending punctuation followed by space or end of string
-    const sentences = text.split(/([.!?]+(?:\s+|$))/g);
-
-    const result: string[] = [];
-    let currentSentence = "";
-
-    for (let i = 0; i < sentences.length; i++) {
-      const part = sentences[i];
-
-      // Skip empty parts
-      if (!part || part.trim() === "") continue;
-
-      // If this is punctuation, add to current sentence and finalize
-      if (/^[.!?]+(?:\s+|$)/.test(part)) {
-        currentSentence += part.replace(/\s+$/, ""); // Remove trailing space from punctuation
-        if (currentSentence.trim().length > 0) {
-          result.push(currentSentence.trim());
-        }
-        currentSentence = "";
-      } else {
-        // Regular text - accumulate
-        currentSentence += part;
-      }
-    }
-
-    // Add any remaining text as a sentence
-    if (currentSentence.trim().length > 0) {
-      result.push(currentSentence.trim());
-    }
-
-    // If no sentences found, return the whole text
-    return result.length > 0 ? result : [text.trim()];
   }, []);
 
   // Auto scroll
@@ -381,7 +343,7 @@ export default function ListenerRoom() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomCode, router, splitIntoSentences]);
+  }, [roomCode, router]);
 
   // Join room
   const joinRoom = useCallback(
@@ -842,23 +804,25 @@ export default function ListenerRoom() {
                             {item.originalText && (
                               <>
                                 <div className={styles.korean}>
-                                  {item.originalText}
+                                  {getDisplayText(item.originalText)}
                                 </div>
                                 <div className={styles.divider}></div>
                               </>
                             )}
-                            <div className={styles.english}>{item.text}</div>
+                            <div className={styles.english}>{getDisplayText(item.text || "")}</div>
                           </>
                         ) : (
                           /* Old translation-batch format */
                           <>
-                            <div className={styles.korean}>{item.korean}</div>
+                            <div className={styles.korean}>{getDisplayText(item.korean || "")}</div>
                             <div className={styles.divider}></div>
                             <div className={styles.english}>
-                              {item.translations?.[selectedLanguage] ||
+                              {getDisplayText(
+                                item.translations?.[selectedLanguage] ||
                                 item.translations?.en ||
                                 item.english ||
-                                ""}
+                                ""
+                              )}
                             </div>
                           </>
                         )}

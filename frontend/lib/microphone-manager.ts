@@ -86,8 +86,7 @@ export async function getMicrophoneDevices(): Promise<MicrophoneDevice[]> {
       try {
         const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         tempStream.getTracks().forEach(track => track.stop());
-      } catch (error) {
-        console.warn("[MicrophoneManager] Could not get microphone permission:", error);
+      } catch {
         // Return empty list if permission denied
         return [];
       }
@@ -113,8 +112,7 @@ export async function getMicrophoneDevices(): Promise<MicrophoneDevice[]> {
           isExternal: isExternal,
         };
       });
-  } catch (error) {
-    console.error("[MicrophoneManager] Error getting devices:", error);
+  } catch {
     return [];
   }
 }
@@ -125,9 +123,8 @@ export async function getMicrophoneDevices(): Promise<MicrophoneDevice[]> {
 export function saveMicrophoneSettings(settings: MicrophoneSettings): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    console.log("[MicrophoneManager] Settings saved:", settings);
-  } catch (error) {
-    console.warn("[MicrophoneManager] Could not save settings:", error);
+  } catch {
+    // Silently fail
   }
 }
 
@@ -138,12 +135,10 @@ export function loadMicrophoneSettings(): MicrophoneSettings | null {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      const settings = JSON.parse(saved) as MicrophoneSettings;
-      console.log("[MicrophoneManager] Settings loaded:", settings);
-      return settings;
+      return JSON.parse(saved) as MicrophoneSettings;
     }
-  } catch (error) {
-    console.warn("[MicrophoneManager] Could not load settings:", error);
+  } catch {
+    // Silently fail
   }
   return null;
 }
@@ -154,8 +149,8 @@ export function loadMicrophoneSettings(): MicrophoneSettings | null {
 export function clearMicrophoneSettings(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
-  } catch (error) {
-    console.warn("[MicrophoneManager] Could not clear settings:", error);
+  } catch {
+    // Silently fail
   }
 }
 
@@ -163,16 +158,11 @@ export function clearMicrophoneSettings(): void {
  * Listen for device changes (connect/disconnect)
  */
 export function onDeviceChange(callback: () => void): () => void {
-  const handler = () => {
-    console.log("[MicrophoneManager] Device change detected");
-    callback();
-  };
-
-  navigator.mediaDevices.addEventListener("devicechange", handler);
+  navigator.mediaDevices.addEventListener("devicechange", callback);
 
   // Return cleanup function
   return () => {
-    navigator.mediaDevices.removeEventListener("devicechange", handler);
+    navigator.mediaDevices.removeEventListener("devicechange", callback);
   };
 }
 
@@ -195,7 +185,6 @@ export async function getRecommendedDevice(): Promise<MicrophoneDevice | null> {
   // Prefer external mic
   const externalMic = devices.find(d => d.isExternal);
   if (externalMic) {
-    console.log("[MicrophoneManager] Recommended: External mic found:", externalMic.label);
     return externalMic;
   }
 

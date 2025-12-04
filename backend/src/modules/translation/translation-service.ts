@@ -75,7 +75,8 @@ export class TranslationService {
             content: `Translate the following Korean text to ${langName}:\n\n${correctedText}`
           }
         ],
-        max_completion_tokens: 3000
+        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
+        temperature: 0.3
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
@@ -107,6 +108,15 @@ export class TranslationService {
       const startTime = Date.now();
       console.log(`[TranslationService] 📦 Batch translating ${texts.length} items with ${this.provider}...`);
 
+      // ⚡ STT 오류 사전 보정 (모든 텍스트에 적용)
+      const correctedTexts = await Promise.all(
+        texts.map(async (item) => ({
+          ...item,
+          text: await this.correctSttErrors(item.text),
+          originalText: item.text  // 원본 보존
+        }))
+      );
+
       // Build prompt
       const systemPrompt = buildTranslationPrompt(
         sourceLanguage,
@@ -116,8 +126,8 @@ export class TranslationService {
         customGlossary
       );
 
-      // Format: [1] 문장1\n[2] 문장2\n[3] 문장3
-      const numberedTexts = texts.map((item, i) => `[${i + 1}] ${item.text}`).join('\n');
+      // Format: [1] 문장1\n[2] 문장2\n[3] 문장3 (corrected 텍스트 사용)
+      const numberedTexts = correctedTexts.map((item, i) => `[${i + 1}] ${item.text}`).join('\n');
 
       const userPrompt = systemPrompt
         .replace('{summary}', summary || '(No summary yet)')
@@ -134,7 +144,7 @@ export class TranslationService {
             content: userPrompt
           }
         ],
-        max_completion_tokens: 5000,
+        max_completion_tokens: 2500,  // 최적화: 5000 → 2500 (배치당 ~800 토큰이면 충분)
         temperature: 0.3
       });
 
@@ -145,12 +155,12 @@ export class TranslationService {
       }
 
       const elapsed = Date.now() - startTime;
-      console.log(`[TranslationService] ⚡ Batch completed in ${elapsed}ms (${Math.round(texts.length * 1000 / elapsed)} items/sec)`);
+      console.log(`[TranslationService] ⚡ Batch completed in ${elapsed}ms (${Math.round(correctedTexts.length * 1000 / elapsed)} items/sec)`);
 
       // Parse response: [1] Translation1\n[2] Translation2\n[3] Translation3
       const results: Array<{ originalText: string; translatedText: string; confidence?: number }> = [];
 
-      for (let i = 0; i < texts.length; i++) {
+      for (let i = 0; i < correctedTexts.length; i++) {
         const num = i + 1;
         // Try multiple patterns to extract translation
         const patterns = [
@@ -168,7 +178,7 @@ export class TranslationService {
         }
 
         // Fallback: if parsing fails, split by lines
-        if (!translation && i < texts.length) {
+        if (!translation && i < correctedTexts.length) {
           const lines = fullResponse.split('\n').filter(l => l.trim());
           if (lines[i]) {
             translation = lines[i].replace(/^\[\d+\]\s*/, '').replace(/^\d+\.\s*/, '').trim();
@@ -176,9 +186,9 @@ export class TranslationService {
         }
 
         results.push({
-          originalText: texts[i].text,
+          originalText: correctedTexts[i].originalText,  // 원본 텍스트 사용
           translatedText: translation || `[Translation failed for item ${num}]`,
-          confidence: texts[i].confidence
+          confidence: correctedTexts[i].confidence
         });
       }
 
@@ -237,6 +247,9 @@ export class TranslationService {
     customGlossary?: Record<string, string>
   ): Promise<string | null> {
     try {
+      // ⚡ STT 오류 사전 보정 (LLM 호출 전에 정규식으로 빠르게 처리)
+      const correctedText = await this.correctSttErrors(currentText);
+
       // 프리셋 기반 프롬프트 생성
       const systemPrompt = buildTranslationPrompt(
         sourceLanguage,
@@ -246,11 +259,11 @@ export class TranslationService {
         customGlossary
       );
 
-      // 컨텍스트 변수 치환
+      // 컨텍스트 변수 치환 (correctedText 사용!)
       const userPrompt = systemPrompt
         .replace('{summary}', summary || '(No summary yet)')
         .replace('{recentContext}', recentContext || '(No recent context)')
-        .replace('{currentText}', currentText);
+        .replace('{currentText}', correctedText);
 
       const client = this.getClient();
 
@@ -262,7 +275,8 @@ export class TranslationService {
             content: userPrompt
           }
         ],
-        max_completion_tokens: 3000
+        max_completion_tokens: 1500,  // 최적화: 3000 → 1500 (단일 문장에 충분)
+        temperature: 0.3  // 일관성 있는 번역을 위해 낮은 temperature
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
@@ -289,6 +303,9 @@ export class TranslationService {
     onChunk?: (chunk: string) => void
   ): Promise<string | null> {
     try {
+      // ⚡ STT 오류 사전 보정
+      const correctedText = await this.correctSttErrors(currentText);
+
       const systemPrompt = buildTranslationPrompt(
         sourceLanguage,
         targetLanguage,
@@ -300,7 +317,7 @@ export class TranslationService {
       const userPrompt = systemPrompt
         .replace('{summary}', summary || '(No summary yet)')
         .replace('{recentContext}', recentContext || '(No recent context)')
-        .replace('{currentText}', currentText);
+        .replace('{currentText}', correctedText);
 
       const client = this.getClient();
 
@@ -312,7 +329,8 @@ export class TranslationService {
             content: userPrompt
           }
         ],
-        max_completion_tokens: 3000,
+        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
+        temperature: 0.3,
         stream: true
       });
 
@@ -413,7 +431,8 @@ OUTPUT REQUIREMENTS:
             content: `Translate this current segment (use context for clarity but translate ONLY this text):\n\n${correctedText}`
           }
         ],
-        max_completion_tokens: 3000
+        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
+        temperature: 0.3
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
@@ -434,20 +453,17 @@ OUTPUT REQUIREMENTS:
         model: this.model,
         messages: [
           {
-            role: 'system',
-            content: `You are a conversation summarizer. Create a brief summary of the conversation in Korean.
-
-Keep the summary:
-- Under 100 words
-- Focused on main topics and key points
-- Useful as context for future translations`
-          },
-          {
             role: 'user',
-            content: `${previousSummary ? `Previous summary: ${previousSummary}\n\n` : ''}Recent conversation:\n${recentText}\n\nCreate an updated summary:`
+            content: `Summarize this conversation in Korean. Keep under 80 words, focus on main topics.
+${previousSummary ? `Previous: ${previousSummary}\n` : ''}
+Recent:
+${recentText}
+
+Summary (Korean, <80 words):`
           }
         ],
-        max_completion_tokens: 3000
+        max_completion_tokens: 300,  // 최적화: 3000 → 300 (80단어 요약에 충분)
+        temperature: 0.5
       });
 
       return response.choices[0]?.message?.content?.trim() || null;
@@ -663,12 +679,17 @@ Translation guidelines:
   private async correctSttErrors(text: string): Promise<string> {
     try {
       // Religious terminology corrections (LDS/Mormon specific)
+      // 확장된 STT 오류 보정 사전 - LLM 의존도 감소
       const religiousCorrections: Record<string, string> = {
         // 경전
         '몰멍평': '몰몬경',
         '몰몸경': '몰몬경',
         '몰몽경': '몰몬경',
+        '몰문경': '몰몬경',
+        '모몬경': '몰몬경',
         '교리와성약': '교리와 성약',
+        '교리 와 성약': '교리와 성약',
+        '값진진주': '값진 진주',
 
         // 현대 선지자 (매우 중요! 자주 틀림)
         '주작스미스': '조셉 스미스',
@@ -676,41 +697,100 @@ Translation guidelines:
         '조섭스미스': '조셉 스미스',
         '조섭 스미스': '조셉 스미스',
         '조셉스미스': '조셉 스미스',
+        '죠셉 스미스': '조셉 스미스',
         '브리검영': '브리검 영',
+        '브리검 용': '브리검 영',
         '러셀넬슨': '러셀 엠 넬슨',
         '러셀엠넬슨': '러셀 엠 넬슨',
+        '러셀 넬슨': '러셀 엠 넬슨',
         '토마스몬슨': '토마스 에스 몬슨',
+        '토마스 몬슨': '토마스 에스 몬슨',
         '제프리홀런드': '제프리 알 홀런드',
+        '제프리 홀랜드': '제프리 알 홀런드',
+        '데일린옥스': '데일린 에이치 옥스',
+        '데일린 옥스': '데일린 에이치 옥스',
+        '헨리아이어링': '헨리 비 아이어링',
+        '헨리 아이어링': '헨리 비 아이어링',
+        '우흐트도르프': '디이터 에프 우흐트도르프',
 
         // 경전 인물
         '앨몬': '앨마',
         '엘마': '앨마',
+        '알마': '앨마',
         '에뮬레크': '앰율레크',
+        '앰뮬레크': '앰율레크',
         '배념민': '베냐민',
         '베념민왕': '베냐민 왕',
+        '베냐민왕': '베냐민 왕',
         '노파이': '니파이',
+        '네파이': '니파이',
         '리하이': '리하이',
         '힐라맨': '힐라맨',
+        '헬라만': '힐라맨',
+        '모로나이': '모로나이',
+        '모로니': '모로나이',
+        '이드': '이더',
 
         // 교리 용어
         '크리스토': '그리스도',
         '예수크리스토': '예수 그리스도',
+        '예수 크리스토': '예수 그리스도',
         '고주': '구주',
+        '구쥬': '구주',
         '잡비': '자비',
+        '자부': '자비',
         '속주': '속죄',
+        '석죄': '속죄',
         '성심': '성신',
         '성령': '성신',
         '선지차': '선지자',
+        '선지가': '선지자',
         '반중': '간증',
         '간중': '간증',
-        '회개': '회개',
+        '감증': '간증',
         '권한': '권능',
+        '권눙': '권능',
+        '회계': '회개',
+        '복음': '복음',
+        '보금': '복음',
+        '부활': '부활',
+        '부할': '부활',
+        '천국': '천국',
+        '천극': '천국',
+        '영생': '영생',
+        '용생': '영생',
 
-        // 조직
+        // 조직 및 직책
         '제일회장단': '제일회장단',
+        '제일 회장단': '제일회장단',
         '십이사도': '십이사도',
+        '12사도': '십이사도',
         '와드': '와드',
-        '스테이크': '스테이크'
+        '워드': '와드',
+        '스테이크': '스테이크',
+        '스테잌': '스테이크',
+        '감독': '감독',
+        '감돡': '감독',
+        '장로': '장로',
+        '잔로': '장로',
+        '집사': '집사',
+        '짒사': '집사',
+        '선교사': '선교사',
+        '성교사': '선교사',
+
+        // 의식
+        '성전': '성전',
+        '승전': '성전',
+        '성찬': '성찬',
+        '성참': '성찬',
+        '침례': '침례',
+        '침레': '침례',
+        '신권': '신권',
+        '신관': '신권',
+        '멜기세덱': '멜기세덱',
+        '멜기 세덱': '멜기세덱',
+        '아론': '아론',
+        '아롱': '아론'
       };
 
       // Common STT error patterns
@@ -804,7 +884,8 @@ DO NOT:
             content: `Correct this religious speech STT output:\n${basicCorrected}`
           }
         ],
-        max_completion_tokens: 3000
+        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
+        temperature: 0.3
       });
 
       return response.choices[0]?.message?.content?.trim() || basicCorrected;
