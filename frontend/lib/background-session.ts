@@ -126,7 +126,7 @@ export class BackgroundSessionManager {
   private startSilentAudio(): void {
     try {
       // Create audio context
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextClass) {
         console.warn('[SilentAudio] AudioContext not supported');
         return;
