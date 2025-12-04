@@ -13,6 +13,7 @@ export interface AudioRecorderConfig {
   onAudioData?: (base64Audio: string) => void;
   onAudioLevel?: (level: number) => void;
   onError?: (error: Error) => void;
+  onDeviceSelected?: (deviceInfo: { deviceId: string; label: string }) => void;  // 실제 선택된 마이크 콜백
 }
 
 export class AudioRecorder {
@@ -30,6 +31,7 @@ export class AudioRecorder {
     onAudioData: (base64Audio: string) => void;
     onAudioLevel: (level: number) => void;
     onError: (error: Error) => void;
+    onDeviceSelected: (deviceInfo: { deviceId: string; label: string }) => void;
   };
   private isRecording = false;
   private audioChunksSent = 0;
@@ -51,6 +53,7 @@ export class AudioRecorder {
       onAudioData: config.onAudioData || (() => {}),
       onAudioLevel: config.onAudioLevel || (() => {}),
       onError: config.onError || ((err) => console.error("[AudioRecorder] Error:", err)),
+      onDeviceSelected: config.onDeviceSelected || (() => {}),
     };
   }
 
@@ -70,46 +73,37 @@ export class AudioRecorder {
         useExternalMicMode: this.config.useExternalMicMode,
       });
 
-      // Build audio constraints
-      const audioConstraints: MediaTrackConstraints = {
-        channelCount: 1,
-        sampleRate: 24000,
-      };
+      // Try multiple strategies to get the correct microphone
+      this.stream = await this.tryGetMicrophoneStream();
 
-      // Add deviceId if specified
-      if (this.config.deviceId) {
-        audioConstraints.deviceId = { exact: this.config.deviceId };
-      }
-
-      // External mic mode: disable processing for better quality
-      // Internal mic mode: enable processing to reduce background noise
-      if (this.config.useExternalMicMode) {
-        audioConstraints.echoCancellation = false;
-        audioConstraints.noiseSuppression = false;
-        audioConstraints.autoGainControl = false;
-        console.log("[AudioRecorder] 🎙️ External mic mode: audio processing disabled");
-      } else {
-        audioConstraints.echoCancellation = true;
-        audioConstraints.noiseSuppression = true;
-        audioConstraints.autoGainControl = true;
-        console.log("[AudioRecorder] 📱 Internal mic mode: audio processing enabled");
-      }
-
-      // Request microphone access
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-      });
-
-      // Log actual track settings
+      // Get actual selected device info
       const audioTrack = this.stream.getAudioTracks()[0];
       if (audioTrack) {
         const settings = audioTrack.getSettings();
+        const actualDeviceId = settings.deviceId || "";
+        const actualLabel = audioTrack.label || "Unknown Microphone";
+
         console.log("[AudioRecorder] ✅ Microphone access granted:", {
-          label: audioTrack.label,
-          deviceId: settings.deviceId,
+          label: actualLabel,
+          deviceId: actualDeviceId,
+          requestedDeviceId: this.config.deviceId || "(default)",
+          matched: this.config.deviceId ? actualDeviceId === this.config.deviceId : true,
           sampleRate: settings.sampleRate,
           channelCount: settings.channelCount,
         });
+
+        // Notify about actual selected device
+        this.config.onDeviceSelected({
+          deviceId: actualDeviceId,
+          label: actualLabel,
+        });
+
+        // Warn if different device was selected
+        if (this.config.deviceId && actualDeviceId !== this.config.deviceId) {
+          console.warn("[AudioRecorder] ⚠️ Different microphone selected than requested!");
+          console.warn("[AudioRecorder] Requested:", this.config.deviceId);
+          console.warn("[AudioRecorder] Actual:", actualDeviceId, "-", actualLabel);
+        }
       }
 
       // Setup AudioContext for STT processing
@@ -291,5 +285,99 @@ export class AudioRecorder {
         this.gainNode.gain.linearRampToValueAtTime(newGain, this.audioContext!.currentTime + 0.5);
       }
     }, this.GAIN_ADJUSTMENT_INTERVAL);
+  }
+
+  /**
+   * Try multiple strategies to get the microphone stream
+   * Mobile browsers often ignore deviceId constraints, so we try multiple approaches
+   */
+  private async tryGetMicrophoneStream(): Promise<MediaStream> {
+    const baseConstraints: MediaTrackConstraints = {
+      channelCount: 1,
+      // Don't specify sampleRate - let browser choose optimal rate
+      // Some external mics don't support specific sample rates
+    };
+
+    // External mic mode: disable processing for better quality
+    if (this.config.useExternalMicMode) {
+      baseConstraints.echoCancellation = false;
+      baseConstraints.noiseSuppression = false;
+      baseConstraints.autoGainControl = false;
+      console.log("[AudioRecorder] 🎙️ External mic mode: audio processing disabled");
+    } else {
+      baseConstraints.echoCancellation = true;
+      baseConstraints.noiseSuppression = true;
+      baseConstraints.autoGainControl = true;
+      console.log("[AudioRecorder] 📱 Internal mic mode: audio processing enabled");
+    }
+
+    // If no specific device requested, just use defaults
+    if (!this.config.deviceId) {
+      console.log("[AudioRecorder] Using default microphone");
+      return navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
+    }
+
+    // Strategy 1: Try with exact deviceId (strictest)
+    try {
+      console.log("[AudioRecorder] Strategy 1: Trying exact deviceId...");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...baseConstraints,
+          deviceId: { exact: this.config.deviceId },
+        },
+      });
+      console.log("[AudioRecorder] Strategy 1: Success with exact deviceId");
+      return stream;
+    } catch (error) {
+      console.warn("[AudioRecorder] Strategy 1 failed:", error);
+    }
+
+    // Strategy 2: Try with ideal deviceId (more flexible)
+    try {
+      console.log("[AudioRecorder] Strategy 2: Trying ideal deviceId...");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...baseConstraints,
+          deviceId: { ideal: this.config.deviceId },
+        },
+      });
+      console.log("[AudioRecorder] Strategy 2: Success with ideal deviceId");
+      return stream;
+    } catch (error) {
+      console.warn("[AudioRecorder] Strategy 2 failed:", error);
+    }
+
+    // Strategy 3: Try with deviceId as string (some browsers prefer this)
+    try {
+      console.log("[AudioRecorder] Strategy 3: Trying deviceId as string...");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...baseConstraints,
+          deviceId: this.config.deviceId,
+        },
+      });
+      console.log("[AudioRecorder] Strategy 3: Success with deviceId string");
+      return stream;
+    } catch (error) {
+      console.warn("[AudioRecorder] Strategy 3 failed:", error);
+    }
+
+    // Strategy 4: Try without audio processing constraints (some devices don't support them)
+    try {
+      console.log("[AudioRecorder] Strategy 4: Trying with minimal constraints...");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { ideal: this.config.deviceId },
+        },
+      });
+      console.log("[AudioRecorder] Strategy 4: Success with minimal constraints");
+      return stream;
+    } catch (error) {
+      console.warn("[AudioRecorder] Strategy 4 failed:", error);
+    }
+
+    // Strategy 5: Fallback to default microphone
+    console.warn("[AudioRecorder] All strategies failed, falling back to default microphone");
+    return navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
   }
 }

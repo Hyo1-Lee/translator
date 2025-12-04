@@ -177,6 +177,8 @@ function SpeakerContent() {
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [useExternalMicMode, setUseExternalMicMode] = useState(false);
   const [currentMicLabel, setCurrentMicLabel] = useState<string>("기본 마이크");
+  const [activeMicLabel, setActiveMicLabel] = useState<string | null>(null);  // 실제 사용 중인 마이크
+  const [micMismatch, setMicMismatch] = useState(false);  // 요청한 마이크와 다른 경우
 
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     roomTitle: "",
@@ -891,6 +893,18 @@ function SpeakerContent() {
           setStatus("마이크 오류");
           alert("마이크 접근 권한이 필요합니다.");
         },
+        onDeviceSelected: (deviceInfo) => {
+          console.log("[Recording] Actual device selected:", deviceInfo);
+          setActiveMicLabel(deviceInfo.label);
+
+          // Check if different from requested
+          if (selectedMicId && deviceInfo.deviceId !== selectedMicId) {
+            setMicMismatch(true);
+            toast.info(`⚠️ 요청한 마이크와 다른 마이크가 선택됨: ${deviceInfo.label}`);
+          } else {
+            setMicMismatch(false);
+          }
+        },
       });
 
       console.log("[Recording] Using microphone:", currentMicLabel, "External mode:", useExternalMicMode);
@@ -949,6 +963,8 @@ function SpeakerContent() {
     setIsRecording(false);
     setStatus("정지");
     setAudioLevel(0);
+    setActiveMicLabel(null);
+    setMicMismatch(false);
 
     // Notify server to close STT client
     if (socketRef.current && roomId) {
@@ -1248,7 +1264,18 @@ function SpeakerContent() {
           {isRecording && (
             <div className={styles.compactAudioLevel}>
               <div className={styles.compactAudioHeader}>
-                <span className={styles.compactAudioLabel}>마이크</span>
+                <span
+                  className={styles.compactAudioLabel}
+                  style={micMismatch ? { color: "#f59e0b" } : undefined}
+                  title={activeMicLabel || currentMicLabel}
+                >
+                  {micMismatch ? "⚠️ " : "🎤 "}
+                  {activeMicLabel
+                    ? activeMicLabel.length > 20
+                      ? activeMicLabel.substring(0, 20) + "..."
+                      : activeMicLabel
+                    : "마이크"}
+                </span>
                 <span className={styles.compactAudioPercent}>
                   {audioLevel}%
                 </span>
