@@ -126,11 +126,12 @@ export class SocketHandler {
           const isEndedRoom = existingRoom.status === 'ENDED';
           console.log(`[Room] ♻️  Rejoining existing room: ${existingRoomCode}${isEndedRoom ? ' (read-only, ended)' : ''}`);
 
-          // Update speaker socket ID
-          room = await this.roomService.reconnectSpeaker(existingRoom.speakerId, socket.id);
+          // Update speaker socket ID using roomCode (more reliable than speakerId)
+          room = await this.roomService.reconnectSpeakerByRoomCode(existingRoomCode, socket.id);
           if (!room) {
-            // If reconnect failed, use existing room
-            room = existingRoom;
+            console.error(`[Room] ❌ Failed to reconnect to room: ${existingRoomCode}`);
+            socket.emit('error', { message: 'Failed to rejoin room' });
+            return;
           }
 
           // IMPORTANT: Only clean up OLD client if it exists and is DIFFERENT from current room

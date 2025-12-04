@@ -265,6 +265,38 @@ export class RoomService {
     return null;
   }
 
+  // Reconnect speaker by room code (for re-joining existing rooms)
+  async reconnectSpeakerByRoomCode(roomCode: string, newSocketId: string): Promise<any> {
+    const room = await Room.findOne({
+      where: {
+        roomCode,
+        status: { [Op.in]: [RoomStatus.ACTIVE, RoomStatus.PAUSED, RoomStatus.ENDED] }
+      }
+    });
+
+    if (room) {
+      // For ENDED rooms, only update socket ID (keep status as ENDED for read-only access)
+      if (room.status === RoomStatus.ENDED) {
+        await room.update({
+          speakerId: newSocketId
+          // Don't change status - keep it as ENDED
+        });
+      } else {
+        // Update speaker socket ID and reactivate room
+        await room.update({
+          speakerId: newSocketId,
+          status: RoomStatus.ACTIVE
+        });
+      }
+
+      return await Room.findByPk(room.id, {
+        include: [RoomSettings]
+      });
+    }
+
+    return null;
+  }
+
   // Get recent rooms
   async getRecentRooms(limit: number = 10): Promise<any[]> {
     return await Room.findAll({

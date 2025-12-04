@@ -7,6 +7,7 @@ import { useToast } from "@/contexts/ToastContext";
 import io from "socket.io-client";
 import QRCode from "qrcode";
 import { AudioRecorder } from "@/lib/audio-recorder";
+import { BackgroundSessionManager } from "@/lib/background-session";
 import styles from "./speaker.module.css";
 
 // Constants
@@ -186,6 +187,7 @@ function SpeakerContent() {
   >(null);
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const translationListRef = useRef<HTMLDivElement>(null);
+  const backgroundSessionRef = useRef<BackgroundSessionManager | null>(null);
 
   // Auto-scroll to latest translation
   useEffect(() => {
@@ -772,6 +774,7 @@ function SpeakerContent() {
 
     return () => {
       stopRecording();
+      backgroundSessionRef.current?.stop();
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
@@ -783,6 +786,29 @@ function SpeakerContent() {
   const startRecording = async () => {
     try {
       setStatus("마이크 요청 중...");
+
+      // Start background session to keep app alive when screen is off
+      if (!backgroundSessionRef.current) {
+        backgroundSessionRef.current = new BackgroundSessionManager({
+          onVisibilityChange: (isVisible) => {
+            console.log(`[BackgroundSession] Visibility: ${isVisible}`);
+          },
+          onReconnectNeeded: () => {
+            console.log("[BackgroundSession] Reconnect needed");
+            // Socket.IO will handle reconnection automatically
+            // But we can force a reconnect if needed
+            if (socketRef.current && !socketRef.current.connected) {
+              socketRef.current.connect();
+            }
+          },
+          onWakeLockError: (error) => {
+            console.warn("[BackgroundSession] Wake Lock error:", error.message);
+            // Show a tip to user on mobile
+            toast.info("화면이 꺼지면 녹음이 중단될 수 있습니다. 화면을 켜둔 상태로 유지해주세요.");
+          },
+        });
+      }
+      await backgroundSessionRef.current.start();
 
       // Create audio recorder
       audioRecorderRef.current = new AudioRecorder({
@@ -807,6 +833,9 @@ function SpeakerContent() {
       // Start recording
       await audioRecorderRef.current.start();
 
+      // Resume audio context (needed for iOS)
+      await backgroundSessionRef.current.resumeAudioContext();
+
       setIsRecording(true);
       setStatus("녹음 중");
       console.log("[Recording] ✅ Started");
@@ -828,6 +857,9 @@ function SpeakerContent() {
 
     // Stop audio recorder
     audioRecorderRef.current?.stop();
+
+    // Stop background session
+    backgroundSessionRef.current?.stop();
 
     setIsRecording(false);
     setStatus("정지");
