@@ -129,9 +129,9 @@ export class SocketHandler {
           // Update speaker socket ID using roomCode (more reliable than speakerId)
           room = await this.roomService.reconnectSpeakerByRoomCode(existingRoomCode, socket.id);
           if (!room) {
-            console.error(`[Room] ❌ Failed to reconnect to room: ${existingRoomCode}`);
-            socket.emit('error', { message: 'Failed to rejoin room' });
-            return;
+            // Fallback: use existingRoom if reconnect fails
+            console.warn(`[Room] ⚠️  reconnectSpeakerByRoomCode failed, using existingRoom`);
+            room = existingRoom;
           }
 
           // IMPORTANT: Only clean up OLD client if it exists and is DIFFERENT from current room

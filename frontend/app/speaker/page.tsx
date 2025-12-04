@@ -787,30 +787,7 @@ function SpeakerContent() {
     try {
       setStatus("마이크 요청 중...");
 
-      // Start background session to keep app alive when screen is off
-      if (!backgroundSessionRef.current) {
-        backgroundSessionRef.current = new BackgroundSessionManager({
-          onVisibilityChange: (isVisible) => {
-            console.log(`[BackgroundSession] Visibility: ${isVisible}`);
-          },
-          onReconnectNeeded: () => {
-            console.log("[BackgroundSession] Reconnect needed");
-            // Socket.IO will handle reconnection automatically
-            // But we can force a reconnect if needed
-            if (socketRef.current && !socketRef.current.connected) {
-              socketRef.current.connect();
-            }
-          },
-          onWakeLockError: (error) => {
-            console.warn("[BackgroundSession] Wake Lock error:", error.message);
-            // Show a tip to user on mobile
-            toast.info("화면이 꺼지면 녹음이 중단될 수 있습니다. 화면을 켜둔 상태로 유지해주세요.");
-          },
-        });
-      }
-      await backgroundSessionRef.current.start();
-
-      // Create audio recorder
+      // Create audio recorder FIRST (to avoid AudioContext conflict)
       audioRecorderRef.current = new AudioRecorder({
         onAudioData: (base64Audio) => {
           if (socketRef.current?.connected && roomId) {
@@ -830,10 +807,30 @@ function SpeakerContent() {
         },
       });
 
-      // Start recording
+      // Start recording BEFORE background session (AudioContext priority)
       await audioRecorderRef.current.start();
 
-      // Resume audio context (needed for iOS)
+      // Start background session AFTER recording started (to avoid AudioContext conflict)
+      if (!backgroundSessionRef.current) {
+        backgroundSessionRef.current = new BackgroundSessionManager({
+          onVisibilityChange: (isVisible) => {
+            console.log(`[BackgroundSession] Visibility: ${isVisible}`);
+          },
+          onReconnectNeeded: () => {
+            console.log("[BackgroundSession] Reconnect needed");
+            if (socketRef.current && !socketRef.current.connected) {
+              socketRef.current.connect();
+            }
+          },
+          onWakeLockError: (error) => {
+            console.warn("[BackgroundSession] Wake Lock error:", error.message);
+            toast.info("화면이 꺼지면 녹음이 중단될 수 있습니다. 화면을 켜둔 상태로 유지해주세요.");
+          },
+        });
+      }
+      await backgroundSessionRef.current.start();
+
+      // Resume background audio context (for iOS compatibility)
       await backgroundSessionRef.current.resumeAudioContext();
 
       setIsRecording(true);
