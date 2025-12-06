@@ -77,8 +77,8 @@ export class DeepgramClient extends STTProvider {
         smart_format: true,           // 자동 구두점 및 포맷팅
         punctuate: true,              // 마침표 자동 추가
         interim_results: this.config.interimResults,
-        endpointing: 2000,            // 2초 침묵 감지 (문장 끊김 방지)
-        utterance_end_ms: 3000,       // 3초 후 발화 종료 확정
+        endpointing: 1500,            // 1.5초 침묵 감지
+        utterance_end_ms: 2500,       // 2초 후 발화 종료 확정
         vad_events: true,
         filler_words: false,
         numerals: true,
