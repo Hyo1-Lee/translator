@@ -52,10 +52,10 @@ export class TranslationManager {
 
   // 번역 큐 배치 설정
   private firstQueueItemTime: number | null = null;
-  private readonly MIN_BATCH_SIZE = 2;        // 최소 배치 크기 (2개 이상이면 배치 처리)
-  private readonly MAX_WAIT_TIME_MS = 4000;   // 최대 4초 대기 (마지막 문장 flush 보장)
-  private readonly BATCH_DELAY_MS = 1500;     // 기본 딜레이
-  private readonly RETRY_DELAY_MS = 1000;     // 재시도 딜레이 (1개만 있을 때)
+  private readonly MIN_BATCH_SIZE = 3;        // 최소 배치 크기 (3개 이상이면 배치 처리)
+  private readonly MAX_WAIT_TIME_MS = 8000;   // 최대 8초 대기 (더 길게 모으기)
+  private readonly BATCH_DELAY_MS = 2500;     // 기본 딜레이 (2.5초)
+  private readonly RETRY_DELAY_MS = 2000;     // 재시도 딜레이 (2초)
 
   constructor(config: TranslationManagerConfig) {
     this.config = config;
@@ -175,15 +175,15 @@ export class TranslationManager {
   }
 
   /**
-   * 스마트 배치 처리: 여러 문장을 한 번의 LLM 호출로 번역
+   * 스마트 배치 처리: 여러 문장을 한 번의 LLM 호출로 번역 후 합쳐서 전송
    */
   private async processBatchSmart(batch: Array<{ text: string; confidence?: number }>): Promise<void> {
     const recentContext = this.contextBuffer.slice(-5).join(' ');
 
     if (this.config.sourceLanguage === 'en') {
-      for (const item of batch) {
-        await this.translateToMultipleLanguages(item.text, item.confidence);
-      }
+      const combinedOriginal = batch.map(b => b.text).join(' ');
+      const avgConfidence = batch.reduce((sum, b) => sum + (b.confidence || 0), 0) / batch.length;
+      await this.translateToMultipleLanguages(combinedOriginal, avgConfidence);
       return;
     }
 
@@ -200,49 +200,51 @@ export class TranslationManager {
 
     if (!batchResults || batchResults.length === 0) {
       console.error(`[TranslationManager] Smart batch failed, fallback to sequential`);
-      for (const item of batch) {
-        await this.translateToMultipleLanguages(item.text, item.confidence);
-      }
+      // Fallback: 합쳐서 단일 번역
+      const combinedOriginal = batch.map(b => b.text).join(' ');
+      const avgConfidence = batch.reduce((sum, b) => sum + (b.confidence || 0), 0) / batch.length;
+      await this.translateToMultipleLanguages(combinedOriginal, avgConfidence);
       return;
     }
 
-    for (const result of batchResults) {
-      const englishTranslation = result.translatedText;
-      const originalText = result.originalText;
-      const confidence = result.confidence;
+    // 원문들과 번역들을 합치기
+    const combinedOriginal = batchResults.map(r => r.originalText).join(' ');
+    const combinedEnglish = batchResults.map(r => r.translatedText).join(' ');
+    const avgConfidence = batchResults.reduce((sum, r) => sum + (r.confidence || 0), 0) / batchResults.length;
 
-      this.config.onTranslation({
-        roomId: this.config.roomId,
-        targetLanguage: 'en',
-        originalText,
-        translatedText: englishTranslation,
-        isPartial: false,
-        contextSummary: this.summary,
-        timestamp: new Date(),
-        sttTextId: undefined,
-        confidence
-      });
+    // 영어 번역 - 하나로 합쳐서 전송
+    this.config.onTranslation({
+      roomId: this.config.roomId,
+      targetLanguage: 'en',
+      originalText: combinedOriginal,
+      translatedText: combinedEnglish,
+      isPartial: false,
+      contextSummary: this.summary,
+      timestamp: new Date(),
+      sttTextId: undefined,
+      confidence: avgConfidence
+    });
 
-      const otherLanguages = this.config.targetLanguages.filter(lang => lang !== 'en');
+    // 다른 언어들 - 합쳐진 영어를 번역
+    const otherLanguages = this.config.targetLanguages.filter(lang => lang !== 'en');
 
-      if (otherLanguages.length > 0) {
-        const googleTranslations = await this.config.googleTranslateService.translateToMultipleLanguages(
-          englishTranslation,
-          otherLanguages
-        );
+    if (otherLanguages.length > 0) {
+      const googleTranslations = await this.config.googleTranslateService.translateToMultipleLanguages(
+        combinedEnglish,
+        otherLanguages
+      );
 
-        for (const [lang, translation] of Object.entries(googleTranslations)) {
-          this.config.onTranslation({
-            roomId: this.config.roomId,
-            targetLanguage: lang,
-            originalText,
-            translatedText: translation,
-            contextSummary: this.summary,
-            timestamp: new Date(),
-            sttTextId: 'saved',
-            confidence
-          });
-        }
+      for (const [lang, translation] of Object.entries(googleTranslations)) {
+        this.config.onTranslation({
+          roomId: this.config.roomId,
+          targetLanguage: lang,
+          originalText: combinedOriginal,
+          translatedText: translation,
+          contextSummary: this.summary,
+          timestamp: new Date(),
+          sttTextId: 'saved',
+          confidence: avgConfidence
+        });
       }
     }
   }
