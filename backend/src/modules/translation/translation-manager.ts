@@ -208,9 +208,9 @@ export class TranslationManager {
     }
 
     // 원문들과 번역들을 합치기
-    const combinedOriginal = batchResults.map(r => r.originalText).join(' ');
-    const combinedEnglish = batchResults.map(r => r.translatedText).join(' ');
-    const avgConfidence = batchResults.reduce((sum, r) => sum + (r.confidence || 0), 0) / batchResults.length;
+    const combinedOriginal = batchResults.map((r: any) => r.originalText).join(' ');
+    const combinedEnglish = batchResults.map((r: any) => r.translatedText).join(' ');
+    const avgConfidence = batchResults.reduce((sum: number, r: any) => sum + (r.confidence || 0), 0) / batchResults.length;
 
     // 영어 번역 - 하나로 합쳐서 전송
     this.config.onTranslation({
