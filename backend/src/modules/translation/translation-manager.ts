@@ -46,6 +46,7 @@ export class TranslationManager {
   private contextBuffer: string[] = [];      // LLM 문맥용 (최근 문장들)
   private summary: string = '';              // 대화 요약
   private translationQueue: Array<{ text: string; confidence?: number }> = [];
+  private previousEnglishTranslation: string = '';  // 이전 영어 번역 (문장 연속성용)
   private batchTimer: NodeJS.Timeout | null = null;
   private transcriptCount: number = 0;       // 요약 주기 계산용
   private isProcessing: boolean = false;     // 중복 처리 방지
@@ -195,7 +196,8 @@ export class TranslationManager {
       'en',
       this.config.environmentPreset,
       this.config.customEnvironmentDescription,
-      this.config.customGlossary
+      this.config.customGlossary,
+      this.previousEnglishTranslation  // 이전 번역 전달 (문장 연속성)
     );
 
     if (!batchResults || batchResults.length === 0) {
@@ -211,6 +213,9 @@ export class TranslationManager {
     const combinedOriginal = batchResults.map((r: any) => r.originalText).join(' ');
     const combinedEnglish = batchResults.map((r: any) => r.translatedText).join(' ');
     const avgConfidence = batchResults.reduce((sum: number, r: any) => sum + (r.confidence || 0), 0) / batchResults.length;
+
+    // 이전 번역 저장 (다음 배치에서 문장 연속성 유지용)
+    this.previousEnglishTranslation = combinedEnglish;
 
     // 영어 번역 - 하나로 합쳐서 전송
     this.config.onTranslation({
@@ -309,7 +314,8 @@ export class TranslationManager {
             contextSummary: this.summary,
             timestamp: new Date()
           });
-        }
+        },
+        this.previousEnglishTranslation  // 이전 번역 전달
       );
     } else {
       englishTranslation = await this.config.translationService.translateWithPreset(
@@ -320,7 +326,8 @@ export class TranslationManager {
         'en',
         this.config.environmentPreset,
         this.config.customEnvironmentDescription,
-        this.config.customGlossary
+        this.config.customGlossary,
+        this.previousEnglishTranslation  // 이전 번역 전달
       );
     }
 
@@ -331,6 +338,9 @@ export class TranslationManager {
       }
       return;
     }
+
+    // 이전 번역 저장 (다음 번역에서 문장 연속성 유지용)
+    this.previousEnglishTranslation = englishTranslation;
 
     this.config.onTranslation({
       roomId: this.config.roomId,
@@ -449,5 +459,6 @@ export class TranslationManager {
     this.transcriptCount = 0;
     this.isProcessing = false;
     this.firstQueueItemTime = null;
+    this.previousEnglishTranslation = '';
   }
 }

@@ -98,7 +98,8 @@ export class TranslationService {
     targetLanguage: string,
     environmentPreset: EnvironmentPreset,
     customEnvironmentDescription?: string,
-    customGlossary?: Record<string, string>
+    customGlossary?: Record<string, string>,
+    previousTranslation?: string
   ): Promise<Array<{ originalText: string; translatedText: string; confidence?: number }> | null> {
     try {
       if (texts.length === 0) return [];
@@ -127,7 +128,8 @@ export class TranslationService {
       const userPrompt = systemPrompt
         .replace('{summary}', summary || '(No summary yet)')
         .replace('{recentContext}', recentContext || '(No recent context)')
-        .replace('{currentText}', `TRANSLATE EACH OF THE FOLLOWING ${texts.length} SENTENCES SEPARATELY. Keep the numbering format [1], [2], [3] etc in your response:\n\n${numberedTexts}`);
+        .replace('{previousTranslation}', previousTranslation || '(This is the first segment)')
+        .replace('{currentText}', `TRANSLATE EACH OF THE FOLLOWING ${texts.length} SENTENCES SEPARATELY. Keep the numbering format [1], [2], [3] etc in your response. IMPORTANT: Continue naturally from the previous English translation - do NOT start fresh if the Korean continues from previous segment:\n\n${numberedTexts}`);
 
       const client = this.getClient();
 
@@ -236,7 +238,8 @@ export class TranslationService {
     targetLanguage: string,
     environmentPreset: EnvironmentPreset,
     customEnvironmentDescription?: string,
-    customGlossary?: Record<string, string>
+    customGlossary?: Record<string, string>,
+    previousTranslation?: string
   ): Promise<string | null> {
     try {
       // ⚡ STT 오류 사전 보정 (LLM 호출 전에 정규식으로 빠르게 처리)
@@ -255,6 +258,7 @@ export class TranslationService {
       const userPrompt = systemPrompt
         .replace('{summary}', summary || '(No summary yet)')
         .replace('{recentContext}', recentContext || '(No recent context)')
+        .replace('{previousTranslation}', previousTranslation || '(This is the first segment)')
         .replace('{currentText}', correctedText);
 
       const client = this.getClient();
@@ -292,7 +296,8 @@ export class TranslationService {
     environmentPreset: EnvironmentPreset,
     customEnvironmentDescription?: string,
     customGlossary?: Record<string, string>,
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    previousTranslation?: string
   ): Promise<string | null> {
     try {
       // ⚡ STT 오류 사전 보정
@@ -309,6 +314,7 @@ export class TranslationService {
       const userPrompt = systemPrompt
         .replace('{summary}', summary || '(No summary yet)')
         .replace('{recentContext}', recentContext || '(No recent context)')
+        .replace('{previousTranslation}', previousTranslation || '(This is the first segment)')
         .replace('{currentText}', correctedText);
 
       const client = this.getClient();

@@ -316,14 +316,21 @@ Correct: "Heavenly Father" ✅ (if certain) OR "Gwanwonnim" ✅ (if uncertain)
 - NEVER add explanatory notes in your output
 - Output translation ONLY, nothing else
 
+🔗 SENTENCE FLOW - CRITICAL:
+- This is CONTINUOUS SPEECH - sentences often span across segments
+- If Korean ends with comma, conjunction (그리고, 하지만, 그래서), or incomplete ending → English should also NOT end completely
+- If Korean starts mid-sentence (no subject, continues previous thought) → English should flow naturally from previous translation
+- PRESERVE the natural speech flow - do NOT artificially close sentences
+
 CONTEXT:
 Summary: {summary}
-Recent: {recentContext}
+Recent Korean: {recentContext}
+Previous English translation: {previousTranslation}
 
 CURRENT TEXT TO TRANSLATE:
 {currentText}
 
-YOUR TRANSLATION (translation only, no notes):`;
+YOUR TRANSLATION (continue naturally from previous translation if applicable, no notes):`;
   }
 
   // 일반 프롬프트 (다른 preset들)
@@ -334,6 +341,12 @@ CONTEXT: ${environment}
 TASK: Translate the current segment, fixing ONLY obvious STT errors and maintaining context.
 
 ${Object.keys(glossary).length > 0 ? `KEY TERMS:\n${formatGlossary(glossary)}\n` : ''}
+🔗 SENTENCE FLOW - CRITICAL:
+- This is CONTINUOUS SPEECH from real-time STT
+- Sentences often span across segments - DO NOT artificially end sentences
+- If Korean ends with comma or conjunction → English should also continue
+- If Korean starts mid-sentence → continue naturally from previous English
+
 CRITICAL RULES:
 1. Fix ONLY obvious STT errors using context
 2. Maintain ${tone} tone
@@ -342,15 +355,17 @@ CRITICAL RULES:
 5. NEVER add parenthetical explanations about translation choices
 6. If uncertain about a word, translate it literally or transliterate it - DO NOT infer or guess
 7. Output ONLY the direct translation, nothing else
+8. PRESERVE sentence flow - if source doesn't end, translation shouldn't end either
 
 CONTEXT:
 Summary: {summary}
-Recent: {recentContext}
+Recent Korean: {recentContext}
+Previous English translation: {previousTranslation}
 
 CURRENT TEXT TO TRANSLATE:
 {currentText}
 
-YOUR TRANSLATION (translation only, no notes or explanations):`;
+YOUR TRANSLATION (continue naturally from previous translation if applicable):`;
 }
 
 /**
