@@ -52,8 +52,10 @@ export class TranslationManager {
 
   // 번역 큐 배치 설정
   private firstQueueItemTime: number | null = null;
-  private readonly MAX_WAIT_TIME_MS = 2000;   // 최대 2.5초 대기 (마지막 문장 flush 보장)
-  private readonly BATCH_DELAY_MS = 1500;     // 배치 모으기 딜레이 (2-3개 문장 모으기)
+  private readonly MIN_BATCH_SIZE = 2;        // 최소 배치 크기 (2개 이상이면 배치 처리)
+  private readonly MAX_WAIT_TIME_MS = 4000;   // 최대 4초 대기 (마지막 문장 flush 보장)
+  private readonly BATCH_DELAY_MS = 1500;     // 기본 딜레이
+  private readonly RETRY_DELAY_MS = 1000;     // 재시도 딜레이 (1개만 있을 때)
 
   constructor(config: TranslationManagerConfig) {
     this.config = config;
@@ -90,32 +92,49 @@ export class TranslationManager {
       this.firstQueueItemTime = Date.now();
     }
 
-    // 최대 대기 시간 체크
-    if (this.firstQueueItemTime !== null) {
-      const waitTime = Date.now() - this.firstQueueItemTime;
-      if (waitTime >= this.MAX_WAIT_TIME_MS) {
-        this.firstQueueItemTime = null;
-        setImmediate(() => this.processTranslationBatch());
-        return;
-      }
-    }
-
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
     }
 
-    // 큐가 많이 쌓이면 즉시 처리
+    // 큐가 3개 이상이면 즉시 처리
     if (this.translationQueue.length >= 3) {
       this.firstQueueItemTime = null;
       setImmediate(() => this.processTranslationBatch());
       return;
     }
 
-    // 딜레이 후 배치 처리 (2-3개 문장 모으기 위해 대기)
+    // 딜레이 후 배치 처리
     this.batchTimer = setTimeout(() => {
+      this.checkAndProcessBatch();
+    }, this.BATCH_DELAY_MS);
+  }
+
+  /**
+   * 배치 처리 조건 체크 및 실행
+   */
+  private checkAndProcessBatch(): void {
+    if (this.translationQueue.length === 0) return;
+
+    const waitTime = this.firstQueueItemTime ? Date.now() - this.firstQueueItemTime : 0;
+
+    // 최대 대기 시간 초과 → 무조건 flush
+    if (waitTime >= this.MAX_WAIT_TIME_MS) {
       this.firstQueueItemTime = null;
       this.processTranslationBatch();
-    }, this.BATCH_DELAY_MS);
+      return;
+    }
+
+    // 최소 배치 크기 미달 → 추가 대기
+    if (this.translationQueue.length < this.MIN_BATCH_SIZE) {
+      this.batchTimer = setTimeout(() => {
+        this.checkAndProcessBatch();
+      }, this.RETRY_DELAY_MS);
+      return;
+    }
+
+    // 조건 충족 → 처리
+    this.firstQueueItemTime = null;
+    this.processTranslationBatch();
   }
 
   /**

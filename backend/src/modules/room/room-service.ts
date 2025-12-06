@@ -182,12 +182,14 @@ export class RoomService {
       });
     }
 
-    // Create new listener
-    return await Listener.create({
+    // Create new listener using upsert to handle race conditions on reload
+    const [listener] = await Listener.upsert({
       socketId,
       name: name || 'Guest',
-      roomId: room.id
+      roomId: room.id,
+      leftAt: null
     });
+    return listener;
   }
 
   // Remove listener
