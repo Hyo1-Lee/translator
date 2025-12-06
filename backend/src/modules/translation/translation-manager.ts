@@ -52,10 +52,10 @@ export class TranslationManager {
 
   // 번역 큐 배치 설정
   private firstQueueItemTime: number | null = null;
-  private readonly MIN_BATCH_SIZE = 3;        // 최소 배치 크기 (3개 이상이면 배치 처리)
-  private readonly MAX_WAIT_TIME_MS = 8000;   // 최대 8초 대기 (더 길게 모으기)
-  private readonly BATCH_DELAY_MS = 2500;     // 기본 딜레이 (2.5초)
-  private readonly RETRY_DELAY_MS = 2000;     // 재시도 딜레이 (2초)
+  private readonly MIN_BATCH_SIZE = 3;        // 최소 배치 크기 (2개 이상이면 배치 처리)
+  private readonly MAX_WAIT_TIME_MS = 7000;   // 최대 7초 대기
+  private readonly BATCH_DELAY_MS = 2000;     // 기본 딜레이 (2초)
+  private readonly RETRY_DELAY_MS = 1500;     // 재시도 딜레이 (1.5초)
 
   constructor(config: TranslationManagerConfig) {
     this.config = config;
