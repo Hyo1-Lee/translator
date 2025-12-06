@@ -24,37 +24,19 @@ const BACKEND_URL =
 const FRONTEND_URL =
   process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
 const STORAGE_KEY = "speaker_room_info";
+const SETTINGS_STORAGE_KEY = "speaker_default_settings";
 
-// Prompt template options
-const PROMPT_TEMPLATES = [
-  { value: "general", label: "일반 대화" },
-  { value: "church", label: "교회/예배" },
-  { value: "lecture", label: "강의/강연" },
-  { value: "meeting", label: "회의/비즈니스" },
-  { value: "medical", label: "의료/건강" },
-  { value: "legal", label: "법률/계약" },
-  { value: "education", label: "교육/학습" },
-  { value: "tech", label: "기술/IT" },
-  { value: "custom", label: "사용자 지정" },
+// Session type presets (simplified from prompt templates + environment presets)
+const SESSION_PRESETS = [
+  { value: "church", label: "교회/예배", icon: "🛐", description: "예배, 설교, 찬양" },
+  { value: "lecture", label: "강의/세미나", icon: "🎓", description: "강연, 교육, 발표" },
+  { value: "meeting", label: "회의/비즈니스", icon: "💼", description: "회의, 컨퍼런스" },
+  { value: "general", label: "일반 대화", icon: "💬", description: "일상 대화, 기타" },
 ];
 
-// Target languages
+// Target languages (for display, currently only English supported)
 const TARGET_LANGUAGES = [
-  { code: "ko", name: "한국어" },
   { code: "en", name: "English" },
-  { code: "ja", name: "日本語" },
-  { code: "zh", name: "中文 (简体)" },
-  { code: "zh-TW", name: "中文 (繁體)" },
-  { code: "es", name: "Español" },
-  { code: "fr", name: "Français" },
-  { code: "de", name: "Deutsch" },
-  { code: "ru", name: "Русский" },
-  { code: "ar", name: "العربية" },
-  { code: "pt", name: "Português" },
-  { code: "vi", name: "Tiếng Việt" },
-  { code: "th", name: "ภาษาไทย" },
-  { code: "id", name: "Bahasa Indonesia" },
-  { code: "hi", name: "हिन्दी" },
 ];
 
 // Source languages (commonly used)
@@ -67,31 +49,23 @@ const SOURCE_LANGUAGES = [
   { code: "fr", name: "Français" },
 ];
 
-// Environment presets
-const ENVIRONMENT_PRESETS = [
-  { value: "general", label: "일반 대화" },
-  { value: "church", label: "종교/교회" },
-  { value: "medical", label: "의료/건강" },
-  { value: "legal", label: "법률/계약" },
-  { value: "business", label: "비즈니스/회의" },
-  { value: "custom", label: "사용자 지정" },
-];
-
 interface RoomSettings {
   roomTitle: string;
-  speakerName: string;
-  promptTemplate: string;
-  customPrompt: string;
-  targetLanguages: string[];
-  password: string;
-  maxListeners: number;
-  // Translation settings
-  enableTranslation: boolean;
+  sessionType: string; // Unified: replaces promptTemplate + environmentPreset
   sourceLanguage: string;
-  environmentPreset: string;
-  customEnvironmentDescription: string;
-  customGlossary: Record<string, string> | null;
+  targetLanguages: string[];
+  // Advanced settings (hidden by default)
+  maxListeners: number;
   enableStreaming: boolean;
+  // Legacy fields for backend compatibility
+  promptTemplate?: string;
+  customPrompt?: string;
+  enableTranslation?: boolean;
+  environmentPreset?: string;
+  customEnvironmentDescription?: string;
+  customGlossary?: Record<string, string> | null;
+  speakerName?: string;
+  password?: string;
 }
 
 interface Transcript {
@@ -183,20 +157,17 @@ function SpeakerContent() {
 
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     roomTitle: "",
-    speakerName: "",
-    promptTemplate: "church",
-    customPrompt: "",
-    targetLanguages: ["en"],
-    password: "",
-    maxListeners: 100,
-    // Translation settings (Default: LDS Church optimized)
-    enableTranslation: true,
+    sessionType: "church", // Default: church (primary target)
     sourceLanguage: "ko",
-    environmentPreset: "church",
-    customEnvironmentDescription: "",
-    customGlossary: null,
+    targetLanguages: ["en"],
+    maxListeners: 100,
     enableStreaming: true,
   });
+
+  // New UX states
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [hasDefaultSettings, setHasDefaultSettings] = useState(false);
+  const [saveAsDefault, setSaveAsDefault] = useState(true);
 
   // Refs
   const socketRef = useRef<
@@ -205,6 +176,12 @@ function SpeakerContent() {
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const translationListRef = useRef<HTMLDivElement>(null);
   const backgroundSessionRef = useRef<BackgroundSessionManager | null>(null);
+  const roomIdRef = useRef<string>(""); // Always holds the latest roomId for callbacks
+
+  // Keep roomIdRef in sync with roomId state
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
 
   // Auto-scroll to latest translation
   useEffect(() => {
@@ -329,6 +306,32 @@ function SpeakerContent() {
     return null;
   }, []);
 
+  // Load default settings from localStorage
+  const loadDefaultSettings = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved);
+          setHasDefaultSettings(true);
+          return settings;
+        } catch {
+          localStorage.removeItem(SETTINGS_STORAGE_KEY);
+        }
+      }
+    }
+    setHasDefaultSettings(false);
+    return null;
+  }, []);
+
+  // Save default settings to localStorage
+  const saveDefaultSettings = useCallback((settings: RoomSettings) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      setHasDefaultSettings(true);
+    }
+  }, []);
+
   // Save room info to localStorage
   const saveRoomInfo = useCallback((roomCode: string, name: string) => {
     if (typeof window !== "undefined") {
@@ -354,62 +357,71 @@ function SpeakerContent() {
   const createRoom = useCallback(() => {
     if (!socketRef.current) return;
 
-    const name =
-      user?.name || roomSettings.speakerName || speakerName || "Speaker";
+    const name = user?.name || speakerName || "Speaker";
     setSpeakerName(name);
 
+    // Save as default if checkbox is checked
+    if (saveAsDefault) {
+      saveDefaultSettings(roomSettings);
+    }
+
+    // Map sessionType to backend-compatible fields
     const dataToSend = {
       name,
       userId: user?.id,
       roomTitle: roomSettings.roomTitle,
-      password: roomSettings.password,
-      promptTemplate: roomSettings.promptTemplate,
-      customPrompt: roomSettings.customPrompt,
+      // Backend compatibility: use sessionType for both
+      promptTemplate: roomSettings.sessionType,
+      environmentPreset: roomSettings.sessionType,
       maxListeners: roomSettings.maxListeners,
-      // Translation settings
-      enableTranslation: roomSettings.enableTranslation,
+      // Translation always enabled (simplified UX)
+      enableTranslation: true,
       sourceLanguage: roomSettings.sourceLanguage,
       targetLanguagesArray: roomSettings.targetLanguages,
-      environmentPreset: roomSettings.environmentPreset,
-      customEnvironmentDescription: roomSettings.customEnvironmentDescription,
-      customGlossary: roomSettings.customGlossary,
       enableStreaming: roomSettings.enableStreaming,
+      // Empty/null for removed fields
+      password: "",
+      customPrompt: "",
+      customEnvironmentDescription: "",
+      customGlossary: null,
     };
 
-    console.log("🏗️ Creating room with settings:");
-    console.log("  - roomTitle:", roomSettings.roomTitle);
-    console.log("  - password:", roomSettings.password ? "***" : "(none)");
-    console.log("  - enableTranslation:", roomSettings.enableTranslation);
+    console.log("🏗️ Creating room with simplified settings:");
+    console.log("  - sessionType:", roomSettings.sessionType);
     console.log("  - sourceLanguage:", roomSettings.sourceLanguage);
-    console.log("  - targetLanguages:", roomSettings.targetLanguages);
-    console.log("  - environmentPreset:", roomSettings.environmentPreset);
-    console.log("  - Full data:", dataToSend);
+    console.log("  - roomTitle:", roomSettings.roomTitle);
 
     socketRef.current.emit("create-room", dataToSend);
 
     setShowSettingsModal(false);
-  }, [user, speakerName, roomSettings]);
+  }, [user, speakerName, roomSettings, saveAsDefault, saveDefaultSettings]);
 
   // Update room settings (without changing room code)
   const updateRoomSettings = useCallback(() => {
     if (!socketRef.current || !roomId) return;
 
-    console.log("⚙️ Updating room settings:", {
-      roomId,
+    // Map to backend-compatible format
+    const settingsToSend = {
       roomTitle: roomSettings.roomTitle,
-      hasPassword: !!roomSettings.password,
+      promptTemplate: roomSettings.sessionType,
+      environmentPreset: roomSettings.sessionType,
+      sourceLanguage: roomSettings.sourceLanguage,
       targetLanguages: roomSettings.targetLanguages,
-      fullSettings: roomSettings,
-    });
+      maxListeners: roomSettings.maxListeners,
+      enableTranslation: true,
+      enableStreaming: roomSettings.enableStreaming,
+    };
+
+    console.log("⚙️ Updating room settings:", settingsToSend);
 
     socketRef.current.emit("update-settings", {
       roomId,
-      settings: roomSettings,
+      settings: settingsToSend,
     });
 
     setShowSettingsModal(false);
-    alert("설정이 업데이트되었습니다!");
-  }, [roomId, roomSettings]);
+    toast.success("설정이 업데이트되었습니다");
+  }, [roomId, roomSettings, toast]);
 
   // Initialize socket connection
   useEffect(() => {
@@ -437,6 +449,11 @@ function SpeakerContent() {
       // Force new room - clear localStorage and show settings modal
       if (forceNew === "true") {
         clearRoomInfo();
+        // Load default settings if available
+        const defaultSettings = loadDefaultSettings();
+        if (defaultSettings) {
+          setRoomSettings(defaultSettings);
+        }
         setShowSettingsModal(true);
         // Clear URL parameter
         router.replace("/speaker");
@@ -447,13 +464,18 @@ function SpeakerContent() {
       if (roomParam && socketRef.current) {
         const name = user?.name || "Speaker";
         setSpeakerName(name);
+        const defaultSettings = loadDefaultSettings();
         socketRef.current.emit("create-room", {
           name,
           userId: user?.id,
           existingRoomCode: roomParam,
-          promptTemplate: "general",
-          targetLanguages: ["en"],
-          maxListeners: 100,
+          promptTemplate: defaultSettings?.sessionType || "church",
+          environmentPreset: defaultSettings?.sessionType || "church",
+          sourceLanguage: defaultSettings?.sourceLanguage || "ko",
+          targetLanguagesArray: defaultSettings?.targetLanguages || ["en"],
+          maxListeners: defaultSettings?.maxListeners || 100,
+          enableTranslation: true,
+          enableStreaming: defaultSettings?.enableStreaming ?? true,
         });
         // Clear URL parameter after processing
         router.replace("/speaker");
@@ -466,19 +488,48 @@ function SpeakerContent() {
         // Try to rejoin existing room
         const name = savedRoom.speakerName || user?.name || "Speaker";
         setSpeakerName(name);
+        const defaultSettings = loadDefaultSettings();
         socketRef.current.emit("create-room", {
           name,
           userId: user?.id,
           existingRoomCode: savedRoom.roomCode,
-          promptTemplate: "general",
-          targetLanguages: ["en"],
-          maxListeners: 100,
+          promptTemplate: defaultSettings?.sessionType || "church",
+          environmentPreset: defaultSettings?.sessionType || "church",
+          sourceLanguage: defaultSettings?.sourceLanguage || "ko",
+          targetLanguagesArray: defaultSettings?.targetLanguages || ["en"],
+          maxListeners: defaultSettings?.maxListeners || 100,
+          enableTranslation: true,
+          enableStreaming: defaultSettings?.enableStreaming ?? true,
         });
         // Don't show settings modal when rejoining
         setShowSettingsModal(false);
       } else {
-        // Show settings modal for new room
-        setShowSettingsModal(true);
+        // NEW: One-click start if default settings exist
+        const defaultSettings = loadDefaultSettings();
+        if (defaultSettings && socketRef.current) {
+          console.log("🚀 One-click start with saved settings");
+          const name = user?.name || "Speaker";
+          setSpeakerName(name);
+          setRoomSettings(defaultSettings);
+
+          socketRef.current.emit("create-room", {
+            name,
+            userId: user?.id,
+            roomTitle: defaultSettings.roomTitle || "",
+            promptTemplate: defaultSettings.sessionType,
+            environmentPreset: defaultSettings.sessionType,
+            sourceLanguage: defaultSettings.sourceLanguage,
+            targetLanguagesArray: defaultSettings.targetLanguages,
+            maxListeners: defaultSettings.maxListeners,
+            enableTranslation: true,
+            enableStreaming: defaultSettings.enableStreaming,
+          });
+          // Don't show modal - direct start!
+          setShowSettingsModal(false);
+        } else {
+          // First time: show settings modal
+          setShowSettingsModal(true);
+        }
       }
     });
 
@@ -610,19 +661,10 @@ function SpeakerContent() {
         );
         setRoomSettings({
           roomTitle: data.roomSettings.roomTitle || "",
-          speakerName: speakerName,
-          promptTemplate: data.roomSettings.promptTemplate || "general",
-          customPrompt: data.roomSettings.customPrompt || "",
-          targetLanguages: data.roomSettings.targetLanguagesArray || ["en"],
-          password: "", // Don't set password for security
-          maxListeners: data.roomSettings.maxListeners || 100,
-          // Translation settings
-          enableTranslation: data.roomSettings.enableTranslation ?? true,
+          sessionType: data.roomSettings.promptTemplate || data.roomSettings.environmentPreset || "church",
           sourceLanguage: data.roomSettings.sourceLanguage || "ko",
-          environmentPreset: data.roomSettings.environmentPreset || "general",
-          customEnvironmentDescription:
-            data.roomSettings.customEnvironmentDescription || "",
-          customGlossary: data.roomSettings.customGlossary || null,
+          targetLanguages: data.roomSettings.targetLanguagesArray || ["en"],
+          maxListeners: data.roomSettings.maxListeners || 100,
           enableStreaming: data.roomSettings.enableStreaming ?? true,
         });
       }
@@ -672,19 +714,10 @@ function SpeakerContent() {
         );
         setRoomSettings({
           roomTitle: data.roomSettings.roomTitle || "",
-          speakerName: speakerName,
-          promptTemplate: data.roomSettings.promptTemplate || "general",
-          customPrompt: data.roomSettings.customPrompt || "",
-          targetLanguages: data.roomSettings.targetLanguagesArray || ["en"],
-          password: "", // Don't set password for security
-          maxListeners: data.roomSettings.maxListeners || 100,
-          // Translation settings
-          enableTranslation: data.roomSettings.enableTranslation ?? true,
+          sessionType: data.roomSettings.promptTemplate || data.roomSettings.environmentPreset || "church",
           sourceLanguage: data.roomSettings.sourceLanguage || "ko",
-          environmentPreset: data.roomSettings.environmentPreset || "general",
-          customEnvironmentDescription:
-            data.roomSettings.customEnvironmentDescription || "",
-          customGlossary: data.roomSettings.customGlossary || null,
+          targetLanguages: data.roomSettings.targetLanguagesArray || ["en"],
+          maxListeners: data.roomSettings.maxListeners || 100,
           enableStreaming: data.roomSettings.enableStreaming ?? true,
         });
       }
@@ -825,10 +858,24 @@ function SpeakerContent() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loadSavedRoom, saveRoomInfo, generateQRCode]);
+  }, [user, loadSavedRoom, loadDefaultSettings, saveRoomInfo, generateQRCode]);
 
   // Start recording
   const startRecording = async () => {
+    // Wait for roomId if not ready yet (can happen on first load)
+    let waitAttempts = 0;
+    while (!roomIdRef.current && waitAttempts < 10) {
+      console.log(`[Recording] Waiting for roomId... (attempt ${waitAttempts + 1})`);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      waitAttempts++;
+    }
+
+    if (!roomIdRef.current) {
+      console.error("[Recording] ❌ No roomId available after waiting");
+      toast.error("방이 아직 생성되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+
     try {
       setStatus("마이크 요청 중...");
 
@@ -837,9 +884,11 @@ function SpeakerContent() {
         deviceId: selectedMicId || undefined,
         useExternalMicMode: useExternalMicMode,
         onAudioData: (base64Audio) => {
-          if (socketRef.current?.connected && roomId) {
+          // Use roomIdRef.current to always get the latest roomId (avoid closure capture issue)
+          const currentRoomId = roomIdRef.current;
+          if (socketRef.current?.connected && currentRoomId) {
             socketRef.current.emit("audio-stream", {
-              roomId,
+              roomId: currentRoomId,
               audio: base64Audio,
             });
           }
@@ -899,9 +948,12 @@ function SpeakerContent() {
       console.log("[Recording] ✅ Started");
 
       // Notify server to create STT client
-      if (socketRef.current && roomId) {
-        socketRef.current.emit("start-recording", { roomId });
-        console.log("[Recording] 📤 Server notified");
+      const currentRoomId = roomIdRef.current;
+      if (socketRef.current && currentRoomId) {
+        socketRef.current.emit("start-recording", { roomId: currentRoomId });
+        console.log("[Recording] 📤 Server notified, roomId:", currentRoomId);
+      } else {
+        console.warn("[Recording] ⚠️ Cannot notify server - roomId not ready:", currentRoomId);
       }
     } catch (error) {
       console.error("[Recording] ❌ Start failed:", error);
@@ -1449,12 +1501,12 @@ function SpeakerContent() {
         </div>
       </div>
 
-      {/* Settings Modal */}
+      {/* Settings Modal - Simplified */}
       {showSettingsModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
-              <h2>{roomId ? "방 설정 변경" : "방 설정"}</h2>
+              <h2>{roomId ? "세션 설정" : "새 세션 시작"}</h2>
               <button
                 onClick={() => setShowSettingsModal(false)}
                 className={styles.closeModalButton}
@@ -1474,9 +1526,68 @@ function SpeakerContent() {
             </div>
 
             <div className={styles.modalBody}>
-              {/* Room Title */}
+              {/* Session Type - Preset Cards */}
               <div className={styles.settingGroup}>
-                <label>방 제목 (선택)</label>
+                <label>세션 유형</label>
+                <div className={styles.presetGrid}>
+                  {SESSION_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      className={`${styles.presetCard} ${
+                        roomSettings.sessionType === preset.value ? styles.presetCardActive : ""
+                      }`}
+                      onClick={() =>
+                        setRoomSettings({
+                          ...roomSettings,
+                          sessionType: preset.value,
+                        })
+                      }
+                    >
+                      <span className={styles.presetIcon}>{preset.icon}</span>
+                      <span className={styles.presetLabel}>{preset.label}</span>
+                      <span className={styles.presetDesc}>{preset.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Source Language */}
+              <div className={styles.settingGroup}>
+                <label>출발 언어 (말하는 언어)</label>
+                <select
+                  value={roomSettings.sourceLanguage}
+                  onChange={(e) =>
+                    setRoomSettings({
+                      ...roomSettings,
+                      sourceLanguage: e.target.value,
+                    })
+                  }
+                  className={styles.select}
+                >
+                  {SOURCE_LANGUAGES.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Target Language - Fixed to English */}
+              <div className={styles.settingGroup}>
+                <label>번역 언어</label>
+                <div className={styles.fixedLanguage}>
+                  <span className={styles.fixedLanguageText}>English (영어)</span>
+                  <span className={styles.fixedLanguageBadge}>현재 지원</span>
+                </div>
+                <p className={styles.settingHint}>
+                  다른 언어는 추후 지원 예정입니다
+                </p>
+              </div>
+
+              {/* Session Name (Optional) */}
+              <div className={styles.settingGroup}>
+                <label>세션 이름 (선택)</label>
                 <input
                   type="text"
                   value={roomSettings.roomTitle}
@@ -1487,260 +1598,42 @@ function SpeakerContent() {
                     })
                   }
                   className={styles.input}
-                  placeholder="예: 주일 예배"
+                  placeholder="예: 주일 예배, 월례 회의"
                 />
               </div>
 
-              {/* Speaker Name */}
-              <div className={styles.settingGroup}>
-                <label>발표자 이름 (선택)</label>
-                <input
-                  type="text"
-                  value={roomSettings.speakerName}
-                  onChange={(e) =>
-                    setRoomSettings({
-                      ...roomSettings,
-                      speakerName: e.target.value,
-                    })
-                  }
-                  className={styles.input}
-                  placeholder="예: 홍길동 목사"
-                  autoComplete="off"
-                  data-form-type="other"
-                />
-              </div>
-
-              {/* Prompt Template */}
-              <div className={styles.settingGroup}>
-                <label>음성 인식 유형</label>
-                <select
-                  value={roomSettings.promptTemplate}
-                  onChange={(e) =>
-                    setRoomSettings({
-                      ...roomSettings,
-                      promptTemplate: e.target.value,
-                    })
-                  }
-                  className={styles.select}
-                >
-                  {PROMPT_TEMPLATES.map((template) => (
-                    <option key={template.value} value={template.value}>
-                      {template.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Custom Prompt */}
-              {roomSettings.promptTemplate === "custom" && (
+              {/* Save as Default Checkbox (only for new rooms) */}
+              {!roomId && (
                 <div className={styles.settingGroup}>
-                  <label>사용자 지정 프롬프트</label>
-                  <textarea
-                    value={roomSettings.customPrompt}
-                    onChange={(e) =>
-                      setRoomSettings({
-                        ...roomSettings,
-                        customPrompt: e.target.value,
-                      })
-                    }
-                    className={styles.textarea}
-                    placeholder="음성 인식을 위한 사용자 지정 프롬프트를 입력하세요..."
-                    rows={4}
-                  />
+                  <label className={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={saveAsDefault}
+                      onChange={(e) => setSaveAsDefault(e.target.checked)}
+                    />
+                    <span>이 설정을 기본값으로 저장</span>
+                  </label>
+                  <p className={styles.settingHint}>
+                    다음 방문 시 이 설정으로 바로 시작됩니다
+                  </p>
                 </div>
               )}
 
-              {/* ===== Translation Settings ===== */}
-              <div className={styles.settingGroup}>
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={roomSettings.enableTranslation}
-                    onChange={(e) =>
-                      setRoomSettings({
-                        ...roomSettings,
-                        enableTranslation: e.target.checked,
-                      })
-                    }
-                  />
-                  <span style={{ fontWeight: "bold" }}>실시간 번역 활성화</span>
-                </label>
-                <p
-                  style={{
-                    fontSize: "0.8125rem",
-                    color: "#94a3b8",
-                    marginTop: "0.5rem",
-                  }}
-                >
-                  💡 GPT + Google Translate를 사용한 고품질 다국어 번역
-                </p>
-              </div>
+              {/* Advanced Settings Toggle */}
+              <button
+                type="button"
+                className={styles.advancedToggle}
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+              >
+                <span>{showAdvancedSettings ? "▼" : "▶"} 고급 설정</span>
+              </button>
 
-              {roomSettings.enableTranslation && (
-                <>
-                  {/* Source Language */}
-                  <div className={styles.settingGroup}>
-                    <label>출발 언어</label>
-                    <select
-                      value={roomSettings.sourceLanguage}
-                      onChange={(e) =>
-                        setRoomSettings({
-                          ...roomSettings,
-                          sourceLanguage: e.target.value,
-                        })
-                      }
-                      className={styles.select}
-                    >
-                      {SOURCE_LANGUAGES.map((lang) => (
-                        <option key={lang.code} value={lang.code}>
-                          {lang.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Environment Preset */}
-                  <div className={styles.settingGroup}>
-                    <label>번역 환경</label>
-                    <select
-                      value={roomSettings.environmentPreset}
-                      onChange={(e) =>
-                        setRoomSettings({
-                          ...roomSettings,
-                          environmentPreset: e.target.value,
-                        })
-                      }
-                      className={styles.select}
-                    >
-                      {ENVIRONMENT_PRESETS.map((preset) => (
-                        <option key={preset.value} value={preset.value}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </select>
-                    <p
-                      style={{
-                        fontSize: "0.8125rem",
-                        color: "#94a3b8",
-                        marginTop: "0.5rem",
-                      }}
-                    >
-                      💡 환경에 맞는 전문 용어와 맥락을 적용합니다
-                    </p>
-                  </div>
-
-                  {/* Custom Environment Description */}
-                  {roomSettings.environmentPreset === "custom" && (
-                    <div className={styles.settingGroup}>
-                      <label>사용자 지정 환경 설명</label>
-                      <textarea
-                        value={roomSettings.customEnvironmentDescription}
-                        onChange={(e) =>
-                          setRoomSettings({
-                            ...roomSettings,
-                            customEnvironmentDescription: e.target.value,
-                          })
-                        }
-                        className={styles.textarea}
-                        placeholder="예: 스타트업 투자 발표회, 의학 세미나, 법률 상담 등..."
-                        rows={3}
-                      />
-                    </div>
-                  )}
-
-                  {/* Target Languages */}
-                  <div className={styles.settingGroup}>
-                    <label>번역 언어 선택</label>
-                    <div className={styles.languageGrid}>
-                      {TARGET_LANGUAGES.map((lang) => {
-                        // Only allow English for now, disable others
-                        const isSourceLang =
-                          lang.code === roomSettings.sourceLanguage;
-                        const isOnlyEnglishAllowed = lang.code !== "en";
-                        const isDisabled = isSourceLang || isOnlyEnglishAllowed;
-                        return (
-                          <label
-                            key={lang.code}
-                            className={`${styles.checkbox} ${
-                              isDisabled ? styles.disabled : ""
-                            }`}
-                            title={
-                              isSourceLang
-                                ? "출발 언어는 번역 대상에서 제외됩니다"
-                                : isOnlyEnglishAllowed
-                                ? "현재 영어만 지원됩니다"
-                                : ""
-                            }
-                          >
-                            <input
-                              type="checkbox"
-                              checked={roomSettings.targetLanguages.includes(
-                                lang.code
-                              )}
-                              disabled={isDisabled}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setRoomSettings({
-                                    ...roomSettings,
-                                    targetLanguages: [
-                                      ...roomSettings.targetLanguages,
-                                      lang.code,
-                                    ],
-                                  });
-                                } else {
-                                  setRoomSettings({
-                                    ...roomSettings,
-                                    targetLanguages:
-                                      roomSettings.targetLanguages.filter(
-                                        (l) => l !== lang.code
-                                      ),
-                                  });
-                                }
-                              }}
-                            />
-                            <span>{lang.name}</span>
-                            {isOnlyEnglishAllowed && (
-                              <span
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "#64748b",
-                                  marginLeft: "0.25rem",
-                                }}
-                              >
-                                (준비중)
-                              </span>
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <p
-                      style={{
-                        fontSize: "0.8125rem",
-                        color: "#94a3b8",
-                        marginTop: "0.5rem",
-                      }}
-                    >
-                      💡 현재 영어 번역만 지원됩니다. 다른 언어는 추후 지원
-                      예정입니다.
-                    </p>
-                  </div>
-
+              {/* Advanced Settings (Collapsed by default) */}
+              {showAdvancedSettings && (
+                <div className={styles.advancedSettings}>
                   {/* Streaming */}
                   <div className={styles.settingGroup}>
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                      }}
-                    >
+                    <label className={styles.checkboxLabel}>
                       <input
                         type="checkbox"
                         checked={roomSettings.enableStreaming}
@@ -1751,85 +1644,32 @@ function SpeakerContent() {
                           })
                         }
                       />
-                      <span>스트리밍 번역 (점진적 표시)</span>
+                      <span>스트리밍 번역</span>
                     </label>
-                    <p
-                      style={{
-                        fontSize: "0.8125rem",
-                        color: "#94a3b8",
-                        marginTop: "0.5rem",
-                      }}
-                    >
-                      💡 번역이 완성되기 전에 중간 결과를 실시간으로 보여줍니다
+                    <p className={styles.settingHint}>
+                      번역이 완성되기 전에 중간 결과를 실시간으로 표시
                     </p>
                   </div>
-                </>
+
+                  {/* Max Listeners */}
+                  <div className={styles.settingGroup}>
+                    <label>최대 청취자 수</label>
+                    <input
+                      type="number"
+                      value={roomSettings.maxListeners}
+                      onChange={(e) =>
+                        setRoomSettings({
+                          ...roomSettings,
+                          maxListeners: parseInt(e.target.value) || 100,
+                        })
+                      }
+                      className={styles.input}
+                      min="1"
+                      max="1000"
+                    />
+                  </div>
+                </div>
               )}
-
-              {/* Password */}
-              <div className={styles.settingGroup}>
-                <label>
-                  비밀번호 (선택)
-                  {roomSettings.password && (
-                    <span
-                      style={{
-                        marginLeft: "0.5rem",
-                        color: "#4ade80",
-                        fontSize: "0.875rem",
-                      }}
-                    >
-                      ✓ 설정됨
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="password"
-                  value={roomSettings.password}
-                  onChange={(e) =>
-                    setRoomSettings({
-                      ...roomSettings,
-                      password: e.target.value,
-                    })
-                  }
-                  className={styles.input}
-                  placeholder={
-                    roomId
-                      ? "비밀번호 변경 (공백으로 두면 제거)"
-                      : "비밀번호를 설정하지 않으면 누구나 입장 가능"
-                  }
-                  autoComplete="new-password"
-                  data-form-type="other"
-                />
-                {roomSettings.password && (
-                  <p
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "#94a3b8",
-                      marginTop: "0.5rem",
-                    }}
-                  >
-                    💡 청취자는 방 입장 시 이 비밀번호를 입력해야 합니다
-                  </p>
-                )}
-              </div>
-
-              {/* Max Listeners */}
-              <div className={styles.settingGroup}>
-                <label>최대 청취자 수</label>
-                <input
-                  type="number"
-                  value={roomSettings.maxListeners}
-                  onChange={(e) =>
-                    setRoomSettings({
-                      ...roomSettings,
-                      maxListeners: parseInt(e.target.value) || 100,
-                    })
-                  }
-                  className={styles.input}
-                  min="1"
-                  max="1000"
-                />
-              </div>
 
               {/* Actions */}
               <div className={styles.modalActions}>
@@ -1843,7 +1683,7 @@ function SpeakerContent() {
                   onClick={roomId ? updateRoomSettings : createRoom}
                   className={styles.createButton}
                 >
-                  {roomId ? "설정 저장" : "방 만들기"}
+                  {roomId ? "설정 저장" : "시작하기"}
                 </button>
               </div>
             </div>

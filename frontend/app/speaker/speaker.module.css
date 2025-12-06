@@ -2265,3 +2265,194 @@
   justify-content: center;
   color: #94a3b8;
 }
+
+/* ===== New Simplified Modal Styles ===== */
+
+/* Preset Grid */
+.presetGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+@media (max-width: 480px) {
+  .presetGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.presetCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.25rem 1rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 2px solid rgba(148, 163, 184, 0.15);
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.presetCard:hover {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(148, 163, 184, 0.3);
+  transform: translateY(-2px);
+}
+
+.presetCardActive {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.presetCardActive:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+.presetIcon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.presetLabel {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.presetDesc {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+/* Fixed Language Display */
+.fixedLanguage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.125rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 0.75rem;
+}
+
+.fixedLanguageText {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.fixedLanguageBadge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.15);
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+/* Setting Hint Text */
+.settingHint {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+}
+
+/* Checkbox Label */
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.checkboxLabel input[type="checkbox"] {
+  position: relative;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.375rem;
+  background: rgba(15, 23, 42, 0.8);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.checkboxLabel input[type="checkbox"]:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.checkboxLabel input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border-color: #3b82f6;
+}
+
+.checkboxLabel input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkboxLabel span {
+  color: #e2e8f0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+/* Advanced Settings Toggle */
+.advancedToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 0;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s;
+  margin-top: 0.5rem;
+}
+
+.advancedToggle:hover {
+  color: #cbd5e1;
+}
+
+.advancedToggle span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Advanced Settings Container */
+.advancedSettings {
+  padding: 1rem 0 0 0;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -143,6 +143,17 @@ export default function ListenerRoom() {
     socketRef.current.on("connect", () => {
       console.log("Connected to server");
       setIsConnected(true);
+
+      // Auto-join room immediately after connect (avoid timing issues with useEffect)
+      if (!isJoined && !needsPassword) {
+        const name = user?.name || "Guest";
+        console.log("🔌 Auto-joining room on connect:", roomCode);
+        socketRef.current?.emit("join-room", {
+          roomId: roomCode,
+          name,
+          password: "",
+        });
+      }
     });
 
     socketRef.current.on("disconnect", (reason) => {

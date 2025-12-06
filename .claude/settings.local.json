@@ -33,7 +33,8 @@
       "WebFetch(domain:github.com)",
       "Bash(npm run build:*)",
       "Bash(cat:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }
