@@ -50,15 +50,13 @@ export class TranslationManager {
   private transcriptCount: number = 0;       // 요약 주기 계산용
   private isProcessing: boolean = false;     // 중복 처리 방지
 
-  // 번역 큐 최대 대기 시간
+  // 번역 큐 배치 설정
   private firstQueueItemTime: number | null = null;
-  private readonly MAX_WAIT_TIME_MS = 1000; // 최대 1초 대기
+  private readonly MAX_WAIT_TIME_MS = 2000;   // 최대 2.5초 대기 (마지막 문장 flush 보장)
+  private readonly BATCH_DELAY_MS = 1500;     // 배치 모으기 딜레이 (2-3개 문장 모으기)
 
   constructor(config: TranslationManagerConfig) {
     this.config = config;
-    console.log(`[TranslationManager][${config.roomId}] 🚀 Initialized`);
-    console.log(`[TranslationManager][${config.roomId}] Source: ${config.sourceLanguage}, Targets: ${config.targetLanguages.join(', ')}`);
-    console.log(`[TranslationManager][${config.roomId}] Preset: ${config.environmentPreset}, Streaming: ${config.enableStreaming}`);
   }
 
   /**
@@ -66,8 +64,6 @@ export class TranslationManager {
    */
   addTranscript(text: string, isFinal: boolean, confidence?: number): void {
     if (!isFinal) return;  // Final만 처리
-
-    console.log(`[TranslationManager][${this.config.roomId}] ✅ Adding transcript: "${text.substring(0, 50)}..."`);
 
     // 컨텍스트 버퍼 업데이트 (LLM 문맥용)
     this.updateContext(text);
@@ -81,7 +77,6 @@ export class TranslationManager {
     // 30개마다 요약 생성
     this.transcriptCount++;
     if (this.transcriptCount % 30 === 0) {
-      console.log(`[TranslationManager][${this.config.roomId}] 📝 Generating summary (${this.transcriptCount} transcripts)`);
       this.regenerateSummary();
     }
   }
@@ -99,7 +94,6 @@ export class TranslationManager {
     if (this.firstQueueItemTime !== null) {
       const waitTime = Date.now() - this.firstQueueItemTime;
       if (waitTime >= this.MAX_WAIT_TIME_MS) {
-        console.log(`[TranslationManager][${this.config.roomId}] ⏰ Max wait time (${waitTime}ms) - processing now`);
         this.firstQueueItemTime = null;
         setImmediate(() => this.processTranslationBatch());
         return;
@@ -112,17 +106,16 @@ export class TranslationManager {
 
     // 큐가 많이 쌓이면 즉시 처리
     if (this.translationQueue.length >= 3) {
-      console.log(`[TranslationManager][${this.config.roomId}] 🚨 Queue size (${this.translationQueue.length}) - processing now`);
       this.firstQueueItemTime = null;
       setImmediate(() => this.processTranslationBatch());
       return;
     }
 
-    // 짧은 딜레이 후 처리 (배치 모으기)
+    // 딜레이 후 배치 처리 (2-3개 문장 모으기 위해 대기)
     this.batchTimer = setTimeout(() => {
       this.firstQueueItemTime = null;
       this.processTranslationBatch();
-    }, 100);
+    }, this.BATCH_DELAY_MS);
   }
 
   /**
@@ -130,23 +123,17 @@ export class TranslationManager {
    */
   private async processTranslationBatch(): Promise<void> {
     if (this.translationQueue.length === 0) return;
-    if (this.isProcessing) {
-      console.log(`[TranslationManager][${this.config.roomId}] ⏳ Already processing...`);
-      return;
-    }
+    if (this.isProcessing) return;
 
     this.isProcessing = true;
 
     const batch = [...this.translationQueue];
     this.translationQueue = [];
 
-    console.log(`[TranslationManager][${this.config.roomId}] 🔄 Processing batch of ${batch.length} items`);
-
     try {
       const useSmartBatch = batch.length >= 2 && typeof (this.config.translationService as any).translateBatch === 'function';
 
       if (useSmartBatch) {
-        console.log(`[TranslationManager][${this.config.roomId}] ⚡ Using smart batch translation`);
         await this.processBatchSmart(batch);
       } else {
         for (const item of batch) {
@@ -154,7 +141,7 @@ export class TranslationManager {
         }
       }
     } catch (error) {
-      console.error(`[TranslationManager][${this.config.roomId}] ❌ Batch processing error:`, error);
+      console.error(`[TranslationManager] Batch error:`, error);
       if (this.config.onError) {
         this.config.onError(error as Error);
       }
@@ -181,8 +168,6 @@ export class TranslationManager {
       return;
     }
 
-    console.log(`[TranslationManager][${this.config.roomId}] 🤖 Groq batch: ${this.config.sourceLanguage} → en (${batch.length} items)`);
-
     const batchResults = await (this.config.translationService as any).translateBatch(
       batch,
       recentContext,
@@ -195,7 +180,7 @@ export class TranslationManager {
     );
 
     if (!batchResults || batchResults.length === 0) {
-      console.error(`[TranslationManager][${this.config.roomId}] ❌ Smart batch failed, fallback to sequential`);
+      console.error(`[TranslationManager] Smart batch failed, fallback to sequential`);
       for (const item of batch) {
         await this.translateToMultipleLanguages(item.text, item.confidence);
       }
@@ -278,8 +263,6 @@ export class TranslationManager {
       return;
     }
 
-    console.log(`[TranslationManager][${this.config.roomId}] 🤖 GPT: ${this.config.sourceLanguage} → en`);
-
     let englishTranslation: string | null = null;
 
     if (this.config.enableStreaming) {
@@ -321,14 +304,12 @@ export class TranslationManager {
     }
 
     if (!englishTranslation) {
-      console.error(`[TranslationManager][${this.config.roomId}] ❌ Failed to translate to English`);
+      console.error(`[TranslationManager] Failed to translate to English`);
       if (this.config.onError) {
         this.config.onError(new Error('Failed to translate to English'));
       }
       return;
     }
-
-    console.log(`[TranslationManager][${this.config.roomId}] ✅ English: "${englishTranslation.substring(0, 50)}..."`);
 
     this.config.onTranslation({
       roomId: this.config.roomId,
@@ -347,8 +328,6 @@ export class TranslationManager {
     const otherLanguages = this.config.targetLanguages.filter(lang => lang !== 'en');
 
     if (otherLanguages.length > 0) {
-      console.log(`[TranslationManager][${this.config.roomId}] 🌐 Google: en → [${otherLanguages.join(', ')}]`);
-
       const googleTranslations = await this.config.googleTranslateService.translateToMultipleLanguages(
         englishTranslation,
         otherLanguages
@@ -378,8 +357,6 @@ export class TranslationManager {
     if (this.contextBuffer.length > 6) {
       this.contextBuffer.shift();
     }
-
-    console.log(`[TranslationManager][${this.config.roomId}] 📚 Context buffer: ${this.contextBuffer.length} items`);
   }
 
   /**
@@ -395,10 +372,9 @@ export class TranslationManager {
 
       if (newSummary) {
         this.summary = newSummary;
-        console.log(`[TranslationManager][${this.config.roomId}] 📝 Summary updated: "${newSummary.substring(0, 100)}..."`);
       }
     } catch (error) {
-      console.error(`[TranslationManager][${this.config.roomId}] ❌ Summary generation error:`, error);
+      console.error(`[TranslationManager] Summary generation error:`, error);
     }
   }
 
@@ -423,8 +399,6 @@ export class TranslationManager {
    * 정리
    */
   async cleanup(): Promise<void> {
-    console.log(`[TranslationManager][${this.config.roomId}] 🧹 Cleaning up...`);
-
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.batchTimer = null;
@@ -432,8 +406,6 @@ export class TranslationManager {
 
     // 남은 번역 큐 처리
     if (this.translationQueue.length > 0) {
-      console.log(`[TranslationManager][${this.config.roomId}] ⏳ Processing ${this.translationQueue.length} remaining items...`);
-
       const maxWaitTime = 10000;
       const startTime = Date.now();
 
@@ -456,7 +428,5 @@ export class TranslationManager {
     this.transcriptCount = 0;
     this.isProcessing = false;
     this.firstQueueItemTime = null;
-
-    console.log(`[TranslationManager][${this.config.roomId}] ✅ Cleaned up`);
   }
 }

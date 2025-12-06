@@ -37,8 +37,6 @@ export class TranslationService {
         baseURL: 'https://api.groq.com/openai/v1'
       });
       this.model = config.groqModel || 'llama-3.3-70b-versatile';
-      console.log(`[TranslationService] 🚀 Groq enabled with model: ${this.model}`);
-      console.log(`[TranslationService] 📦 Smart batch: ${this.enableSmartBatch ? `enabled (${this.batchSize} items)` : 'disabled'}`);
     }
   }
 
@@ -105,9 +103,6 @@ export class TranslationService {
     try {
       if (texts.length === 0) return [];
 
-      const startTime = Date.now();
-      console.log(`[TranslationService] 📦 Batch translating ${texts.length} items with ${this.provider}...`);
-
       // ⚡ STT 오류 사전 보정 (모든 텍스트에 적용)
       const correctedTexts = await Promise.all(
         texts.map(async (item) => ({
@@ -150,12 +145,9 @@ export class TranslationService {
 
       const fullResponse = response.choices[0]?.message?.content?.trim();
       if (!fullResponse) {
-        console.error('[TranslationService] ❌ Empty batch response');
+        console.error('[TranslationService] Empty batch response');
         return null;
       }
-
-      const elapsed = Date.now() - startTime;
-      console.log(`[TranslationService] ⚡ Batch completed in ${elapsed}ms (${Math.round(correctedTexts.length * 1000 / elapsed)} items/sec)`);
 
       // Parse response: [1] Translation1\n[2] Translation2\n[3] Translation3
       const results: Array<{ originalText: string; translatedText: string; confidence?: number }> = [];
@@ -194,7 +186,7 @@ export class TranslationService {
 
       return results;
     } catch (error) {
-      console.error('[TranslationService] ❌ Batch translation error:', error);
+      console.error('[TranslationService] Batch translation error:', error);
       return null;
     }
   }
