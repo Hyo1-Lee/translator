@@ -34,7 +34,8 @@
       "Bash(npm run build:*)",
       "Bash(cat:*)",
       "Bash(tasklist:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:vercel.com)"
     ],
     "deny": []
   }
