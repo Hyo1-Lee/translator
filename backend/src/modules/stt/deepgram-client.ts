@@ -74,11 +74,11 @@ export class DeepgramClient extends STTProvider {
       const options: any = {
         model: this.config.model,
         language: this.config.language,
-        smart_format: false,
-        punctuate: false,
+        smart_format: true,           // 자동 구두점 및 포맷팅
+        punctuate: true,              // 마침표 자동 추가
         interim_results: this.config.interimResults,
-        endpointing: 1000,
-        utterance_end_ms: 1500,
+        endpointing: 2000,            // 2초 침묵 감지 (문장 끊김 방지)
+        utterance_end_ms: 3000,       // 3초 후 발화 종료 확정
         vad_events: true,
         filler_words: false,
         numerals: true,
