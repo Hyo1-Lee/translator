@@ -168,27 +168,18 @@ export class RoomService {
       throw new Error('Room not found');
     }
 
-    // Check if listener already exists with this socket ID
-    const existing = await Listener.findOne({
-      where: { socketId }
-    });
-
-    if (existing) {
-      // Update existing listener - rejoin room
-      return await existing.update({
-        roomId: room.id,
-        name: name || existing.name,
-        leftAt: null
-      });
-    }
-
-    // Create new listener using upsert to handle race conditions on reload
-    const [listener] = await Listener.upsert({
+    // Use upsert directly to handle race conditions (e.g., duplicate join-room events on reload)
+    // This avoids the race condition between findOne and create
+    const [listener, created] = await Listener.upsert({
       socketId,
       name: name || 'Guest',
       roomId: room.id,
       leftAt: null
+    }, {
+      returning: true
     });
+
+    console.log(`[Room] Listener ${created ? 'created' : 'updated'}: ${socketId}`);
     return listener;
   }
 
