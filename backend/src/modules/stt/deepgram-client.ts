@@ -31,7 +31,7 @@ export class DeepgramClient extends STTProvider {
   // Sentence buffering
   private sentenceBuffer: string[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
-  private readonly FLUSH_TIMEOUT_MS = 500; // 0.5초 후 자동 flush
+  private readonly FLUSH_TIMEOUT_MS = 800; // 0.5초 후 자동 flush
   private readonly SENTENCE_ENDINGS = /[.!?。！？]/; // 문장 종결 부호 (한국어 + 영어)
 
   // 마지막 INTERIM 결과 저장 (disconnect 시 처리용)
@@ -93,7 +93,7 @@ export class DeepgramClient extends STTProvider {
 
         // 발화 끝점 감지 - 균형 설정
         // ⚠️ 너무 길면 여러 문장이 합쳐짐, 너무 짧으면 문장 중간에 끊김
-        endpointing: 800,           // 발화 끝 감지 시간 (380ms - 균형점)
+        endpointing: 1000,           // 발화 끝 감지 시간 (380ms - 균형점)
         utterance_end_ms: 1200,     // 발화 종료 판단 시간 (1.2초)
 
         // VAD (Voice Activity Detection)

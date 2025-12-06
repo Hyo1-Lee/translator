@@ -1552,37 +1552,35 @@ function SpeakerContent() {
                 </div>
               </div>
 
-              {/* Source Language */}
-              <div className={styles.settingGroup}>
-                <label>출발 언어 (말하는 언어)</label>
-                <select
-                  value={roomSettings.sourceLanguage}
-                  onChange={(e) =>
-                    setRoomSettings({
-                      ...roomSettings,
-                      sourceLanguage: e.target.value,
-                    })
-                  }
-                  className={styles.select}
-                >
-                  {SOURCE_LANGUAGES.map((lang) => (
-                    <option key={lang.code} value={lang.code}>
-                      {lang.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Target Language - Fixed to English */}
-              <div className={styles.settingGroup}>
-                <label>번역 언어</label>
-                <div className={styles.fixedLanguage}>
-                  <span className={styles.fixedLanguageText}>English (영어)</span>
-                  <span className={styles.fixedLanguageBadge}>현재 지원</span>
+              {/* Language Settings - Side by side */}
+              <div className={styles.languageRow}>
+                <div className={styles.settingGroup}>
+                  <label>출발 언어</label>
+                  <select
+                    value={roomSettings.sourceLanguage}
+                    onChange={(e) =>
+                      setRoomSettings({
+                        ...roomSettings,
+                        sourceLanguage: e.target.value,
+                      })
+                    }
+                    className={styles.select}
+                  >
+                    {SOURCE_LANGUAGES.map((lang) => (
+                      <option key={lang.code} value={lang.code}>
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <p className={styles.settingHint}>
-                  다른 언어는 추후 지원 예정입니다
-                </p>
+
+                <div className={styles.settingGroup}>
+                  <label>번역 언어</label>
+                  <div className={styles.fixedLanguage}>
+                    <span className={styles.fixedLanguageText}>English</span>
+                    <span className={styles.fixedLanguageBadge}>지원</span>
+                  </div>
+                </div>
               </div>
 
               {/* Session Name (Optional) */}
@@ -1604,18 +1602,15 @@ function SpeakerContent() {
 
               {/* Save as Default Checkbox (only for new rooms) */}
               {!roomId && (
-                <div className={styles.settingGroup}>
+                <div className={styles.checkboxRow}>
                   <label className={styles.checkboxLabel}>
                     <input
                       type="checkbox"
                       checked={saveAsDefault}
                       onChange={(e) => setSaveAsDefault(e.target.checked)}
                     />
-                    <span>이 설정을 기본값으로 저장</span>
+                    <span>다음에도 이 설정 사용</span>
                   </label>
-                  <p className={styles.settingHint}>
-                    다음 방문 시 이 설정으로 바로 시작됩니다
-                  </p>
                 </div>
               )}
 
@@ -1631,42 +1626,40 @@ function SpeakerContent() {
               {/* Advanced Settings (Collapsed by default) */}
               {showAdvancedSettings && (
                 <div className={styles.advancedSettings}>
-                  {/* Streaming */}
-                  <div className={styles.settingGroup}>
-                    <label className={styles.checkboxLabel}>
+                  {/* Streaming + Max Listeners in row */}
+                  <div className={styles.advancedRow}>
+                    <div className={styles.checkboxRow}>
+                      <label className={styles.checkboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={roomSettings.enableStreaming}
+                          onChange={(e) =>
+                            setRoomSettings({
+                              ...roomSettings,
+                              enableStreaming: e.target.checked,
+                            })
+                          }
+                        />
+                        <span>스트리밍 번역</span>
+                      </label>
+                    </div>
+
+                    <div className={styles.compactInputGroup}>
+                      <label>최대 청취자</label>
                       <input
-                        type="checkbox"
-                        checked={roomSettings.enableStreaming}
+                        type="number"
+                        value={roomSettings.maxListeners}
                         onChange={(e) =>
                           setRoomSettings({
                             ...roomSettings,
-                            enableStreaming: e.target.checked,
+                            maxListeners: parseInt(e.target.value) || 100,
                           })
                         }
+                        className={styles.compactInput}
+                        min="1"
+                        max="1000"
                       />
-                      <span>스트리밍 번역</span>
-                    </label>
-                    <p className={styles.settingHint}>
-                      번역이 완성되기 전에 중간 결과를 실시간으로 표시
-                    </p>
-                  </div>
-
-                  {/* Max Listeners */}
-                  <div className={styles.settingGroup}>
-                    <label>최대 청취자 수</label>
-                    <input
-                      type="number"
-                      value={roomSettings.maxListeners}
-                      onChange={(e) =>
-                        setRoomSettings({
-                          ...roomSettings,
-                          maxListeners: parseInt(e.target.value) || 100,
-                        })
-                      }
-                      className={styles.input}
-                      min="1"
-                      max="1000"
-                    />
+                    </div>
                   </div>
                 </div>
               )}
