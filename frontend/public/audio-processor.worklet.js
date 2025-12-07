@@ -91,19 +91,37 @@ class RealtimeAudioProcessor extends AudioWorkletProcessor {
     }
     const rms = Math.sqrt(sum / outputData.length);
 
-    // Voice activity threshold
-    const VOICE_THRESHOLD = 0.001; // Very sensitive
+    // Voice activity threshold - 더 민감하게 설정
+    const VOICE_THRESHOLD = 0.0003; // 매우 민감 (멀리 있는 마이크 대응)
 
     if (rms < VOICE_THRESHOLD) {
       // Skip silent frames
       return;
     }
 
+    // 마이크 거리에 따른 동적 증폭 계산
+    // RMS가 낮을수록 (멀리 있을수록) 더 많이 증폭
+    let dynamicAmplification = 2.5;  // 기본 증폭률 상향 (1.5 → 2.5)
+
+    if (rms < 0.01) {
+      // 매우 조용함: 마이크가 멀리 있음 → 최대 증폭
+      dynamicAmplification = 4.0;
+    } else if (rms < 0.03) {
+      // 조용함: 중간 거리 → 높은 증폭
+      dynamicAmplification = 3.0;
+    } else if (rms < 0.08) {
+      // 보통: 적당한 거리 → 보통 증폭
+      dynamicAmplification = 2.5;
+    } else if (rms > 0.3) {
+      // 매우 큼: 가까이 있음 → 낮은 증폭 (클리핑 방지)
+      dynamicAmplification = 1.2;
+    }
+
     // Convert to Int16 PCM
     const int16Data = new Int16Array(outputData.length);
     for (let i = 0; i < outputData.length; i++) {
-      // Moderate amplification (1.5x)
-      const amplified = outputData[i] * 1.5;
+      // 동적 증폭 적용
+      const amplified = outputData[i] * dynamicAmplification;
 
       // Clamp to [-1, 1]
       const clamped = Math.max(-1, Math.min(1, amplified));

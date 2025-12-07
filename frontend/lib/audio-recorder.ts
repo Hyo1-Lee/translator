@@ -9,6 +9,8 @@ import { processAudioChunk, AudioProcessConfig, DEFAULT_AUDIO_CONFIG } from "./a
 export interface AudioRecorderConfig {
   deviceId?: string;  // 특정 마이크 장치 ID
   useExternalMicMode?: boolean;  // 외부 마이크 모드 (echoCancellation 등 비활성화)
+  disableNoiseSuppression?: boolean;  // 노이즈 캔슬링 비활성화 (멀리 있는 마이크 대응)
+  disableAutoGainControl?: boolean;   // 자동 게인 컨트롤 비활성화 (우리가 직접 조절)
   audioProcessConfig?: AudioProcessConfig;
   onAudioData?: (base64Audio: string) => void;
   onAudioLevel?: (level: number) => void;
@@ -27,6 +29,8 @@ export class AudioRecorder {
   private config: {
     deviceId?: string;
     useExternalMicMode: boolean;
+    disableNoiseSuppression: boolean;
+    disableAutoGainControl: boolean;
     audioProcessConfig: AudioProcessConfig;
     onAudioData: (base64Audio: string) => void;
     onAudioLevel: (level: number) => void;
@@ -36,19 +40,25 @@ export class AudioRecorder {
   private isRecording = false;
   private audioChunksSent = 0;
 
-  // Dynamic gain adjustment
+  // Dynamic gain adjustment - 마이크 거리 변화 대응용 공격적 설정
   private recentAudioLevels: number[] = [];
-  private readonly AUDIO_LEVEL_HISTORY_SIZE = 50;  // Track last 50 measurements (~1 second)
+  private readonly AUDIO_LEVEL_HISTORY_SIZE = 30;  // 더 짧은 히스토리로 빠른 반응
   private readonly MIN_GAIN = 1.0;
-  private readonly MAX_GAIN = 4.0;
-  private readonly TARGET_AUDIO_LEVEL = 30;  // Target level (0-100 scale)
-  private readonly GAIN_ADJUSTMENT_INTERVAL = 500;  // Adjust every 0.5 second (faster response)
+  private readonly MAX_GAIN = 10.0;  // 최대 게인 대폭 상향 (멀리 있는 마이크 대응)
+  private readonly TARGET_AUDIO_LEVEL = 35;  // 목표 레벨 약간 상향
+  private readonly GAIN_ADJUSTMENT_INTERVAL = 200;  // 0.2초마다 조정 (더 빠른 반응)
   private gainAdjustmentTimer: NodeJS.Timeout | null = null;
+
+  // 마이크 거리 보정용 추가 상태
+  private consecutiveLowLevelCount = 0;
+  private consecutiveHighLevelCount = 0;
 
   constructor(config: AudioRecorderConfig = {}) {
     this.config = {
       deviceId: config.deviceId,
       useExternalMicMode: config.useExternalMicMode || false,
+      disableNoiseSuppression: config.disableNoiseSuppression ?? true,  // 기본: 노이즈 캔슬링 비활성화
+      disableAutoGainControl: config.disableAutoGainControl ?? true,    // 기본: 자동 게인 비활성화 (우리가 조절)
       audioProcessConfig: config.audioProcessConfig || DEFAULT_AUDIO_CONFIG,
       onAudioData: config.onAudioData || (() => {}),
       onAudioLevel: config.onAudioLevel || (() => {}),
@@ -153,8 +163,9 @@ export class AudioRecorder {
     const source = this.audioContext.createMediaStreamSource(this.stream);
 
     // GainNode for dynamic volume adjustment
+    // 초기 게인을 높게 설정하여 마이크 노이즈 캔슬링에 걸리기 전에 신호 강화
     this.gainNode = this.audioContext.createGain();
-    this.gainNode.gain.value = 2.0;  // Start with moderate gain
+    this.gainNode.gain.value = 3.5;  // 높은 초기 게인 (마이크 거리 변화 대응)
     source.connect(this.gainNode);
 
     // Analyser for audio level meter
@@ -222,32 +233,73 @@ export class AudioRecorder {
 
   /**
    * Start dynamic gain adjustment based on audio levels
+   * 마이크 거리 변화에 더 공격적으로 대응
    */
   private startDynamicGainAdjustment(): void {
     this.gainAdjustmentTimer = setInterval(() => {
-      if (!this.gainNode || this.recentAudioLevels.length < 10) return;
+      if (!this.gainNode || this.recentAudioLevels.length < 5) return;
 
-      // Calculate average audio level
-      const avgLevel = this.recentAudioLevels.reduce((sum, level) => sum + level, 0) / this.recentAudioLevels.length;
+      // Calculate average audio level (최근 값에 더 가중치)
+      const recentLevels = this.recentAudioLevels.slice(-10);
+      const avgLevel = recentLevels.reduce((sum, level) => sum + level, 0) / recentLevels.length;
+
+      // 최근 최대값 (피크 기반 조정)
+      const peakLevel = Math.max(...recentLevels);
 
       // Current gain
       const currentGain = this.gainNode.gain.value;
 
-      // Adjust gain based on average level
+      // Adjust gain based on average level - 더 공격적인 조정
       let newGain = currentGain;
+      let rampTime = 0.3;  // 기본 램프 시간
 
-      if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.5) {
-        // Audio is too quiet, increase gain
-        newGain = Math.min(this.MAX_GAIN, currentGain * 1.1);
-      } else if (avgLevel > this.TARGET_AUDIO_LEVEL * 2.0) {
-        // Audio is too loud, decrease gain
-        newGain = Math.max(this.MIN_GAIN, currentGain * 0.9);
+      // 매우 조용함: 마이크가 멀리 있거나 소리가 작음
+      if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.3) {
+        this.consecutiveLowLevelCount++;
+        this.consecutiveHighLevelCount = 0;
+
+        // 연속으로 조용하면 더 공격적으로 증폭
+        if (this.consecutiveLowLevelCount > 3) {
+          newGain = Math.min(this.MAX_GAIN, currentGain * 1.3);  // 30% 증가
+          rampTime = 0.15;  // 더 빠른 반응
+        } else {
+          newGain = Math.min(this.MAX_GAIN, currentGain * 1.15);  // 15% 증가
+        }
+      }
+      // 조금 조용함
+      else if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.6) {
+        this.consecutiveLowLevelCount++;
+        this.consecutiveHighLevelCount = 0;
+        newGain = Math.min(this.MAX_GAIN, currentGain * 1.08);  // 8% 증가
+      }
+      // 너무 시끄러움: 클리핑 방지
+      else if (peakLevel > 85 || avgLevel > this.TARGET_AUDIO_LEVEL * 2.5) {
+        this.consecutiveHighLevelCount++;
+        this.consecutiveLowLevelCount = 0;
+
+        if (this.consecutiveHighLevelCount > 2) {
+          newGain = Math.max(this.MIN_GAIN, currentGain * 0.7);  // 30% 감소
+          rampTime = 0.1;  // 빠른 반응 (클리핑 방지)
+        } else {
+          newGain = Math.max(this.MIN_GAIN, currentGain * 0.85);  // 15% 감소
+        }
+      }
+      // 약간 시끄러움
+      else if (avgLevel > this.TARGET_AUDIO_LEVEL * 1.8) {
+        this.consecutiveHighLevelCount++;
+        this.consecutiveLowLevelCount = 0;
+        newGain = Math.max(this.MIN_GAIN, currentGain * 0.92);  // 8% 감소
+      }
+      // 적정 범위
+      else {
+        this.consecutiveLowLevelCount = 0;
+        this.consecutiveHighLevelCount = 0;
       }
 
       // Apply new gain smoothly
-      if (newGain !== currentGain) {
+      if (Math.abs(newGain - currentGain) > 0.05) {
         this.gainNode.gain.setValueAtTime(currentGain, this.audioContext!.currentTime);
-        this.gainNode.gain.linearRampToValueAtTime(newGain, this.audioContext!.currentTime + 0.5);
+        this.gainNode.gain.linearRampToValueAtTime(newGain, this.audioContext!.currentTime + rampTime);
       }
     }, this.GAIN_ADJUSTMENT_INTERVAL);
   }
@@ -270,8 +322,10 @@ export class AudioRecorder {
       baseConstraints.autoGainControl = false;
     } else {
       baseConstraints.echoCancellation = true;
-      baseConstraints.noiseSuppression = true;
-      baseConstraints.autoGainControl = true;
+      // 노이즈 캔슬링: 마이크 거리 변화에 대응하려면 끄는 게 좋음
+      baseConstraints.noiseSuppression = !this.config.disableNoiseSuppression;
+      // 자동 게인: 우리가 직접 조절하므로 끄는 게 좋음
+      baseConstraints.autoGainControl = !this.config.disableAutoGainControl;
     }
 
     // If no specific device requested, just use defaults

@@ -178,6 +178,13 @@ function SpeakerContent() {
   const backgroundSessionRef = useRef<BackgroundSessionManager | null>(null);
   const roomIdRef = useRef<string>(""); // Always holds the latest roomId for callbacks
 
+  // Debug audio recording refs
+  const debugMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const debugAudioChunksRef = useRef<Blob[]>([]);
+  const debugStreamRef = useRef<MediaStream | null>(null);
+  const [debugAudioUrl, setDebugAudioUrl] = useState<string | null>(null);
+  const [isDebugRecording, setIsDebugRecording] = useState(false);
+
   // Keep roomIdRef in sync with roomId state
   useEffect(() => {
     roomIdRef.current = roomId;
@@ -1054,6 +1061,85 @@ function SpeakerContent() {
     }
   };
 
+  // Debug audio recording - 원본 마이크 입력 녹음
+  const startDebugRecording = async () => {
+    try {
+      // 마이크 스트림 가져오기
+      const constraints: MediaStreamConstraints = {
+        audio: {
+          deviceId: selectedMicId ? { ideal: selectedMicId } : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      debugStreamRef.current = stream;
+      debugAudioChunksRef.current = [];
+
+      // 이전 URL 해제
+      if (debugAudioUrl) {
+        URL.revokeObjectURL(debugAudioUrl);
+        setDebugAudioUrl(null);
+      }
+
+      // MediaRecorder 시작
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm',
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          debugAudioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(debugAudioChunksRef.current, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        setDebugAudioUrl(url);
+        console.log('[Debug Recording] Saved:', blob.size, 'bytes');
+      };
+
+      debugMediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(1000); // 1초마다 데이터 수집
+      setIsDebugRecording(true);
+      console.log('[Debug Recording] Started');
+      toast.success('디버그 녹음 시작');
+    } catch (error) {
+      console.error('[Debug Recording] Error:', error);
+      toast.error('디버그 녹음 실패');
+    }
+  };
+
+  const stopDebugRecording = () => {
+    if (debugMediaRecorderRef.current && debugMediaRecorderRef.current.state !== 'inactive') {
+      debugMediaRecorderRef.current.stop();
+    }
+    if (debugStreamRef.current) {
+      debugStreamRef.current.getTracks().forEach(track => track.stop());
+      debugStreamRef.current = null;
+    }
+    setIsDebugRecording(false);
+    console.log('[Debug Recording] Stopped');
+    toast.success('디버그 녹음 완료');
+  };
+
+  const downloadDebugAudio = () => {
+    if (!debugAudioUrl) return;
+
+    const a = document.createElement('a');
+    a.href = debugAudioUrl;
+    a.download = `debug-audio-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success('오디오 다운로드 완료');
+  };
+
   // Copy to clipboard
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -1366,6 +1452,77 @@ function SpeakerContent() {
               </svg>
               새 방
             </button>
+          </div>
+
+          {/* Debug Audio Recording - 원본 마이크 입력 확인용 */}
+          <div className={styles.debugSection}>
+            <div className={styles.debugHeader}>
+              <span>🔧 디버그 녹음</span>
+              <span className={styles.debugHint}>원본 오디오 확인용</span>
+            </div>
+            <div className={styles.debugControls}>
+              {!isDebugRecording ? (
+                <button
+                  onClick={startDebugRecording}
+                  className={styles.debugStartButton}
+                  title="디버그 녹음 시작"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                  </svg>
+                  녹음
+                </button>
+              ) : (
+                <button
+                  onClick={stopDebugRecording}
+                  className={styles.debugStopButton}
+                  title="디버그 녹음 중지"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <rect x="6" y="6" width="12" height="12" />
+                  </svg>
+                  중지
+                </button>
+              )}
+              {debugAudioUrl && (
+                <>
+                  <audio
+                    src={debugAudioUrl}
+                    controls
+                    className={styles.debugAudioPlayer}
+                  />
+                  <button
+                    onClick={downloadDebugAudio}
+                    className={styles.debugDownloadButton}
+                    title="오디오 다운로드"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    다운로드
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

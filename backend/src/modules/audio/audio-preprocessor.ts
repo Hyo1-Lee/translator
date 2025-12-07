@@ -20,6 +20,8 @@ export interface AudioPreprocessorConfig {
   compressionThreshold?: number;// Compression threshold in dB, default -20
   targetRMS?: number;           // Target RMS for normalization, default 0.1
   adaptiveGainEnabled?: boolean;// Enable adaptive gain control, default true
+  distanceCompensationEnabled?: boolean; // 마이크 거리 보정 활성화, default true
+  aggressiveGainMode?: boolean; // 공격적 게인 모드 (멀리 있는 마이크 대응), default true
 }
 
 export class AudioPreprocessor {
@@ -41,10 +43,16 @@ export class AudioPreprocessor {
   private hpA1: number = 0;
   private hpA2: number = 0;
 
-  // Adaptive gain state
+  // Adaptive gain state - 마이크 거리 보정용 개선
   private currentGain: number = 1.0;
   private rmsHistory: number[] = [];
-  private readonly RMS_HISTORY_SIZE = 10;
+  private readonly RMS_HISTORY_SIZE = 15;  // 더 많은 히스토리로 안정성 향상
+
+  // 마이크 거리 보정용 상태
+  private distanceGain: number = 1.0;      // 거리 기반 추가 게인
+  private consecutiveLowRmsCount: number = 0;
+  private consecutiveHighRmsCount: number = 0;
+  private estimatedDistance: 'near' | 'medium' | 'far' | 'very_far' = 'medium';
 
   // Noise profile for spectral subtraction
   private noiseProfile: Float32Array | null = null;
@@ -56,11 +64,13 @@ export class AudioPreprocessor {
       sampleRate: config.sampleRate,
       preEmphasisAlpha: config.preEmphasisAlpha ?? 0.97,
       highpassCutoff: config.highpassCutoff ?? 80,
-      noiseGateThreshold: config.noiseGateThreshold ?? -50,
-      compressionRatio: config.compressionRatio ?? 3,
-      compressionThreshold: config.compressionThreshold ?? -20,
-      targetRMS: config.targetRMS ?? 0.1,
-      adaptiveGainEnabled: config.adaptiveGainEnabled ?? true
+      noiseGateThreshold: config.noiseGateThreshold ?? -55,  // 더 낮춰서 스피커 음성도 통과
+      compressionRatio: config.compressionRatio ?? 4,       // 압축 강화로 동적 범위 균일화
+      compressionThreshold: config.compressionThreshold ?? -25,  // 더 낮은 임계값
+      targetRMS: config.targetRMS ?? 0.12,                  // 목표 RMS 약간 상향
+      adaptiveGainEnabled: config.adaptiveGainEnabled ?? true,
+      distanceCompensationEnabled: config.distanceCompensationEnabled ?? true,
+      aggressiveGainMode: config.aggressiveGainMode ?? true
     };
 
     this.initializeHighpassFilter();
@@ -166,47 +176,47 @@ export class AudioPreprocessor {
   }
 
   /**
-   * Spectral Noise Gate
-   * Applies frequency-domain noise reduction using FFT
-   * This is a simplified time-domain approximation for real-time processing
+   * Spectral Noise Gate (완화된 버전)
+   * 마이크 거리 변화와 스피커 출력 상황을 고려하여 덜 공격적으로 적용
    */
   private applySpectralNoiseGate(data: Float32Array): void {
     // Calculate RMS for noise gating
     const rms = this.calculateRMS(data);
     const rmsDb = 20 * Math.log10(rms + 1e-10);
 
-    // Build noise profile during initial frames
+    // Build noise profile during initial frames (더 보수적으로)
     if (this.noiseEstimationFrames < this.NOISE_ESTIMATION_DURATION) {
-      if (rmsDb < this.config.noiseGateThreshold + 10) {
-        // This frame is likely noise
+      // 매우 조용한 프레임만 노이즈로 간주 (임계값 낮춤)
+      if (rmsDb < this.config.noiseGateThreshold - 5) {
         if (!this.noiseProfile) {
           this.noiseProfile = new Float32Array(data.length);
           this.noiseProfile.set(data);
         } else {
           // Running average
           for (let i = 0; i < data.length; i++) {
-            this.noiseProfile[i] = 0.9 * this.noiseProfile[i] + 0.1 * Math.abs(data[i]);
+            this.noiseProfile[i] = 0.95 * this.noiseProfile[i] + 0.05 * Math.abs(data[i]);
           }
         }
         this.noiseEstimationFrames++;
       }
     }
 
-    // Apply noise gate
-    if (rmsDb < this.config.noiseGateThreshold) {
-      // Below threshold - apply aggressive attenuation
+    // Apply noise gate - 더 관대하게 적용
+    if (rmsDb < this.config.noiseGateThreshold - 10) {
+      // 매우 조용한 경우에만 감쇠 (스피커 음성 유지)
       for (let i = 0; i < data.length; i++) {
-        data[i] *= 0.01; // -40dB attenuation
+        data[i] *= 0.1; // -20dB 감쇠 (기존 -40dB보다 완화)
       }
-    } else if (this.noiseProfile) {
-      // Above threshold - subtract noise profile
+    } else if (rmsDb < this.config.noiseGateThreshold && this.noiseProfile) {
+      // 중간 레벨: 부분적 노이즈 제거만 적용
       for (let i = 0; i < data.length; i++) {
-        const noiseLevel = this.noiseProfile[i] * 0.5; // Subtract 50% of estimated noise
+        const noiseLevel = this.noiseProfile[i] * 0.3; // 30%만 제거 (기존 50%)
         const sign = data[i] >= 0 ? 1 : -1;
         const magnitude = Math.abs(data[i]);
         data[i] = sign * Math.max(0, magnitude - noiseLevel);
       }
     }
+    // 임계값 이상: 그대로 통과 (노이즈 제거 안함)
   }
 
   /**
@@ -239,8 +249,8 @@ export class AudioPreprocessor {
   }
 
   /**
-   * Adaptive Gain Control
-   * Automatically adjusts volume to maintain consistent RMS level
+   * Adaptive Gain Control with Distance Compensation
+   * 마이크 거리 변화에 공격적으로 대응하여 일관된 볼륨 유지
    */
   private applyAdaptiveGain(data: Float32Array): void {
     const currentRMS = this.calculateRMS(data);
@@ -251,22 +261,96 @@ export class AudioPreprocessor {
       this.rmsHistory.shift();
     }
 
-    // Calculate average RMS
+    // Calculate average and recent RMS
     const avgRMS = this.rmsHistory.reduce((a, b) => a + b, 0) / this.rmsHistory.length;
+    const recentRMS = this.rmsHistory.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, this.rmsHistory.length);
 
-    // Calculate target gain
-    const targetGain = avgRMS > 0.001 ? this.config.targetRMS / avgRMS : 1.0;
+    // 마이크 거리 추정 및 보정
+    if (this.config.distanceCompensationEnabled) {
+      this.estimateDistanceAndCompensate(recentRMS);
+    }
 
-    // Smooth gain changes to avoid artifacts
-    const alpha = 0.1; // Smoothing factor
+    // Calculate base target gain
+    let targetGain = avgRMS > 0.0005 ? this.config.targetRMS / avgRMS : 1.0;
+
+    // 공격적 게인 모드: 조용한 신호에 더 강하게 대응
+    if (this.config.aggressiveGainMode) {
+      // RMS가 매우 낮으면 (멀리 있음) 게인을 더 높임
+      if (recentRMS < 0.01) {
+        this.consecutiveLowRmsCount++;
+        this.consecutiveHighRmsCount = 0;
+
+        if (this.consecutiveLowRmsCount > 2) {
+          // 연속으로 낮으면 더 공격적 증폭
+          targetGain *= 1.5;
+        }
+      } else if (recentRMS > 0.2) {
+        this.consecutiveHighRmsCount++;
+        this.consecutiveLowRmsCount = 0;
+
+        if (this.consecutiveHighRmsCount > 2) {
+          // 연속으로 높으면 클리핑 방지
+          targetGain *= 0.7;
+        }
+      } else {
+        this.consecutiveLowRmsCount = 0;
+        this.consecutiveHighRmsCount = 0;
+      }
+    }
+
+    // Apply distance compensation
+    targetGain *= this.distanceGain;
+
+    // Smooth gain changes - 더 빠른 반응을 위해 alpha 상향
+    const alpha = this.config.aggressiveGainMode ? 0.25 : 0.15;
     this.currentGain = alpha * targetGain + (1 - alpha) * this.currentGain;
 
-    // Limit gain range to prevent extreme amplification
-    this.currentGain = Math.max(0.5, Math.min(10.0, this.currentGain));
+    // 더 넓은 게인 범위 (멀리 있는 마이크 대응)
+    const maxGain = this.config.aggressiveGainMode ? 15.0 : 10.0;
+    this.currentGain = Math.max(0.3, Math.min(maxGain, this.currentGain));
 
     // Apply gain
     for (let i = 0; i < data.length; i++) {
       data[i] *= this.currentGain;
+    }
+  }
+
+  /**
+   * 마이크 거리 추정 및 보정
+   * RMS 기반으로 마이크 거리를 추정하고 적절한 보정 게인 적용
+   */
+  private estimateDistanceAndCompensate(recentRMS: number): void {
+    // RMS 기반 거리 추정 (1/r² 법칙 고려)
+    let newDistance: 'near' | 'medium' | 'far' | 'very_far';
+    let baseDistanceGain: number;
+
+    if (recentRMS > 0.15) {
+      // 가까움: 마이크 앞에서 말함
+      newDistance = 'near';
+      baseDistanceGain = 0.8;  // 약간 줄임 (클리핑 방지)
+    } else if (recentRMS > 0.05) {
+      // 중간: 적정 거리
+      newDistance = 'medium';
+      baseDistanceGain = 1.0;
+    } else if (recentRMS > 0.015) {
+      // 멀음: 마이크에서 좀 떨어짐
+      newDistance = 'far';
+      baseDistanceGain = 1.8;  // 증폭
+    } else {
+      // 매우 멀음: 마이크에서 많이 떨어짐
+      newDistance = 'very_far';
+      baseDistanceGain = 3.0;  // 강한 증폭
+    }
+
+    // 거리 변화 감지 시 빠르게 대응
+    if (newDistance !== this.estimatedDistance) {
+      // 급격한 변화 시 즉시 적용
+      this.distanceGain = baseDistanceGain;
+      this.estimatedDistance = newDistance;
+    } else {
+      // 점진적 조정
+      const alpha = 0.3;
+      this.distanceGain = alpha * baseDistanceGain + (1 - alpha) * this.distanceGain;
     }
   }
 
@@ -295,6 +379,11 @@ export class AudioPreprocessor {
     this.rmsHistory = [];
     this.noiseProfile = null;
     this.noiseEstimationFrames = 0;
+    // 거리 보정 상태 초기화
+    this.distanceGain = 1.0;
+    this.consecutiveLowRmsCount = 0;
+    this.consecutiveHighRmsCount = 0;
+    this.estimatedDistance = 'medium';
   }
 
   /**
@@ -303,6 +392,8 @@ export class AudioPreprocessor {
   getMetrics() {
     return {
       currentGain: this.currentGain,
+      distanceGain: this.distanceGain,
+      estimatedDistance: this.estimatedDistance,
       avgRMS: this.rmsHistory.length > 0
         ? this.rmsHistory.reduce((a, b) => a + b, 0) / this.rmsHistory.length
         : 0,
