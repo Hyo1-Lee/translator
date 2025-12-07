@@ -16,6 +16,7 @@ export interface AudioRecorderConfig {
   onAudioLevel?: (level: number) => void;
   onError?: (error: Error) => void;
   onDeviceSelected?: (deviceInfo: { deviceId: string; label: string }) => void;  // 실제 선택된 마이크 콜백
+  onMicrophoneFallback?: (reason: string) => void;  // 마이크 폴백 발생 시 콜백
 }
 
 export class AudioRecorder {
@@ -36,6 +37,7 @@ export class AudioRecorder {
     onAudioLevel: (level: number) => void;
     onError: (error: Error) => void;
     onDeviceSelected: (deviceInfo: { deviceId: string; label: string }) => void;
+    onMicrophoneFallback: (reason: string) => void;
   };
   private isRecording = false;
   private audioChunksSent = 0;
@@ -69,6 +71,7 @@ export class AudioRecorder {
       onAudioLevel: config.onAudioLevel || (() => {}),
       onError: config.onError || ((err) => console.error("[AudioRecorder] Error:", err)),
       onDeviceSelected: config.onDeviceSelected || (() => {}),
+      onMicrophoneFallback: config.onMicrophoneFallback || (() => {}),
     };
   }
 
@@ -365,20 +368,25 @@ export class AudioRecorder {
 
     // If no specific device requested, just use defaults
     if (!this.config.deviceId) {
+      console.log("[AudioRecorder] No deviceId specified, using default microphone");
       return navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
     }
+
+    const requestedDeviceId = this.config.deviceId;
+    console.log("[AudioRecorder] Attempting to use deviceId:", requestedDeviceId);
 
     // Strategy 1: Try with exact deviceId (strictest)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...baseConstraints,
-          deviceId: { exact: this.config.deviceId },
+          deviceId: { exact: requestedDeviceId },
         },
       });
+      console.log("[AudioRecorder] ✅ Strategy 1 (exact) succeeded");
       return stream;
-    } catch {
-      // Continue to next strategy
+    } catch (error) {
+      console.warn("[AudioRecorder] ⚠️ Strategy 1 (exact) failed:", (error as Error).message);
     }
 
     // Strategy 2: Try with ideal deviceId (more flexible)
@@ -386,12 +394,21 @@ export class AudioRecorder {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...baseConstraints,
-          deviceId: { ideal: this.config.deviceId },
+          deviceId: { ideal: requestedDeviceId },
         },
       });
+      // Check if we got the requested device
+      const actualDeviceId = stream.getAudioTracks()[0]?.getSettings()?.deviceId;
+      if (actualDeviceId === requestedDeviceId) {
+        console.log("[AudioRecorder] ✅ Strategy 2 (ideal) succeeded - got exact device");
+        return stream;
+      }
+      // Got a different device - notify user
+      console.warn("[AudioRecorder] ⚠️ Strategy 2 (ideal) returned different device:", actualDeviceId);
+      this.config.onMicrophoneFallback(`선택한 마이크를 사용할 수 없습니다 (deviceId 불일치)`);
       return stream;
-    } catch {
-      // Continue to next strategy
+    } catch (error) {
+      console.warn("[AudioRecorder] ⚠️ Strategy 2 (ideal) failed:", (error as Error).message);
     }
 
     // Strategy 3: Try with deviceId as string (some browsers prefer this)
@@ -399,27 +416,41 @@ export class AudioRecorder {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           ...baseConstraints,
-          deviceId: this.config.deviceId,
+          deviceId: requestedDeviceId,
         },
       });
+      const actualDeviceId = stream.getAudioTracks()[0]?.getSettings()?.deviceId;
+      if (actualDeviceId === requestedDeviceId) {
+        console.log("[AudioRecorder] ✅ Strategy 3 (string) succeeded - got exact device");
+        return stream;
+      }
+      console.warn("[AudioRecorder] ⚠️ Strategy 3 (string) returned different device:", actualDeviceId);
+      this.config.onMicrophoneFallback(`선택한 마이크를 사용할 수 없습니다`);
       return stream;
-    } catch {
-      // Continue to next strategy
+    } catch (error) {
+      console.warn("[AudioRecorder] ⚠️ Strategy 3 (string) failed:", (error as Error).message);
     }
 
     // Strategy 4: Try without audio processing constraints (some devices don't support them)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          deviceId: { ideal: this.config.deviceId },
+          deviceId: { ideal: requestedDeviceId },
         },
       });
+      console.warn("[AudioRecorder] ⚠️ Strategy 4 (no constraints) - audio processing disabled");
+      this.config.onMicrophoneFallback(`선택한 마이크가 일부 설정을 지원하지 않습니다`);
       return stream;
-    } catch {
-      // Continue to fallback
+    } catch (error) {
+      console.warn("[AudioRecorder] ⚠️ Strategy 4 (no constraints) failed:", (error as Error).message);
     }
 
-    // Strategy 5: Fallback to default microphone
+    // Strategy 5: Fallback to default microphone - CRITICAL WARNING
+    console.error("[AudioRecorder] ❌ All strategies failed! Falling back to default microphone");
+    this.config.onMicrophoneFallback(
+      `❌ 선택한 마이크(${requestedDeviceId.substring(0, 8)}...)를 찾을 수 없습니다. ` +
+      `기본 마이크로 녹음됩니다. 마이크 설정을 확인해주세요!`
+    );
     return navigator.mediaDevices.getUserMedia({ audio: baseConstraints });
   }
 }

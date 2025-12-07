@@ -14,6 +14,7 @@ export interface MicrophoneDevice {
 
 export interface MicrophoneSettings {
   deviceId: string | null;
+  deviceLabel?: string | null;  // 마이크 이름 저장 (deviceId 변경 시 자동 재연결용)
   useExternalMicMode: boolean;
 }
 
@@ -191,4 +192,84 @@ export async function getRecommendedDevice(): Promise<MicrophoneDevice | null> {
   // Fall back to default or first available
   const defaultMic = devices.find(d => d.isDefault);
   return defaultMic || devices[0];
+}
+
+/**
+ * Find device by label (for auto-reconnect when deviceId changes)
+ * 무선 마이크는 연결할 때마다 deviceId가 변경될 수 있으므로, label로 같은 마이크를 찾습니다.
+ */
+export async function findDeviceByLabel(label: string): Promise<MicrophoneDevice | null> {
+  const devices = await getMicrophoneDevices();
+
+  // 1. 정확히 같은 이름 찾기
+  const exactMatch = devices.find(d => d.label === label);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  // 2. 부분 일치 찾기 (앞뒤 공백이나 약간의 차이 허용)
+  const normalizedLabel = label.toLowerCase().trim();
+  const partialMatch = devices.find(d =>
+    d.label.toLowerCase().trim() === normalizedLabel ||
+    d.label.toLowerCase().includes(normalizedLabel) ||
+    normalizedLabel.includes(d.label.toLowerCase())
+  );
+  if (partialMatch) {
+    return partialMatch;
+  }
+
+  return null;
+}
+
+/**
+ * Attempt to reconnect to saved microphone
+ * deviceId가 유효하면 그대로 사용, 아니면 label로 같은 마이크를 찾아서 재연결
+ */
+export async function attemptMicrophoneReconnect(
+  savedSettings: MicrophoneSettings
+): Promise<{ device: MicrophoneDevice | null; reconnected: boolean; message: string }> {
+  const devices = await getMicrophoneDevices();
+
+  if (devices.length === 0) {
+    return { device: null, reconnected: false, message: "사용 가능한 마이크가 없습니다" };
+  }
+
+  // 1. 저장된 deviceId로 찾기
+  if (savedSettings.deviceId) {
+    const exactDevice = devices.find(d => d.deviceId === savedSettings.deviceId);
+    if (exactDevice) {
+      return { device: exactDevice, reconnected: false, message: "" };
+    }
+  }
+
+  // 2. deviceId가 유효하지 않으면 label로 찾기
+  if (savedSettings.deviceLabel) {
+    const labelMatch = await findDeviceByLabel(savedSettings.deviceLabel);
+    if (labelMatch) {
+      console.log(`[MicrophoneManager] 🔄 Auto-reconnected by label: "${savedSettings.deviceLabel}" -> ${labelMatch.deviceId}`);
+      return {
+        device: labelMatch,
+        reconnected: true,
+        message: `마이크 자동 재연결: ${labelMatch.label}`,
+      };
+    }
+  }
+
+  // 3. 외부 마이크가 있으면 추천
+  const externalMic = devices.find(d => d.isExternal);
+  if (externalMic) {
+    return {
+      device: externalMic,
+      reconnected: true,
+      message: `외부 마이크 감지: ${externalMic.label}`,
+    };
+  }
+
+  // 4. 찾지 못함 - 기본 마이크 사용 권유
+  const defaultMic = devices.find(d => d.isDefault) || devices[0];
+  return {
+    device: defaultMic,
+    reconnected: true,
+    message: `저장된 마이크를 찾을 수 없어 기본 마이크 사용: ${defaultMic.label}`,
+  };
 }

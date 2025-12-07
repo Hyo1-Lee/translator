@@ -13,6 +13,7 @@ import {
   saveMicrophoneSettings,
   loadMicrophoneSettings,
   onDeviceChange,
+  attemptMicrophoneReconnect,
   MicrophoneDevice,
 } from "@/lib/microphone-manager";
 import { getDisplayText } from "@/lib/text-display";
@@ -233,6 +234,7 @@ function SpeakerContent() {
           setCurrentMicLabel(externalMic.label);
           saveMicrophoneSettings({
             deviceId: externalMic.deviceId,
+            deviceLabel: externalMic.label,
             useExternalMicMode: true,
           });
           console.log("[Microphone] Auto-selected external mic:", externalMic.label);
@@ -253,9 +255,10 @@ function SpeakerContent() {
     const newExternalMode = device.isExternal;
     setUseExternalMicMode(newExternalMode);
 
-    // Save settings
+    // Save settings (deviceLabel도 저장 - deviceId 변경 시 자동 재연결용)
     saveMicrophoneSettings({
       deviceId: device.deviceId,
+      deviceLabel: device.label,
       useExternalMicMode: newExternalMode,
     });
 
@@ -283,20 +286,60 @@ function SpeakerContent() {
     return cleanup;
   }, [loadMicDevices]);
 
-  // Update current mic label when devices change
+  // ★ 페이지 로드/장치 변경 시 마이크 검증 및 자동 재연결
   useEffect(() => {
-    if (selectedMicId && micDevices.length > 0) {
-      const selectedDevice = micDevices.find((d) => d.deviceId === selectedMicId);
-      if (selectedDevice) {
-        setCurrentMicLabel(selectedDevice.label);
-      } else {
-        // Selected device no longer available
-        setSelectedMicId(null);
+    const validateAndReconnectMic = async () => {
+      if (micDevices.length === 0) return;
+
+      const savedSettings = loadMicrophoneSettings();
+      if (!savedSettings || !savedSettings.deviceId) {
+        // 저장된 설정이 없으면 기본 마이크 사용
         setCurrentMicLabel("기본 마이크");
-        toast.info("선택한 마이크가 연결 해제되었습니다");
+        return;
       }
-    }
-  }, [micDevices, selectedMicId, toast]);
+
+      // 저장된 deviceId로 장치 찾기
+      const selectedDevice = micDevices.find((d) => d.deviceId === savedSettings.deviceId);
+
+      if (selectedDevice) {
+        // deviceId가 유효함 - 정상
+        setSelectedMicId(selectedDevice.deviceId);
+        setCurrentMicLabel(selectedDevice.label);
+        console.log("[Microphone] ✅ Saved microphone verified:", selectedDevice.label);
+      } else {
+        // deviceId가 유효하지 않음 - 자동 재연결 시도
+        console.warn("[Microphone] ⚠️ Saved deviceId not found, attempting reconnect...");
+
+        const reconnectResult = await attemptMicrophoneReconnect(savedSettings);
+
+        if (reconnectResult.device) {
+          // 재연결 성공
+          setSelectedMicId(reconnectResult.device.deviceId);
+          setCurrentMicLabel(reconnectResult.device.label);
+          setUseExternalMicMode(reconnectResult.device.isExternal);
+
+          // 설정 업데이트
+          saveMicrophoneSettings({
+            deviceId: reconnectResult.device.deviceId,
+            deviceLabel: reconnectResult.device.label,
+            useExternalMicMode: reconnectResult.device.isExternal,
+          });
+
+          if (reconnectResult.reconnected) {
+            console.log("[Microphone] 🔄 Auto-reconnected:", reconnectResult.message);
+            toast.info(`🔄 ${reconnectResult.message}`, { duration: 5000 });
+          }
+        } else {
+          // 재연결 실패 - 기본 마이크 사용
+          setSelectedMicId(null);
+          setCurrentMicLabel("기본 마이크");
+          toast.error(`⚠️ ${reconnectResult.message}`, { duration: 5000 });
+        }
+      }
+    };
+
+    validateAndReconnectMic();
+  }, [micDevices, toast]);
 
   // Load saved room info from localStorage
   const loadSavedRoom = useCallback(() => {
@@ -883,13 +926,51 @@ function SpeakerContent() {
       return;
     }
 
+    // ★ 녹음 시작 전 마이크 유효성 검증 및 자동 재연결
+    let effectiveMicId: string | null = selectedMicId;
+    let effectiveExternalMode = useExternalMicMode;
+
+    const savedSettings = loadMicrophoneSettings();
+    if (savedSettings && savedSettings.deviceId) {
+      const reconnectResult = await attemptMicrophoneReconnect(savedSettings);
+
+      if (!reconnectResult.device) {
+        // 마이크를 전혀 찾을 수 없음
+        console.error("[Recording] ❌ No microphone available");
+        toast.error(`❌ ${reconnectResult.message}`, { duration: 5000 });
+        setShowMicModal(true);
+        return;
+      }
+
+      if (reconnectResult.reconnected) {
+        // 자동 재연결됨 - 설정 업데이트
+        console.log("[Recording] 🔄 Auto-reconnected:", reconnectResult.message);
+        setSelectedMicId(reconnectResult.device.deviceId);
+        setCurrentMicLabel(reconnectResult.device.label);
+        setUseExternalMicMode(reconnectResult.device.isExternal);
+
+        // 새 설정 저장
+        saveMicrophoneSettings({
+          deviceId: reconnectResult.device.deviceId,
+          deviceLabel: reconnectResult.device.label,
+          useExternalMicMode: reconnectResult.device.isExternal,
+        });
+
+        toast.info(`🔄 ${reconnectResult.message}`, { duration: 5000 });
+      }
+
+      // 재연결된 deviceId 사용
+      effectiveMicId = reconnectResult.device.deviceId;
+      effectiveExternalMode = reconnectResult.device.isExternal;
+    }
+
     try {
       setStatus("마이크 요청 중...");
 
-      // Create audio recorder with selected microphone
+      // Create audio recorder with effective microphone (자동 재연결 적용됨)
       audioRecorderRef.current = new AudioRecorder({
-        deviceId: selectedMicId || undefined,
-        useExternalMicMode: useExternalMicMode,
+        deviceId: effectiveMicId || undefined,
+        useExternalMicMode: effectiveExternalMode,
         onAudioData: (base64Audio) => {
           // Use roomIdRef.current to always get the latest roomId (avoid closure capture issue)
           const currentRoomId = roomIdRef.current;
@@ -915,10 +996,15 @@ function SpeakerContent() {
           // Check if different from requested
           if (selectedMicId && deviceInfo.deviceId !== selectedMicId) {
             setMicMismatch(true);
-            toast.info(`⚠️ 요청한 마이크와 다른 마이크가 선택됨: ${deviceInfo.label}`);
+            toast.error(`⚠️ 요청한 마이크와 다른 마이크가 선택됨: ${deviceInfo.label}`, { duration: 8000 });
           } else {
             setMicMismatch(false);
           }
+        },
+        onMicrophoneFallback: (reason) => {
+          console.error("[Recording] ❌ Microphone fallback:", reason);
+          toast.error(reason, { duration: 10000 });
+          setMicMismatch(true);
         },
       });
 
@@ -1903,6 +1989,7 @@ function SpeakerContent() {
                     setUseExternalMicMode(newMode);
                     saveMicrophoneSettings({
                       deviceId: selectedMicId,
+                      deviceLabel: currentMicLabel,
                       useExternalMicMode: newMode,
                     });
                   }}
