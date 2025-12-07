@@ -273,26 +273,46 @@ export class AudioPreprocessor {
     // Calculate base target gain
     let targetGain = avgRMS > 0.0005 ? this.config.targetRMS / avgRMS : 1.0;
 
-    // 공격적 게인 모드: 조용한 신호에 더 강하게 대응
+    // 공격적 게인 모드: 음성 감지 시에만 조절, 침묵 시 게인 유지
     if (this.config.aggressiveGainMode) {
-      // RMS가 매우 낮으면 (멀리 있음) 게인을 더 높임
-      if (recentRMS < 0.01) {
-        this.consecutiveLowRmsCount++;
-        this.consecutiveHighRmsCount = 0;
+      const SILENCE_RMS = 0.003;  // 이 이하는 침묵으로 간주
+      const VOICE_RMS = 0.008;    // 이 이상은 음성으로 간주
 
-        if (this.consecutiveLowRmsCount > 2) {
-          // 연속으로 낮으면 더 공격적 증폭
-          targetGain *= 1.5;
-        }
-      } else if (recentRMS > 0.2) {
-        this.consecutiveHighRmsCount++;
+      // 침묵 감지: 게인 조절 안 함
+      if (recentRMS < SILENCE_RMS) {
+        // 침묵 시에는 게인 유지 (증가 안 함)
         this.consecutiveLowRmsCount = 0;
+        this.consecutiveHighRmsCount = 0;
+        // targetGain 수정하지 않음
+      }
+      // 음성 감지 시에만 게인 조절
+      else if (recentRMS >= VOICE_RMS) {
+        // 음성이 작음 (멀리 있음)
+        if (recentRMS < 0.02) {
+          this.consecutiveLowRmsCount++;
+          this.consecutiveHighRmsCount = 0;
 
-        if (this.consecutiveHighRmsCount > 2) {
-          // 연속으로 높으면 클리핑 방지
-          targetGain *= 0.7;
+          if (this.consecutiveLowRmsCount > 3) {
+            // 연속으로 작은 음성이면 증폭
+            targetGain *= 1.3;
+          }
         }
-      } else {
+        // 음성이 큼 (가까이 있음)
+        else if (recentRMS > 0.2) {
+          this.consecutiveHighRmsCount++;
+          this.consecutiveLowRmsCount = 0;
+
+          if (this.consecutiveHighRmsCount > 2) {
+            // 연속으로 높으면 클리핑 방지
+            targetGain *= 0.7;
+          }
+        } else {
+          this.consecutiveLowRmsCount = 0;
+          this.consecutiveHighRmsCount = 0;
+        }
+      }
+      // 중간 레벨: 게인 유지
+      else {
         this.consecutiveLowRmsCount = 0;
         this.consecutiveHighRmsCount = 0;
       }
@@ -318,8 +338,16 @@ export class AudioPreprocessor {
   /**
    * 마이크 거리 추정 및 보정
    * RMS 기반으로 마이크 거리를 추정하고 적절한 보정 게인 적용
+   * ★ 침묵 시에는 거리 추정을 하지 않음
    */
   private estimateDistanceAndCompensate(recentRMS: number): void {
+    const SILENCE_RMS = 0.003;  // 이 이하는 침묵으로 간주
+
+    // 침묵 시에는 거리 추정하지 않고 현재 값 유지
+    if (recentRMS < SILENCE_RMS) {
+      return;  // 기존 distanceGain 유지
+    }
+
     // RMS 기반 거리 추정 (1/r² 법칙 고려)
     let newDistance: 'near' | 'medium' | 'far' | 'very_far';
     let baseDistanceGain: number;
@@ -332,14 +360,14 @@ export class AudioPreprocessor {
       // 중간: 적정 거리
       newDistance = 'medium';
       baseDistanceGain = 1.0;
-    } else if (recentRMS > 0.015) {
+    } else if (recentRMS > 0.02) {
       // 멀음: 마이크에서 좀 떨어짐
       newDistance = 'far';
-      baseDistanceGain = 1.8;  // 증폭
+      baseDistanceGain = 1.5;  // 증폭 (기존 1.8에서 완화)
     } else {
-      // 매우 멀음: 마이크에서 많이 떨어짐
+      // 매우 멀음: 마이크에서 많이 떨어짐 (하지만 침묵은 아님)
       newDistance = 'very_far';
-      baseDistanceGain = 3.0;  // 강한 증폭
+      baseDistanceGain = 2.0;  // 증폭 (기존 3.0에서 완화)
     }
 
     // 거리 변화 감지 시 빠르게 대응

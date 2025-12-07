@@ -47,11 +47,16 @@ export class AudioRecorder {
   private readonly MAX_GAIN = 10.0;  // 최대 게인 대폭 상향 (멀리 있는 마이크 대응)
   private readonly TARGET_AUDIO_LEVEL = 35;  // 목표 레벨 약간 상향
   private readonly GAIN_ADJUSTMENT_INTERVAL = 200;  // 0.2초마다 조정 (더 빠른 반응)
+  private readonly SILENCE_THRESHOLD = 5;  // 이 레벨 이하는 침묵으로 간주
+  private readonly VOICE_THRESHOLD = 10;   // 이 레벨 이상은 음성으로 간주
   private gainAdjustmentTimer: NodeJS.Timeout | null = null;
 
   // 마이크 거리 보정용 추가 상태
   private consecutiveLowLevelCount = 0;
   private consecutiveHighLevelCount = 0;
+  private consecutiveSilenceCount = 0;     // 연속 침묵 카운트
+  private initialGain = 3.5;               // 초기 게인 값 저장
+  private lastVoiceGain = 3.5;             // 마지막 음성 감지 시 게인 저장
 
   constructor(config: AudioRecorderConfig = {}) {
     this.config = {
@@ -233,7 +238,7 @@ export class AudioRecorder {
 
   /**
    * Start dynamic gain adjustment based on audio levels
-   * 마이크 거리 변화에 더 공격적으로 대응
+   * 마이크 거리 변화에 대응하되, 침묵 시 게인 상승 방지
    */
   private startDynamicGainAdjustment(): void {
     this.gainAdjustmentTimer = setInterval(() => {
@@ -249,49 +254,79 @@ export class AudioRecorder {
       // Current gain
       const currentGain = this.gainNode.gain.value;
 
-      // Adjust gain based on average level - 더 공격적인 조정
       let newGain = currentGain;
       let rampTime = 0.3;  // 기본 램프 시간
 
-      // 매우 조용함: 마이크가 멀리 있거나 소리가 작음
-      if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.3) {
-        this.consecutiveLowLevelCount++;
+      // ★ 핵심 수정: 침묵 감지 - 게인 조절하지 않음
+      if (avgLevel < this.SILENCE_THRESHOLD) {
+        this.consecutiveSilenceCount++;
+        this.consecutiveLowLevelCount = 0;
         this.consecutiveHighLevelCount = 0;
 
-        // 연속으로 조용하면 더 공격적으로 증폭
-        if (this.consecutiveLowLevelCount > 3) {
-          newGain = Math.min(this.MAX_GAIN, currentGain * 1.3);  // 30% 증가
-          rampTime = 0.15;  // 더 빠른 반응
-        } else {
-          newGain = Math.min(this.MAX_GAIN, currentGain * 1.15);  // 15% 증가
+        // 침묵이 오래 지속되면 (약 5초 = 25회) 서서히 마지막 음성 게인으로 복귀
+        if (this.consecutiveSilenceCount > 25) {
+          // 게인이 lastVoiceGain보다 높으면 서서히 낮춤
+          if (currentGain > this.lastVoiceGain * 1.2) {
+            newGain = currentGain * 0.98;  // 2%씩 천천히 감소
+            rampTime = 0.5;
+          }
         }
+        // 침묵 시에는 게인 유지 (증가 안 함)
+        // console.log(`[Gain] Silence detected (${avgLevel.toFixed(1)}), maintaining gain`);
       }
-      // 조금 조용함
-      else if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.6) {
-        this.consecutiveLowLevelCount++;
-        this.consecutiveHighLevelCount = 0;
-        newGain = Math.min(this.MAX_GAIN, currentGain * 1.08);  // 8% 증가
-      }
-      // 너무 시끄러움: 클리핑 방지
-      else if (peakLevel > 85 || avgLevel > this.TARGET_AUDIO_LEVEL * 2.5) {
-        this.consecutiveHighLevelCount++;
-        this.consecutiveLowLevelCount = 0;
+      // 음성 감지 시에만 게인 조절
+      else if (avgLevel >= this.VOICE_THRESHOLD) {
+        this.consecutiveSilenceCount = 0;  // 침묵 카운트 리셋
 
-        if (this.consecutiveHighLevelCount > 2) {
-          newGain = Math.max(this.MIN_GAIN, currentGain * 0.7);  // 30% 감소
-          rampTime = 0.1;  // 빠른 반응 (클리핑 방지)
-        } else {
-          newGain = Math.max(this.MIN_GAIN, currentGain * 0.85);  // 15% 감소
+        // 음성이 너무 작음: 마이크가 멀리 있음
+        if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.4) {
+          this.consecutiveLowLevelCount++;
+          this.consecutiveHighLevelCount = 0;
+
+          // 연속으로 작으면 증폭 (침묵이 아닌 실제 음성일 때만)
+          if (this.consecutiveLowLevelCount > 3) {
+            newGain = Math.min(this.MAX_GAIN, currentGain * 1.2);  // 20% 증가
+            rampTime = 0.2;
+          } else {
+            newGain = Math.min(this.MAX_GAIN, currentGain * 1.1);  // 10% 증가
+          }
         }
+        // 음성이 조금 작음
+        else if (avgLevel < this.TARGET_AUDIO_LEVEL * 0.7) {
+          this.consecutiveLowLevelCount++;
+          this.consecutiveHighLevelCount = 0;
+          newGain = Math.min(this.MAX_GAIN, currentGain * 1.05);  // 5% 증가
+        }
+        // 너무 시끄러움: 클리핑 방지 (즉시 대응)
+        else if (peakLevel > 85 || avgLevel > this.TARGET_AUDIO_LEVEL * 2.5) {
+          this.consecutiveHighLevelCount++;
+          this.consecutiveLowLevelCount = 0;
+
+          if (this.consecutiveHighLevelCount > 2) {
+            newGain = Math.max(this.MIN_GAIN, currentGain * 0.7);  // 30% 감소
+            rampTime = 0.1;  // 빠른 반응 (클리핑 방지)
+          } else {
+            newGain = Math.max(this.MIN_GAIN, currentGain * 0.85);  // 15% 감소
+          }
+        }
+        // 약간 시끄러움
+        else if (avgLevel > this.TARGET_AUDIO_LEVEL * 1.8) {
+          this.consecutiveHighLevelCount++;
+          this.consecutiveLowLevelCount = 0;
+          newGain = Math.max(this.MIN_GAIN, currentGain * 0.92);  // 8% 감소
+        }
+        // 적정 범위
+        else {
+          this.consecutiveLowLevelCount = 0;
+          this.consecutiveHighLevelCount = 0;
+        }
+
+        // 음성 감지 시 현재 게인 저장 (나중에 침묵 후 복귀용)
+        this.lastVoiceGain = newGain;
       }
-      // 약간 시끄러움
-      else if (avgLevel > this.TARGET_AUDIO_LEVEL * 1.8) {
-        this.consecutiveHighLevelCount++;
-        this.consecutiveLowLevelCount = 0;
-        newGain = Math.max(this.MIN_GAIN, currentGain * 0.92);  // 8% 감소
-      }
-      // 적정 범위
+      // 중간 레벨 (SILENCE < avgLevel < VOICE): 게인 유지
       else {
+        this.consecutiveSilenceCount = 0;
         this.consecutiveLowLevelCount = 0;
         this.consecutiveHighLevelCount = 0;
       }

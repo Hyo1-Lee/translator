@@ -954,6 +954,9 @@ function SpeakerContent() {
       setStatus("녹음 중");
       console.log("[Recording] ✅ Started");
 
+      // 디버그 녹음도 자동으로 시작 (원본 오디오 확인용)
+      startDebugRecording();
+
       // Notify server to create STT client
       const currentRoomId = roomIdRef.current;
       if (socketRef.current && currentRoomId) {
@@ -977,6 +980,9 @@ function SpeakerContent() {
 
     // Stop background session
     backgroundSessionRef.current?.stop();
+
+    // 디버그 녹음도 자동으로 중지
+    stopDebugRecording();
 
     setIsRecording(false);
     setStatus("정지");
@@ -1452,78 +1458,28 @@ function SpeakerContent() {
               </svg>
               새 방
             </button>
+            <button
+              onClick={downloadDebugAudio}
+              className={`${styles.compactActionButton} ${debugAudioUrl ? styles.hasAudio : ''}`}
+              disabled={!debugAudioUrl}
+              title="원본 오디오 다운로드"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              오디오
+            </button>
           </div>
 
-          {/* Debug Audio Recording - 원본 마이크 입력 확인용 */}
-          <div className={styles.debugSection}>
-            <div className={styles.debugHeader}>
-              <span>🔧 디버그 녹음</span>
-              <span className={styles.debugHint}>원본 오디오 확인용</span>
-            </div>
-            <div className={styles.debugControls}>
-              {!isDebugRecording ? (
-                <button
-                  onClick={startDebugRecording}
-                  className={styles.debugStartButton}
-                  title="디버그 녹음 시작"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                  </svg>
-                  녹음
-                </button>
-              ) : (
-                <button
-                  onClick={stopDebugRecording}
-                  className={styles.debugStopButton}
-                  title="디버그 녹음 중지"
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <rect x="6" y="6" width="12" height="12" />
-                  </svg>
-                  중지
-                </button>
-              )}
-              {debugAudioUrl && (
-                <>
-                  <audio
-                    src={debugAudioUrl}
-                    controls
-                    className={styles.debugAudioPlayer}
-                  />
-                  <button
-                    onClick={downloadDebugAudio}
-                    className={styles.debugDownloadButton}
-                    title="오디오 다운로드"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    다운로드
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* Right Panel - Real-time Translation */}
