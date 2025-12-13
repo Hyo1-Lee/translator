@@ -167,7 +167,7 @@ function SpeakerContent() {
 
   // New UX states
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  const [hasDefaultSettings, setHasDefaultSettings] = useState(false);
+  const [, setHasDefaultSettings] = useState(false);
   const [saveAsDefault, setSaveAsDefault] = useState(true);
 
   // Refs
@@ -182,9 +182,9 @@ function SpeakerContent() {
   // Debug audio recording refs
   const debugMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const debugAudioChunksRef = useRef<Blob[]>([]);
-  const debugStreamRef = useRef<MediaStream | null>(null);
+  const _debugStreamRef = useRef<MediaStream | null>(null);
   const [debugAudioUrl, setDebugAudioUrl] = useState<string | null>(null);
-  const [isDebugRecording, setIsDebugRecording] = useState(false);
+  const [, setIsDebugRecording] = useState(false);
 
   // Keep roomIdRef in sync with roomId state
   useEffect(() => {
@@ -1205,7 +1205,7 @@ function SpeakerContent() {
   const startDebugRecording = async () => {
     try {
       // AudioRecorder의 스트림을 가져옴 (같은 마이크 사용 보장)
-      const stream = (audioRecorderRef.current as any)?.stream;
+      const stream = (audioRecorderRef.current as unknown as { stream?: MediaStream })?.stream;
 
       if (!stream) {
         console.warn('[Debug Recording] No stream available from AudioRecorder');
