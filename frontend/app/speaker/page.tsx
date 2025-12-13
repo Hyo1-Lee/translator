@@ -130,7 +130,7 @@ function SpeakerContent() {
 
   // State management
   const [roomId, setRoomId] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
+  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "paused">("idle");
   const [listenerCount, setListenerCount] = useState(0);
   // Status for debugging - not currently displayed in UI
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -591,19 +591,19 @@ function SpeakerContent() {
 
         // 다른 디바이스에서 녹음 상태가 변경된 경우 UI 동기화
         if (data.roomId === roomId) {
-          if (data.isRecording && !isRecording) {
+          if (data.isRecording && recordingState === "idle") {
             // 다른 디바이스에서 녹음 시작
             console.log(
               "[Phase1] Another device started recording, syncing..."
             );
             // TODO: 필요시 녹음 시작 로직
-          } else if (!data.isRecording && isRecording) {
+          } else if (!data.isRecording && recordingState !== "idle") {
             // 다른 디바이스에서 녹음 중지
             console.log(
               "[Phase1] Another device stopped recording, syncing..."
             );
             audioRecorderRef.current?.stop();
-            setIsRecording(false);
+            setRecordingState("idle");
             setAudioLevel(0);
           }
         }
@@ -616,7 +616,7 @@ function SpeakerContent() {
         console.log(`[Phase1] Recording state synced: ${data.isRecording}`);
 
         // 재연결/새 디바이스 연결 시 현재 상태 동기화
-        if (data.isRecording && !isRecording) {
+        if (data.isRecording && recordingState === "idle") {
           console.log("[Phase1] Syncing to recording state...");
           // TODO: 필요시 UI 상태만 업데이트 (실제 녹음은 시작하지 않음)
         }
@@ -629,7 +629,7 @@ function SpeakerContent() {
       setStatus("연결 끊김");
 
       // Stop recording on disconnect
-      if (isRecording) {
+      if (recordingState !== "idle") {
         stopRecording();
       }
     });
@@ -640,11 +640,11 @@ function SpeakerContent() {
       setStatus("재연결됨");
 
       // Stop recording temporarily to prevent unauthorized audio stream
-      const wasRecording = isRecording;
+      const wasRecording = recordingState !== "idle";
       if (wasRecording) {
         console.log("[Reconnect] ⏸️  Pausing recording during reconnection...");
         audioRecorderRef.current?.stop();
-        setIsRecording(false);
+        setRecordingState("idle");
         setAudioLevel(0);
       }
 
@@ -1012,6 +1012,22 @@ function SpeakerContent() {
 
       // Start recording BEFORE background session (AudioContext priority)
       await audioRecorderRef.current.start();
+      setRecordingState("recording");
+
+      // 실제 사용 중인 마이크 확인 로깅
+      const actualStream = audioRecorderRef.current.stream;
+      if (actualStream) {
+        const track = actualStream.getAudioTracks()[0];
+        if (track) {
+          const settings = track.getSettings();
+          console.log("[Recording] 🎤 Actual microphone being used:", {
+            deviceId: settings.deviceId,
+            label: track.label,
+            sampleRate: settings.sampleRate,
+            channelCount: settings.channelCount,
+          });
+        }
+      }
 
       // Start background session AFTER recording started (to avoid AudioContext conflict)
       if (!backgroundSessionRef.current) {
@@ -1036,7 +1052,6 @@ function SpeakerContent() {
       // Resume background audio context (for iOS compatibility)
       await backgroundSessionRef.current.resumeAudioContext();
 
-      setIsRecording(true);
       setStatus("녹음 중");
       console.log("[Recording] ✅ Started");
 
@@ -1057,6 +1072,38 @@ function SpeakerContent() {
     }
   };
 
+  // Pause recording
+  const pauseRecording = () => {
+    console.log("[Recording] ⏸️ Pausing...");
+    audioRecorderRef.current?.pause();
+
+    // 디버그 녹음도 일시정지
+    if (debugMediaRecorderRef.current && debugMediaRecorderRef.current.state === 'recording') {
+      debugMediaRecorderRef.current.pause();
+      console.log("[Debug Recording] ⏸️ Paused");
+    }
+
+    setRecordingState("paused");
+    setStatus("일시정지");
+    console.log("[Recording] ✅ Paused");
+  };
+
+  // Resume recording
+  const resumeRecording = () => {
+    console.log("[Recording] ▶️ Resuming...");
+    audioRecorderRef.current?.resume();
+
+    // 디버그 녹음도 재개
+    if (debugMediaRecorderRef.current && debugMediaRecorderRef.current.state === 'paused') {
+      debugMediaRecorderRef.current.resume();
+      console.log("[Debug Recording] ▶️ Resumed");
+    }
+
+    setRecordingState("recording");
+    setStatus("녹음 중");
+    console.log("[Recording] ✅ Resumed");
+  };
+
   // Stop recording
   const stopRecording = () => {
     console.log("[Recording] ⏹️ Stopping...");
@@ -1070,7 +1117,7 @@ function SpeakerContent() {
     // 디버그 녹음도 자동으로 중지
     stopDebugRecording();
 
-    setIsRecording(false);
+    setRecordingState("idle");
     setStatus("정지");
     setAudioLevel(0);
     setActiveMicLabel(null);
@@ -1154,20 +1201,28 @@ function SpeakerContent() {
   };
 
   // Debug audio recording - 원본 마이크 입력 녹음
+  // ★ IMPORTANT: AudioRecorder가 이미 생성한 스트림을 재사용해야 함!
   const startDebugRecording = async () => {
     try {
-      // 마이크 스트림 가져오기
-      const constraints: MediaStreamConstraints = {
-        audio: {
-          deviceId: selectedMicId ? { ideal: selectedMicId } : undefined,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      };
+      // AudioRecorder의 스트림을 가져옴 (같은 마이크 사용 보장)
+      const stream = (audioRecorderRef.current as any)?.stream;
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      debugStreamRef.current = stream;
+      if (!stream) {
+        console.warn('[Debug Recording] No stream available from AudioRecorder');
+        toast.error('녹음 스트림을 찾을 수 없습니다');
+        return;
+      }
+
+      // 스트림 정보 로깅
+      const audioTrack = stream.getAudioTracks()[0];
+      if (audioTrack) {
+        const settings = audioTrack.getSettings();
+        console.log('[Debug Recording] Using same stream as AudioRecorder:', {
+          deviceId: settings.deviceId,
+          label: audioTrack.label,
+        });
+      }
+
       debugAudioChunksRef.current = [];
 
       // 이전 URL 해제
@@ -1176,7 +1231,7 @@ function SpeakerContent() {
         setDebugAudioUrl(null);
       }
 
-      // MediaRecorder 시작
+      // MediaRecorder 시작 (AudioRecorder와 동일한 스트림 사용)
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
           ? 'audio/webm;codecs=opus'
@@ -1199,8 +1254,8 @@ function SpeakerContent() {
       debugMediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start(1000); // 1초마다 데이터 수집
       setIsDebugRecording(true);
-      console.log('[Debug Recording] Started');
-      toast.success('디버그 녹음 시작');
+      console.log('[Debug Recording] Started with same stream as AudioRecorder');
+      toast.success('디버그 녹음 시작 (선택된 마이크 사용)');
     } catch (error) {
       console.error('[Debug Recording] Error:', error);
       toast.error('디버그 녹음 실패');
@@ -1211,10 +1266,8 @@ function SpeakerContent() {
     if (debugMediaRecorderRef.current && debugMediaRecorderRef.current.state !== 'inactive') {
       debugMediaRecorderRef.current.stop();
     }
-    if (debugStreamRef.current) {
-      debugStreamRef.current.getTracks().forEach(track => track.stop());
-      debugStreamRef.current = null;
-    }
+    // ★ 스트림을 공유하므로 여기서 종료하면 안 됨! (AudioRecorder가 종료할 것)
+    // debugStreamRef는 더 이상 사용하지 않음
     setIsDebugRecording(false);
     console.log('[Debug Recording] Stopped');
     toast.success('디버그 녹음 완료');
@@ -1381,7 +1434,7 @@ function SpeakerContent() {
                 ? styles.hasExternal
                 : ""
             }`}
-            disabled={isRecording}
+            disabled={recordingState === "recording"}
           >
             <span className={styles.micSelectButtonIcon}>
               <svg
@@ -1430,27 +1483,94 @@ function SpeakerContent() {
                 </svg>
                 기록 보기 모드 (종료된 세션)
               </div>
-            ) : !isRecording ? (
-              <button
-                onClick={startRecording}
-                className={styles.compactStartButton}
-                disabled={!roomId || !isConnected}
-              >
-                <span className={styles.recordDot}></span>
-                녹음 시작
-              </button>
             ) : (
-              <button
-                onClick={stopRecording}
-                className={styles.compactStopButton}
-              >
-                ⏹ 녹음 중지
-              </button>
+              <div className={styles.recordingControls}>
+                {recordingState === "idle" ? (
+                  <button
+                    onClick={startRecording}
+                    className={styles.playButton}
+                    disabled={!roomId || !isConnected}
+                    title="녹음 시작"
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                ) : recordingState === "recording" ? (
+                  <>
+                    <button
+                      onClick={pauseRecording}
+                      className={styles.pauseButton}
+                      title="일시정지"
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <rect x="6" y="4" width="4" height="16" rx="1" />
+                        <rect x="14" y="4" width="4" height="16" rx="1" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={stopRecording}
+                      className={styles.stopButton}
+                      title="정지"
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <rect x="5" y="5" width="14" height="14" rx="1.5" />
+                      </svg>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={resumeRecording}
+                      className={styles.playButton}
+                      title="재개"
+                    >
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={stopRecording}
+                      className={styles.stopButton}
+                      title="정지"
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <rect x="5" y="5" width="14" height="14" rx="1.5" />
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
           {/* Audio level meter */}
-          {isRecording && (
+          {recordingState === "recording" && (
             <div className={styles.compactAudioLevel}>
               <div className={styles.compactAudioHeader}>
                 <span

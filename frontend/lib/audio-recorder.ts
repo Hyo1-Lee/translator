@@ -20,7 +20,7 @@ export interface AudioRecorderConfig {
 }
 
 export class AudioRecorder {
-  private stream: MediaStream | null = null;
+  public stream: MediaStream | null = null;  // public으로 변경 (디버그 녹음에서 접근)
   private audioContext: AudioContext | null = null;
   private processor: ScriptProcessorNode | null = null;
   private analyser: AnalyserNode | null = null;
@@ -40,6 +40,7 @@ export class AudioRecorder {
     onMicrophoneFallback: (reason: string) => void;
   };
   private isRecording = false;
+  private isPaused = false;
   private audioChunksSent = 0;
 
   // Dynamic gain adjustment - 마이크 거리 변화 대응용 공격적 설정
@@ -116,6 +117,28 @@ export class AudioRecorder {
   }
 
   /**
+   * Pause recording (keep stream alive, stop sending data)
+   */
+  pause(): void {
+    if (!this.isRecording || this.isPaused) {
+      return;
+    }
+    this.isPaused = true;
+    console.log("[AudioRecorder] ⏸️ Paused");
+  }
+
+  /**
+   * Resume recording
+   */
+  resume(): void {
+    if (!this.isRecording || !this.isPaused) {
+      return;
+    }
+    this.isPaused = false;
+    console.log("[AudioRecorder] ▶️ Resumed");
+  }
+
+  /**
    * Stop recording
    */
   stop(): void {
@@ -124,6 +147,7 @@ export class AudioRecorder {
     }
 
     this.isRecording = false;
+    this.isPaused = false;
 
     // Stop animation
     if (this.animationFrameId) {
@@ -186,7 +210,7 @@ export class AudioRecorder {
     this.audioChunksSent = 0;
 
     this.processor.onaudioprocess = (e: AudioProcessingEvent) => {
-      if (!this.isRecording || !this.audioContext) return;
+      if (!this.isRecording || this.isPaused || !this.audioContext) return;
 
       const inputData = e.inputBuffer.getChannelData(0);
       const sampleRate = this.audioContext.sampleRate;

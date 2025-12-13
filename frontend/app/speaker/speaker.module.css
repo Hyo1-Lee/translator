@@ -1333,6 +1333,88 @@
   gap: 0.75rem;
 }
 
+/* Recording Controls - Clean & Simple */
+.recordingControls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 0.875rem;
+  backdrop-filter: blur(20px);
+}
+
+.playButton,
+.pauseButton,
+.stopButton {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.playButton {
+  background: #a18cd1;
+  color: white;
+  box-shadow: 0 2px 8px rgba(161, 140, 209, 0.3);
+}
+
+.playButton svg {
+  margin-left: 2px;
+}
+
+.playButton:hover:not(:disabled) {
+  background: #b19ddb;
+  box-shadow: 0 4px 12px rgba(161, 140, 209, 0.4);
+}
+
+.playButton:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.playButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pauseButton {
+  background: #f59e0b;
+  color: white;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.pauseButton:hover {
+  background: #fbbf24;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.pauseButton:active {
+  transform: scale(0.95);
+}
+
+.stopButton {
+  background: #ef4444;
+  color: white;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.stopButton:hover {
+  background: #f87171;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.stopButton:active {
+  transform: scale(0.95);
+}
+
 .compactStartButton,
 .compactStopButton {
   display: flex;
