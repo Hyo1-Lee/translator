@@ -566,7 +566,7 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  padding: 1rem;  /* Reduced from 2rem for mobile */
+  padding: 1rem; /* Reduced from 2rem for mobile */
 }
 
 @media (min-width: 768px) {
@@ -950,20 +950,20 @@
   }
 
   .modal {
-    max-height: 95vh;  /* Increased from 90vh for more space */
-    border-radius: 1rem;  /* Smaller radius on mobile */
+    max-height: 95vh; /* Increased from 90vh for more space */
+    border-radius: 1rem; /* Smaller radius on mobile */
   }
 
   .modalHeader {
-    padding: 1.25rem 1.5rem 1rem;  /* Reduced padding on mobile */
+    padding: 1.25rem 1.5rem 1rem; /* Reduced padding on mobile */
   }
 
   .modalHeader h2 {
-    font-size: 1.375rem;  /* Smaller title on mobile */
+    font-size: 1.375rem; /* Smaller title on mobile */
   }
 
   .modalBody {
-    padding: 1.25rem 1.5rem;  /* Reduced padding on mobile */
+    padding: 1.25rem 1.5rem; /* Reduced padding on mobile */
   }
 
   .closeModalButton {
@@ -972,11 +972,11 @@
   }
 
   .settingGroup {
-    margin-bottom: 1.25rem;  /* Slightly reduced spacing on mobile */
+    margin-bottom: 1.25rem; /* Slightly reduced spacing on mobile */
   }
 
   .languageGrid {
-    grid-template-columns: 1fr;  /* Single column on small screens */
+    grid-template-columns: 1fr; /* Single column on small screens */
   }
 }
 
@@ -2214,7 +2214,7 @@
 }
 
 .toggleSwitch::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 2px;
   top: 2px;
@@ -2423,6 +2423,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .languageRow .settingGroup {
@@ -2434,12 +2435,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0.875rem 1.125rem;
   background: rgba(15, 23, 42, 0.5);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 0.625rem;
-  height: 100%;
-  min-height: 42px;
   box-sizing: border-box;
 }
 
@@ -2753,7 +2752,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
   }
   50% {

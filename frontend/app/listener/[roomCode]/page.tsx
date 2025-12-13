@@ -257,12 +257,12 @@ export default function ListenerRoom() {
 
     // Listen for translation-text (new system)
     socketRef.current.on("translation-text", (data: SocketData) => {
-      console.log(`[Listener] 🌐 Translation received:`, {
-        language: data.targetLanguage,
-        text: (data.text || "").substring(0, 50) + "...",
-        isPartial: data.isPartial,
-        isHistory: data.isHistory,
-      });
+      // console.log(`[Listener] 🌐 Translation received:`, {
+      //   language: data.targetLanguage,
+      //   text: (data.text || "").substring(0, 50) + "...",
+      //   isPartial: data.isPartial,
+      //   isHistory: data.isHistory,
+      // });
 
       setTranscripts((prev) => {
         const newTranscript = {
@@ -810,19 +810,23 @@ export default function ListenerRoom() {
                                 <div className={styles.divider}></div>
                               </>
                             )}
-                            <div className={styles.english}>{getDisplayText(item.text || "")}</div>
+                            <div className={styles.english}>
+                              {getDisplayText(item.text || "")}
+                            </div>
                           </>
                         ) : (
                           /* Old translation-batch format */
                           <>
-                            <div className={styles.korean}>{getDisplayText(item.korean || "")}</div>
+                            <div className={styles.korean}>
+                              {getDisplayText(item.korean || "")}
+                            </div>
                             <div className={styles.divider}></div>
                             <div className={styles.english}>
                               {getDisplayText(
                                 item.translations?.[selectedLanguage] ||
-                                item.translations?.en ||
-                                item.english ||
-                                ""
+                                  item.translations?.en ||
+                                  item.english ||
+                                  ""
                               )}
                             </div>
                           </>
