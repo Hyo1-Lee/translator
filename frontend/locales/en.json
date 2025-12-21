@@ -135,13 +135,20 @@
     "incorrectPassword": "Incorrect password.",
     "language": "Language",
     "fontSize": "Font Size",
+    "fontSmall": "Small",
+    "fontMedium": "Medium",
+    "fontLarge": "Large",
     "autoScroll": "Auto Scroll",
+    "showOriginal": "Show Original",
     "noTranscripts": "No translations yet.",
     "noTranscriptsDesc": "Translations will appear here when the speaker starts.",
     "saveTranscript": "Save Transcript",
     "loginRequired": "Login required to save transcripts. Go to login page?",
     "saved": "Transcript saved!",
     "saveFailed": "Failed to save transcript.",
-    "saveError": "An error occurred while saving the transcript."
+    "saveError": "An error occurred while saving the transcript.",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit Fullscreen",
+    "noContentToSave": "Nothing to save"
   }
 }

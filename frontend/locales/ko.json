@@ -135,13 +135,20 @@
     "incorrectPassword": "비밀번호가 올바르지 않습니다.",
     "language": "언어",
     "fontSize": "글자 크기",
+    "fontSmall": "작게",
+    "fontMedium": "보통",
+    "fontLarge": "크게",
     "autoScroll": "자동 스크롤",
+    "showOriginal": "원문 표시",
     "noTranscripts": "아직 번역 내용이 없습니다.",
     "noTranscriptsDesc": "연사가 발언을 시작하면 여기에 표시됩니다.",
     "saveTranscript": "스크립트 저장",
     "loginRequired": "스크립트를 저장하려면 로그인이 필요합니다. 로그인 페이지로 이동하시겠습니까?",
     "saved": "스크립트가 저장되었습니다!",
     "saveFailed": "스크립트 저장에 실패했습니다.",
-    "saveError": "스크립트 저장 중 오류가 발생했습니다."
+    "saveError": "스크립트 저장 중 오류가 발생했습니다.",
+    "fullscreen": "전체화면",
+    "exitFullscreen": "전체화면 나가기",
+    "noContentToSave": "저장할 내용이 없습니다"
   }
 }

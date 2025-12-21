@@ -17,7 +17,7 @@ const I18nContext = createContext<I18nContextType | undefined>(undefined);
 const translations = { ko, en };
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("ko");
+  const [locale, setLocaleState] = useState<Locale>("en");
 
   useEffect(() => {
     // Load saved locale from localStorage

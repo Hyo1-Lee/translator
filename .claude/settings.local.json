@@ -35,7 +35,9 @@
       "Bash(cat:*)",
       "Bash(tasklist:*)",
       "Bash(find:*)",
-      "WebFetch(domain:vercel.com)"
+      "WebFetch(domain:vercel.com)",
+      "Bash(npx next build)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   }

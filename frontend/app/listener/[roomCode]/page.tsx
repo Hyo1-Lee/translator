@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useI18n } from "@/contexts/I18nContext";
 import io from "socket.io-client";
 import { getDisplayText } from "@/lib/text-display";
 import styles from "./listener.module.css";
@@ -75,6 +76,7 @@ export default function ListenerRoom() {
   const router = useRouter();
   const { user, accessToken } = useAuth();
   const toast = useToast();
+  const { t } = useI18n();
 
   const roomCode = (params.roomCode as string)?.toUpperCase();
 
@@ -91,6 +93,7 @@ export default function ListenerRoom() {
   ]);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(true);
 
   // Password state
   const [needsPassword, setNeedsPassword] = useState(false);
@@ -99,6 +102,9 @@ export default function ListenerRoom() {
 
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
+  const isJoinedRef = useRef(false);
+  const roomPasswordRef = useRef<string>("");
 
   // Format timestamp
   const formatTime = useCallback((timestamp: number) => {
@@ -117,6 +123,24 @@ export default function ListenerRoom() {
     }
   }, [transcripts, autoScroll]);
 
+  // Scroll detection - auto-pause when user scrolls up, resume when at bottom
+  const handleScroll = useCallback(() => {
+    if (!transcriptContainerRef.current) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = transcriptContainerRef.current;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+    setAutoScroll(isNearBottom);
+  }, []);
+
+  useEffect(() => {
+    const container = transcriptContainerRef.current;
+    if (container) {
+      container.addEventListener("scroll", handleScroll);
+      return () => container.removeEventListener("scroll", handleScroll);
+    }
+  }, [handleScroll]);
+
   // ESC key to exit fullscreen
   useEffect(() => {
     const handleEscKey = (event: KeyboardEvent) => {
@@ -128,6 +152,36 @@ export default function ListenerRoom() {
     window.addEventListener("keydown", handleEscKey);
     return () => window.removeEventListener("keydown", handleEscKey);
   }, [isFullscreen]);
+
+  // Page Visibility API - reconnect when tab becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("👁️ Page became visible, checking connection...");
+
+        if (socketRef.current) {
+          const isSocketConnected = socketRef.current.connected;
+          console.log("🔌 Socket connected:", isSocketConnected, "isJoinedRef:", isJoinedRef.current);
+
+          if (!isSocketConnected) {
+            console.log("🔄 Socket disconnected, attempting to reconnect...");
+            socketRef.current.connect();
+          } else if (isJoinedRef.current) {
+            // Socket is connected but we might have missed events, rejoin to be safe
+            console.log("🔄 Rejoining room to ensure sync...");
+            socketRef.current.emit("join-room", {
+              roomId: roomCode,
+              name: "Guest",
+              password: roomPasswordRef.current || undefined,
+            });
+          }
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [roomCode]);
 
   // Initialize socket
   useEffect(() => {
@@ -155,12 +209,13 @@ export default function ListenerRoom() {
       console.log("Reconnected to server after", attemptNumber, "attempts");
       setIsConnected(true);
 
-      // Rejoin room after reconnection
-      if (isJoined && socketRef.current) {
-        const name = user?.name || "Guest";
+      // Rejoin room after reconnection - use ref to get current value
+      if (isJoinedRef.current && socketRef.current) {
+        console.log("🔄 Rejoining room after reconnection...");
         socketRef.current.emit("join-room", {
           roomId: roomCode,
-          name,
+          name: "Guest", // User name might not be available here
+          password: roomPasswordRef.current || undefined,
         });
       }
     });
@@ -191,6 +246,7 @@ export default function ListenerRoom() {
       setSessionTitle(title);
 
       setIsJoined(true);
+      isJoinedRef.current = true; // Update ref for reconnection handler
       setNeedsPassword(false);
       setPasswordError("");
       setPassword(""); // Clear password after successful join
@@ -351,6 +407,11 @@ export default function ListenerRoom() {
     (pwd?: string) => {
       const name = user?.name || "Guest";
       const finalPassword = pwd !== undefined ? pwd : password;
+
+      // Save password for reconnection
+      if (finalPassword) {
+        roomPasswordRef.current = finalPassword;
+      }
 
       console.log("🔑 Attempting to join room:", {
         roomCode,
@@ -514,15 +575,15 @@ export default function ListenerRoom() {
           onClick={(e) => e.stopPropagation()}
         >
           <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
-            <h2>🔒 비밀번호 필요</h2>
-            <p>이 방은 비밀번호로 보호되어 있습니다</p>
+            <h2>🔒 {t("listener.passwordRequired")}</h2>
+            <p>{t("listener.passwordRequiredDesc")}</p>
             <div className={styles.roomCodeBadge}>
-              방 코드: <strong>{roomCode}</strong>
+              {t("listener.room")}: <strong>{roomCode}</strong>
             </div>
             <form onSubmit={handlePasswordSubmit}>
               <input
                 type="password"
-                placeholder="비밀번호 입력"
+                placeholder={t("listener.passwordPlaceholder")}
                 value={password}
                 onChange={(e) => {
                   console.log("🔐 Password input changed");
@@ -550,7 +611,7 @@ export default function ListenerRoom() {
                   }}
                   className={styles.cancelBtn}
                 >
-                  취소
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
@@ -560,7 +621,7 @@ export default function ListenerRoom() {
                   }}
                   className={styles.submitBtn}
                 >
-                  입장
+                  {t("listener.enter")}
                 </button>
               </div>
             </form>
@@ -578,14 +639,14 @@ export default function ListenerRoom() {
         <header className={styles.header}>
           <div className={styles.headerLeft}>
             <button onClick={() => router.push("/")} className={styles.backBtn}>
-              ← 나가기
+              ← {t("common.back")}
             </button>
             <div className={styles.sessionInfo}>
               {sessionTitle && (
                 <h1 className={styles.sessionTitle}>{sessionTitle}</h1>
               )}
               <div className={styles.roomInfo}>
-                <span className={styles.roomLabel}>방:</span>
+                <span className={styles.roomLabel}>{t("listener.room")}:</span>
                 <span className={styles.roomCode}>{roomCode}</span>
                 {speakerName && (
                   <span className={styles.speaker}>| {speakerName}</span>
@@ -598,7 +659,7 @@ export default function ListenerRoom() {
               <span
                 className={isConnected ? styles.connected : styles.disconnected}
               >
-                {isConnected ? "● 연결됨" : "○ 연결 끊김"}
+                {isConnected ? `● ${t("common.connected")}` : `○ ${t("common.disconnected")}`}
               </span>
             </div>
           </div>
@@ -607,7 +668,7 @@ export default function ListenerRoom() {
         {/* Controls */}
         <div className={styles.controls}>
           <div className={styles.controlItem}>
-            <label className={styles.label}>글자 크기</label>
+            <label className={styles.label}>{t("listener.fontSize")}</label>
             <div className={styles.fontButtons}>
               <button
                 onClick={() => setFontSize("small")}
@@ -615,7 +676,7 @@ export default function ListenerRoom() {
                   fontSize === "small" ? styles.active : ""
                 }`}
               >
-                작게
+                {t("listener.fontSmall")}
               </button>
               <button
                 onClick={() => setFontSize("medium")}
@@ -623,7 +684,7 @@ export default function ListenerRoom() {
                   fontSize === "medium" ? styles.active : ""
                 }`}
               >
-                보통
+                {t("listener.fontMedium")}
               </button>
               <button
                 onClick={() => setFontSize("large")}
@@ -631,14 +692,14 @@ export default function ListenerRoom() {
                   fontSize === "large" ? styles.active : ""
                 }`}
               >
-                크게
+                {t("listener.fontLarge")}
               </button>
             </div>
           </div>
 
           {availableLanguages.length > 1 && (
             <div className={styles.controlItem}>
-              <label className={styles.label}>번역 언어</label>
+              <label className={styles.label}>{t("listener.language")}</label>
               <select
                 value={selectedLanguage}
                 onChange={(e) => setSelectedLanguage(e.target.value)}
@@ -659,7 +720,16 @@ export default function ListenerRoom() {
               checked={autoScroll}
               onChange={() => setAutoScroll(!autoScroll)}
             />
-            <span>자동 스크롤</span>
+            <span>{t("listener.autoScroll")}</span>
+          </label>
+
+          <label className={styles.checkbox}>
+            <input
+              type="checkbox"
+              checked={showOriginal}
+              onChange={() => setShowOriginal(!showOriginal)}
+            />
+            <span>{t("listener.showOriginal")}</span>
           </label>
 
           <div className={styles.actionButtons}>
@@ -670,8 +740,8 @@ export default function ListenerRoom() {
                 disabled={transcripts.length === 0}
                 title={
                   transcripts.length === 0
-                    ? "저장할 내용이 없습니다"
-                    : "세션 저장"
+                    ? t("listener.noContentToSave")
+                    : t("listener.saveTranscript")
                 }
               >
                 <svg
@@ -686,7 +756,7 @@ export default function ListenerRoom() {
                   <polyline points="17 21 17 13 7 13 7 21" />
                   <polyline points="7 3 7 8 15 8" />
                 </svg>
-                저장
+                {t("common.save")}
               </button>
             )}
 
@@ -703,13 +773,13 @@ export default function ListenerRoom() {
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              내보내기
+              {t("common.export")}
             </button>
 
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
               className={styles.fullscreenBtn}
-              title={isFullscreen ? "전체화면 나가기" : "전체화면"}
+              title={isFullscreen ? t("listener.exitFullscreen") : t("listener.fullscreen")}
             >
               <svg
                 width="20"
@@ -749,12 +819,13 @@ export default function ListenerRoom() {
             >
               <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
             </svg>
-            전체화면 나가기
+            {t("listener.exitFullscreen")}
           </button>
         )}
 
         {/* Transcripts */}
         <div
+          ref={transcriptContainerRef}
           className={`${styles.transcriptContainer} ${styles[fontSize]} ${
             isFullscreen ? styles.fullscreen : ""
           }`}
@@ -762,9 +833,9 @@ export default function ListenerRoom() {
           {transcripts.length === 0 ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyIcon}>💬</div>
-              <p className={styles.emptyTitle}>아직 번역 내용이 없습니다</p>
+              <p className={styles.emptyTitle}>{t("listener.noTranscripts")}</p>
               <p className={styles.emptyText}>
-                연사가 발언을 시작하면 여기에 실시간으로 표시됩니다
+                {t("listener.noTranscriptsDesc")}
               </p>
             </div>
           ) : (
@@ -802,7 +873,7 @@ export default function ListenerRoom() {
                         {/* New translation-text format */}
                         {item.targetLanguage ? (
                           <>
-                            {item.originalText && (
+                            {showOriginal && item.originalText && (
                               <>
                                 <div className={styles.korean}>
                                   {getDisplayText(item.originalText)}
@@ -817,10 +888,14 @@ export default function ListenerRoom() {
                         ) : (
                           /* Old translation-batch format */
                           <>
-                            <div className={styles.korean}>
-                              {getDisplayText(item.korean || "")}
-                            </div>
-                            <div className={styles.divider}></div>
+                            {showOriginal && (
+                              <>
+                                <div className={styles.korean}>
+                                  {getDisplayText(item.korean || "")}
+                                </div>
+                                <div className={styles.divider}></div>
+                              </>
+                            )}
                             <div className={styles.english}>
                               {getDisplayText(
                                 item.translations?.[selectedLanguage] ||
