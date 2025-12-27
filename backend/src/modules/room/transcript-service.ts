@@ -114,10 +114,19 @@ export class TranscriptService {
   // Clean up old transcripts
   async cleanupOldTranscripts(daysOld: number = 7): Promise<{
     sttTexts: number,
-    translations: number
+    translations: number,
+    translationTexts: number
   }> {
     const cutoffDate = new Date(Date.now() - daysOld * 24 * 60 * 60 * 1000);
 
+    // TranslationText를 먼저 삭제 (stt_texts 외래 키 참조)
+    const translationTextsResult = await TranslationText.destroy({
+      where: {
+        timestamp: { [Op.lt]: cutoffDate }
+      }
+    });
+
+    // 그 다음 SttText 삭제
     const sttResult = await SttText.destroy({
       where: {
         timestamp: { [Op.lt]: cutoffDate }
@@ -132,7 +141,8 @@ export class TranscriptService {
 
     return {
       sttTexts: sttResult,
-      translations: translationResult
+      translations: translationResult,
+      translationTexts: translationTextsResult
     };
   }
 
