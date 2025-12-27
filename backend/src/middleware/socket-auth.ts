@@ -1,6 +1,16 @@
 import { Socket } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import { sessionManager } from '../services/session-manager';
 import { Room } from '../models/Room';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+
+interface JWTPayload {
+  userId: string;
+  email: string;
+  iat: number;
+  exp: number;
+}
 
 /**
  * Socket authentication middleware for speaker actions
@@ -12,6 +22,7 @@ import { Room } from '../models/Room';
 export interface AuthenticatedSocket extends Socket {
   userId?: string;
   roomId?: string;
+  isAuthenticated?: boolean;
 }
 
 /**
@@ -47,35 +58,58 @@ export async function validateSpeakerAuth(
 }
 
 /**
+ * JWT 토큰을 검증하고 페이로드를 반환
+ */
+export function verifySocketToken(token: string): JWTPayload | null {
+  try {
+    return jwt.verify(token, JWT_SECRET) as JWTPayload;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
  * Extracts userId from socket handshake auth
+ * Supports both JWT token and direct userId (for backwards compatibility)
  * Should be called when socket first connects
  */
-export function extractUserIdFromSocket(socket: Socket): string | undefined {
-  // Check handshake auth data
+export function extractUserIdFromSocket(socket: Socket): { userId?: string; isAuthenticated: boolean } {
   const authData = socket.handshake.auth;
 
-  // Try to get userId from auth data
-  if (authData && authData.userId) {
-    return authData.userId;
+  // 1. JWT 토큰으로 인증 시도 (권장)
+  if (authData && authData.token) {
+    const payload = verifySocketToken(authData.token);
+    if (payload) {
+      return { userId: payload.userId, isAuthenticated: true };
+    }
+    console.warn(`[SocketAuth] ⚠️ Invalid JWT token for socket ${socket.id}`);
   }
 
-  // Try to get from query params (fallback)
+  // 2. userId 직접 전달 (레거시 호환 - 비인증)
+  if (authData && authData.userId) {
+    console.warn(`[SocketAuth] ⚠️ Using unverified userId for socket ${socket.id} (legacy mode)`);
+    return { userId: authData.userId, isAuthenticated: false };
+  }
+
+  // 3. Query params fallback (레거시 호환 - 비인증)
   const query = socket.handshake.query;
   if (query && typeof query.userId === 'string') {
-    return query.userId;
+    console.warn(`[SocketAuth] ⚠️ Using unverified userId from query for socket ${socket.id} (legacy mode)`);
+    return { userId: query.userId, isAuthenticated: false };
   }
 
-  return undefined;
+  return { userId: undefined, isAuthenticated: false };
 }
 
 /**
  * Attach userId to socket instance for later use
  */
 export function attachUserIdToSocket(socket: AuthenticatedSocket): void {
-  const userId = extractUserIdFromSocket(socket);
+  const { userId, isAuthenticated } = extractUserIdFromSocket(socket);
   if (userId) {
     socket.userId = userId;
-    console.log(`[SocketAuth] ✅ Attached userId ${userId} to socket ${socket.id}`);
+    socket.isAuthenticated = isAuthenticated;
+    console.log(`[SocketAuth] ✅ Attached userId to socket ${socket.id} (authenticated: ${isAuthenticated})`);
   } else {
     console.warn(`[SocketAuth] ⚠️ No userId found for socket ${socket.id}`);
   }

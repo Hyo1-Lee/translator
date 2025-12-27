@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
 import { connectDatabase, closeDatabase } from './infrastructure/database/sequelize';
@@ -53,6 +54,18 @@ async function bootstrap() {
 
   await fastify.register(helmet, {
     contentSecurityPolicy: false
+  });
+
+  // Global Rate Limiting - 일반 API용
+  await fastify.register(rateLimit, {
+    max: 100,           // 분당 100회
+    timeWindow: '1 minute',
+    errorResponseBuilder: (request, context) => ({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: `요청이 너무 많습니다. ${context.after}에 다시 시도해주세요.`,
+      retryAfter: context.after
+    })
   });
 
   // Health check endpoint

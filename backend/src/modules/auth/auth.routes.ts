@@ -1,5 +1,75 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { AuthService } from './auth.service';
+
+// Zod 스키마 정의
+const emailSchema = z.string()
+  .email('올바른 이메일 형식이 아닙니다')
+  .max(254, '이메일은 254자 이하여야 합니다')
+  .transform(email => email.toLowerCase().trim());
+
+const passwordSchema = z.string()
+  .min(8, '비밀번호는 최소 8자 이상이어야 합니다')
+  .max(128, '비밀번호는 128자 이하여야 합니다')
+  .regex(/[A-Z]/, '비밀번호에 대문자가 포함되어야 합니다')
+  .regex(/[a-z]/, '비밀번호에 소문자가 포함되어야 합니다')
+  .regex(/[0-9]/, '비밀번호에 숫자가 포함되어야 합니다');
+
+const verificationCodeSchema = z.string()
+  .length(6, '인증 코드는 6자리여야 합니다')
+  .regex(/^\d+$/, '인증 코드는 숫자만 포함해야 합니다');
+
+const nameSchema = z.string()
+  .min(1, '이름은 최소 1자 이상이어야 합니다')
+  .max(50, '이름은 50자 이하여야 합니다')
+  .optional();
+
+const checkEmailBodySchema = z.object({
+  email: emailSchema
+});
+
+const sendCodeBodySchema = z.object({
+  email: emailSchema
+});
+
+const verifyCodeBodySchema = z.object({
+  code: verificationCodeSchema
+});
+
+const signupBodySchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  name: nameSchema
+});
+
+const loginBodySchema = z.object({
+  email: emailSchema,
+  password: z.string().min(1, '비밀번호를 입력해주세요')
+});
+
+const refreshTokenBodySchema = z.object({
+  refreshToken: z.string().min(1, '리프레시 토큰이 필요합니다')
+});
+
+// 인증 API Rate Limiting 설정 (분당 5회)
+const authRateLimitConfig = {
+  config: {
+    rateLimit: {
+      max: 5,
+      timeWindow: '1 minute'
+    }
+  }
+};
+
+// 코드 발송은 더 엄격하게 (분당 3회)
+const sendCodeRateLimitConfig = {
+  config: {
+    rateLimit: {
+      max: 3,
+      timeWindow: '1 minute'
+    }
+  }
+};
 
 interface CheckEmailBody {
   email: string;
@@ -32,17 +102,17 @@ export async function authRoutes(fastify: FastifyInstance) {
   const authService = new AuthService();
 
   // Check if email exists
-  fastify.post('/check-email', async (request: FastifyRequest<{ Body: CheckEmailBody }>, reply: FastifyReply) => {
+  fastify.post('/check-email', authRateLimitConfig, async (request: FastifyRequest<{ Body: CheckEmailBody }>, reply: FastifyReply) => {
     try {
-      const { email } = request.body;
-
-      if (!email || !email.includes('@')) {
+      const parseResult = checkEmailBodySchema.safeParse(request.body);
+      if (!parseResult.success) {
         return reply.code(400).send({
           success: false,
-          message: 'Invalid email address',
+          message: parseResult.error.errors[0].message,
         });
       }
 
+      const { email } = parseResult.data;
       const result = await authService.checkEmail(email);
 
       return reply.send({
@@ -58,18 +128,18 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Send verification code
-  fastify.post('/send-code', async (request: FastifyRequest<{ Body: SendCodeBody }>, reply: FastifyReply) => {
+  // Send verification code (더 엄격한 제한)
+  fastify.post('/send-code', sendCodeRateLimitConfig, async (request: FastifyRequest<{ Body: SendCodeBody }>, reply: FastifyReply) => {
     try {
-      const { email } = request.body;
-
-      if (!email || !email.includes('@')) {
+      const parseResult = sendCodeBodySchema.safeParse(request.body);
+      if (!parseResult.success) {
         return reply.code(400).send({
           success: false,
-          message: 'Invalid email address',
+          message: parseResult.error.errors[0].message,
         });
       }
 
+      const { email } = parseResult.data;
       await authService.sendVerificationCode(email);
 
       return reply.send({
@@ -86,17 +156,17 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // Verify code
-  fastify.post('/verify-code', async (request: FastifyRequest<{ Body: VerifyCodeBody }>, reply: FastifyReply) => {
+  fastify.post('/verify-code', authRateLimitConfig, async (request: FastifyRequest<{ Body: VerifyCodeBody }>, reply: FastifyReply) => {
     try {
-      const { code } = request.body;
-
-      if (!code || code.length !== 6) {
+      const parseResult = verifyCodeBodySchema.safeParse(request.body);
+      if (!parseResult.success) {
         return reply.code(400).send({
           success: false,
-          message: 'Invalid verification code',
+          message: parseResult.error.errors[0].message,
         });
       }
 
+      const { code } = parseResult.data;
       const email = await authService.verifyCode(code);
 
       return reply.send({
@@ -113,24 +183,17 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // Signup
-  fastify.post('/signup', async (request: FastifyRequest<{ Body: SignupBody }>, reply: FastifyReply) => {
+  fastify.post('/signup', authRateLimitConfig, async (request: FastifyRequest<{ Body: SignupBody }>, reply: FastifyReply) => {
     try {
-      const { email, password, name } = request.body;
-
-      if (!email || !password) {
+      const parseResult = signupBodySchema.safeParse(request.body);
+      if (!parseResult.success) {
         return reply.code(400).send({
           success: false,
-          message: 'Email and password are required',
+          message: parseResult.error.errors[0].message,
         });
       }
 
-      if (password.length < 8) {
-        return reply.code(400).send({
-          success: false,
-          message: 'Password must be at least 8 characters',
-        });
-      }
-
+      const { email, password, name } = parseResult.data;
       const result = await authService.register(email, password, name);
 
       return reply.send({
@@ -147,17 +210,17 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // Login
-  fastify.post('/login', async (request: FastifyRequest<{ Body: LoginBody }>, reply: FastifyReply) => {
+  fastify.post('/login', authRateLimitConfig, async (request: FastifyRequest<{ Body: LoginBody }>, reply: FastifyReply) => {
     try {
-      const { email, password } = request.body;
-
-      if (!email || !password) {
+      const parseResult = loginBodySchema.safeParse(request.body);
+      if (!parseResult.success) {
         return reply.code(400).send({
           success: false,
-          message: 'Email and password are required',
+          message: parseResult.error.errors[0].message,
         });
       }
 
+      const { email, password } = parseResult.data;
       const result = await authService.login(email, password);
 
       return reply.send({
@@ -176,15 +239,15 @@ export async function authRoutes(fastify: FastifyInstance) {
   // Refresh token
   fastify.post('/refresh', async (request: FastifyRequest<{ Body: RefreshTokenBody }>, reply: FastifyReply) => {
     try {
-      const { refreshToken } = request.body;
-
-      if (!refreshToken) {
+      const parseResult = refreshTokenBodySchema.safeParse(request.body);
+      if (!parseResult.success) {
         return reply.code(400).send({
           success: false,
-          message: 'Refresh token is required',
+          message: parseResult.error.errors[0].message,
         });
       }
 
+      const { refreshToken } = parseResult.data;
       const result = await authService.refreshAccessToken(refreshToken);
 
       return reply.send({
@@ -203,15 +266,15 @@ export async function authRoutes(fastify: FastifyInstance) {
   // Logout
   fastify.post('/logout', async (request: FastifyRequest<{ Body: RefreshTokenBody }>, reply: FastifyReply) => {
     try {
-      const { refreshToken } = request.body;
-
-      if (!refreshToken) {
+      const parseResult = refreshTokenBodySchema.safeParse(request.body);
+      if (!parseResult.success) {
         return reply.code(400).send({
           success: false,
-          message: 'Refresh token is required',
+          message: parseResult.error.errors[0].message,
         });
       }
 
+      const { refreshToken } = parseResult.data;
       await authService.logout(refreshToken);
 
       return reply.send({
