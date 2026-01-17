@@ -97,7 +97,6 @@ function SpeakerContent() {
   // Debug audio recording refs
   const debugMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const debugAudioChunksRef = useRef<Blob[]>([]);
-  const _debugStreamRef = useRef<MediaStream | null>(null);
   const [debugAudioUrl, setDebugAudioUrl] = useState<string | null>(null);
   const [, setIsDebugRecording] = useState(false);
 
@@ -158,7 +157,6 @@ function SpeakerContent() {
     try {
       const devices = await getMicrophoneDevices();
       setMicDevices(devices);
-      console.log("[Microphone] Devices loaded:", devices.length);
 
       // Auto-select external mic if available and no previous selection
       if (!selectedMicId && devices.length > 0) {
@@ -172,12 +170,11 @@ function SpeakerContent() {
             deviceLabel: externalMic.label,
             useExternalMicMode: true,
           });
-          console.log("[Microphone] Auto-selected external mic:", externalMic.label);
           toast.info(`외부 마이크 감지: ${externalMic.label}`);
         }
       }
-    } catch (error) {
-      console.error("[Microphone] Error loading devices:", error);
+    } catch {
+      // Silent fail - mic devices will be loaded on retry
     }
   }, [selectedMicId, toast]);
 
@@ -197,7 +194,6 @@ function SpeakerContent() {
       useExternalMicMode: newExternalMode,
     });
 
-    console.log("[Microphone] Selected:", device.label, "External mode:", newExternalMode);
     setShowMicModal(false);
   }, []);
 
@@ -240,11 +236,8 @@ function SpeakerContent() {
         // deviceId가 유효함 - 정상
         setSelectedMicId(selectedDevice.deviceId);
         setCurrentMicLabel(selectedDevice.label);
-        console.log("[Microphone] ✅ Saved microphone verified:", selectedDevice.label);
       } else {
         // deviceId가 유효하지 않음 - 자동 재연결 시도
-        console.warn("[Microphone] ⚠️ Saved deviceId not found, attempting reconnect...");
-
         const reconnectResult = await attemptMicrophoneReconnect(savedSettings);
 
         if (reconnectResult.device) {
@@ -261,7 +254,6 @@ function SpeakerContent() {
           });
 
           if (reconnectResult.reconnected) {
-            console.log("[Microphone] 🔄 Auto-reconnected:", reconnectResult.message);
             toast.info(`🔄 ${reconnectResult.message}`, { duration: 5000 });
           }
         } else {
@@ -371,11 +363,6 @@ function SpeakerContent() {
       customGlossary: null,
     };
 
-    console.log("🏗️ Creating room with simplified settings:");
-    console.log("  - sessionType:", roomSettings.sessionType);
-    console.log("  - sourceLanguage:", roomSettings.sourceLanguage);
-    console.log("  - roomTitle:", roomSettings.roomTitle);
-
     socketRef.current.emit("create-room", dataToSend);
 
     setShowSettingsModal(false);
@@ -396,8 +383,6 @@ function SpeakerContent() {
       enableTranslation: true,
       enableStreaming: roomSettings.enableStreaming,
     };
-
-    console.log("⚙️ Updating room settings:", settingsToSend);
 
     socketRef.current.emit("update-settings", {
       roomId,
@@ -423,7 +408,6 @@ function SpeakerContent() {
     });
 
     socketRef.current.on("connect", () => {
-      console.log("Connected to server");
       setIsConnected(true);
       setStatus("연결됨");
 
@@ -492,7 +476,6 @@ function SpeakerContent() {
         // NEW: One-click start if default settings exist
         const defaultSettings = loadDefaultSettings();
         if (defaultSettings && socketRef.current) {
-          console.log("🚀 One-click start with saved settings");
           const name = user?.name || "Speaker";
           setSpeakerName(name);
           setRoomSettings(defaultSettings);
@@ -522,21 +505,10 @@ function SpeakerContent() {
     socketRef.current.on(
       "recording-state-changed",
       (data: { roomId: string; isRecording: boolean; timestamp: string }) => {
-        console.log(`[Phase1] Recording state changed: ${data.isRecording}`);
-
         // 다른 디바이스에서 녹음 상태가 변경된 경우 UI 동기화
         if (data.roomId === roomId) {
-          if (data.isRecording && recordingState === "idle") {
-            // 다른 디바이스에서 녹음 시작
-            console.log(
-              "[Phase1] Another device started recording, syncing..."
-            );
-            // TODO: 필요시 녹음 시작 로직
-          } else if (!data.isRecording && recordingState !== "idle") {
+          if (!data.isRecording && recordingState !== "idle") {
             // 다른 디바이스에서 녹음 중지
-            console.log(
-              "[Phase1] Another device stopped recording, syncing..."
-            );
             audioRecorderRef.current?.stop();
             setRecordingState("idle");
             setAudioLevel(0);
@@ -547,19 +519,13 @@ function SpeakerContent() {
 
     socketRef.current.on(
       "recording-state-synced",
-      (data: { roomId: string; isRecording: boolean; timestamp: string }) => {
-        console.log(`[Phase1] Recording state synced: ${data.isRecording}`);
-
+      (_data: { roomId: string; isRecording: boolean; timestamp: string }) => {
         // 재연결/새 디바이스 연결 시 현재 상태 동기화
-        if (data.isRecording && recordingState === "idle") {
-          console.log("[Phase1] Syncing to recording state...");
-          // TODO: 필요시 UI 상태만 업데이트 (실제 녹음은 시작하지 않음)
-        }
+        // TODO: 필요시 UI 상태만 업데이트
       }
     );
 
-    socketRef.current.on("disconnect", (reason) => {
-      console.log("Disconnected from server:", reason);
+    socketRef.current.on("disconnect", () => {
       setIsConnected(false);
       setStatus("연결 끊김");
 
@@ -569,15 +535,13 @@ function SpeakerContent() {
       }
     });
 
-    socketRef.current.on("reconnect", (attemptNumber) => {
-      console.log("Reconnected to server after", attemptNumber, "attempts");
+    socketRef.current.on("reconnect", () => {
       setIsConnected(true);
       setStatus("재연결됨");
 
       // Stop recording temporarily to prevent unauthorized audio stream
       const wasRecording = recordingState !== "idle";
       if (wasRecording) {
-        console.log("[Reconnect] ⏸️  Pausing recording during reconnection...");
         audioRecorderRef.current?.stop();
         setRecordingState("idle");
         setAudioLevel(0);
@@ -598,9 +562,6 @@ function SpeakerContent() {
 
         // Resume recording after room is re-established
         if (wasRecording) {
-          console.log(
-            "[Reconnect] ▶️  Will resume recording after room-created..."
-          );
           // Set a flag or use state to resume recording
           if (socketRef.current) {
             socketRef.current.__resumeRecording = true;
@@ -610,40 +571,27 @@ function SpeakerContent() {
     });
 
     socketRef.current.on("reconnect_attempt", (attemptNumber) => {
-      console.log("Reconnection attempt:", attemptNumber);
       setStatus(`재연결 시도 중 (${attemptNumber}/10)`);
     });
 
     socketRef.current.on("reconnect_failed", () => {
-      console.log("Reconnection failed");
       setStatus("재연결 실패");
       toast.error("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
     socketRef.current.on("room-created", (data: SocketData) => {
-      console.log(
-        "[Room] Room created:",
-        data.roomId,
-        "status:",
-        data.roomStatus
-      );
       setRoomId(data.roomId || "");
+      // Also update ref immediately for startRecording to use
+      roomIdRef.current = data.roomId || "";
       saveRoomInfo(data.roomId || "", speakerName);
       generateQRCode(data.roomId || "");
 
       // Check if room is in read-only mode (ENDED status)
       const readOnly = data.roomStatus === "ENDED";
       setIsReadOnly(readOnly);
-      if (readOnly) {
-        console.log("[Room] 📖 Read-only mode (ended session)");
-      }
 
       // Update roomSettings from server response
       if (data.roomSettings) {
-        console.log(
-          "📋 Received room settings from server:",
-          data.roomSettings
-        );
         setRoomSettings({
           roomTitle: data.roomSettings.roomTitle || "",
           sessionType: data.roomSettings.promptTemplate || data.roomSettings.environmentPreset || "church",
@@ -664,7 +612,6 @@ function SpeakerContent() {
 
       // Resume recording if needed (after reconnection)
       if (socketRef.current && socketRef.current.__resumeRecording) {
-        console.log("[Reconnect] ▶️  Resuming recording...");
         socketRef.current.__resumeRecording = false;
         // Wait a bit for socket to stabilize
         setTimeout(() => {
@@ -674,29 +621,18 @@ function SpeakerContent() {
     });
 
     socketRef.current.on("room-rejoined", (data: SocketData) => {
-      console.log(
-        "[Room] Room rejoined:",
-        data.roomId,
-        "status:",
-        data.roomStatus
-      );
       setRoomId(data.roomId || "");
+      // Also update ref immediately for startRecording to use
+      roomIdRef.current = data.roomId || "";
       saveRoomInfo(data.roomId || "", speakerName); // Save to localStorage
       generateQRCode(data.roomId || "");
 
       // Check if room is in read-only mode (ENDED status)
       const readOnly = data.roomStatus === "ENDED";
       setIsReadOnly(readOnly);
-      if (readOnly) {
-        console.log("[Room] 📖 Read-only mode (ended session)");
-      }
 
       // Update roomSettings from server response
       if (data.roomSettings) {
-        console.log(
-          "📋 Received room settings from server (rejoined):",
-          data.roomSettings
-        );
         setRoomSettings({
           roomTitle: data.roomSettings.roomTitle || "",
           sessionType: data.roomSettings.promptTemplate || data.roomSettings.environmentPreset || "church",
@@ -711,7 +647,6 @@ function SpeakerContent() {
 
       // Resume recording if needed (after reconnection)
       if (socketRef.current && socketRef.current.__resumeRecording) {
-        console.log("[Reconnect] ▶️  Resuming recording...");
         socketRef.current.__resumeRecording = false;
         // Wait a bit for socket to stabilize
         setTimeout(() => {
@@ -758,13 +693,6 @@ function SpeakerContent() {
 
     // Listen for translation-text (new system)
     socketRef.current.on("translation-text", (data: SocketData) => {
-      console.log(`[Frontend] 🌐 Translation received:`, {
-        language: data.targetLanguage,
-        text: (data.text || "").substring(0, 50) + "...",
-        isPartial: data.isPartial,
-        isHistory: data.isHistory,
-      });
-
       setTranscripts((prev) => {
         const newTranscript = {
           type: "translation",
@@ -850,13 +778,11 @@ function SpeakerContent() {
     // Wait for roomId if not ready yet (can happen on first load)
     let waitAttempts = 0;
     while (!roomIdRef.current && waitAttempts < 10) {
-      console.log(`[Recording] Waiting for roomId... (attempt ${waitAttempts + 1})`);
       await new Promise(resolve => setTimeout(resolve, 200));
       waitAttempts++;
     }
 
     if (!roomIdRef.current) {
-      console.error("[Recording] ❌ No roomId available after waiting");
       toast.error("방이 아직 생성되지 않았습니다. 잠시 후 다시 시도해주세요.");
       return;
     }
@@ -871,7 +797,6 @@ function SpeakerContent() {
 
       if (!reconnectResult.device) {
         // 마이크를 전혀 찾을 수 없음
-        console.error("[Recording] ❌ No microphone available");
         toast.error(`❌ ${reconnectResult.message}`, { duration: 5000 });
         setShowMicModal(true);
         return;
@@ -879,7 +804,6 @@ function SpeakerContent() {
 
       if (reconnectResult.reconnected) {
         // 자동 재연결됨 - 설정 업데이트
-        console.log("[Recording] 🔄 Auto-reconnected:", reconnectResult.message);
         setSelectedMicId(reconnectResult.device.deviceId);
         setCurrentMicLabel(reconnectResult.device.label);
         setUseExternalMicMode(reconnectResult.device.isExternal);
@@ -919,13 +843,11 @@ function SpeakerContent() {
         onAudioLevel: (level) => {
           setAudioLevel(level);
         },
-        onError: (error) => {
-          console.error("[Recording] ❌ Error:", error);
+        onError: () => {
           setStatus("마이크 오류");
           toast.error("마이크 접근 권한이 필요합니다.");
         },
         onDeviceSelected: (deviceInfo) => {
-          console.log("[Recording] Actual device selected:", deviceInfo);
           setActiveMicLabel(deviceInfo.label);
 
           // Check if different from requested
@@ -937,47 +859,25 @@ function SpeakerContent() {
           }
         },
         onMicrophoneFallback: (reason) => {
-          console.error("[Recording] ❌ Microphone fallback:", reason);
           toast.error(reason, { duration: 10000 });
           setMicMismatch(true);
         },
       });
 
-      console.log("[Recording] Using microphone:", currentMicLabel, "External mode:", useExternalMicMode);
-
       // Start recording BEFORE background session (AudioContext priority)
       await audioRecorderRef.current.start();
       setRecordingState("recording");
 
-      // 실제 사용 중인 마이크 확인 로깅
-      const actualStream = audioRecorderRef.current.stream;
-      if (actualStream) {
-        const track = actualStream.getAudioTracks()[0];
-        if (track) {
-          const settings = track.getSettings();
-          console.log("[Recording] 🎤 Actual microphone being used:", {
-            deviceId: settings.deviceId,
-            label: track.label,
-            sampleRate: settings.sampleRate,
-            channelCount: settings.channelCount,
-          });
-        }
-      }
-
       // Start background session AFTER recording started (to avoid AudioContext conflict)
       if (!backgroundSessionRef.current) {
         backgroundSessionRef.current = new BackgroundSessionManager({
-          onVisibilityChange: (isVisible) => {
-            console.log(`[BackgroundSession] Visibility: ${isVisible}`);
-          },
+          onVisibilityChange: () => {},
           onReconnectNeeded: () => {
-            console.log("[BackgroundSession] Reconnect needed");
             if (socketRef.current && !socketRef.current.connected) {
               socketRef.current.connect();
             }
           },
-          onWakeLockError: (error) => {
-            console.warn("[BackgroundSession] Wake Lock error:", error.message);
+          onWakeLockError: () => {
             toast.info("화면이 꺼지면 녹음이 중단될 수 있습니다. 화면을 켜둔 상태로 유지해주세요.");
           },
         });
@@ -988,7 +888,6 @@ function SpeakerContent() {
       await backgroundSessionRef.current.resumeAudioContext();
 
       setStatus("녹음 중");
-      console.log("[Recording] ✅ Started");
 
       // 디버그 녹음도 자동으로 시작 (원본 오디오 확인용)
       startDebugRecording();
@@ -997,52 +896,41 @@ function SpeakerContent() {
       const currentRoomId = roomIdRef.current;
       if (socketRef.current && currentRoomId) {
         socketRef.current.emit("start-recording", { roomId: currentRoomId });
-        console.log("[Recording] 📤 Server notified, roomId:", currentRoomId);
-      } else {
-        console.warn("[Recording] ⚠️ Cannot notify server - roomId not ready:", currentRoomId);
       }
-    } catch (error) {
-      console.error("[Recording] ❌ Start failed:", error);
+    } catch {
       setStatus("마이크 오류");
+      toast.error("녹음을 시작할 수 없습니다.");
     }
   };
 
   // Pause recording
   const pauseRecording = () => {
-    console.log("[Recording] ⏸️ Pausing...");
     audioRecorderRef.current?.pause();
 
     // 디버그 녹음도 일시정지
     if (debugMediaRecorderRef.current && debugMediaRecorderRef.current.state === 'recording') {
       debugMediaRecorderRef.current.pause();
-      console.log("[Debug Recording] ⏸️ Paused");
     }
 
     setRecordingState("paused");
     setStatus("일시정지");
-    console.log("[Recording] ✅ Paused");
   };
 
   // Resume recording
   const resumeRecording = () => {
-    console.log("[Recording] ▶️ Resuming...");
     audioRecorderRef.current?.resume();
 
     // 디버그 녹음도 재개
     if (debugMediaRecorderRef.current && debugMediaRecorderRef.current.state === 'paused') {
       debugMediaRecorderRef.current.resume();
-      console.log("[Debug Recording] ▶️ Resumed");
     }
 
     setRecordingState("recording");
     setStatus("녹음 중");
-    console.log("[Recording] ✅ Resumed");
   };
 
   // Stop recording
   const stopRecording = () => {
-    console.log("[Recording] ⏹️ Stopping...");
-
     // Stop audio recorder
     audioRecorderRef.current?.stop();
 
@@ -1061,10 +949,7 @@ function SpeakerContent() {
     // Notify server to close STT client
     if (socketRef.current && roomId) {
       socketRef.current.emit("stop-recording", { roomId });
-      console.log("[Recording] 📤 Server notified");
     }
-
-    console.log("[Recording] ✅ Stopped");
   };
 
   // Create new room
@@ -1143,19 +1028,8 @@ function SpeakerContent() {
       const stream = (audioRecorderRef.current as unknown as { stream?: MediaStream })?.stream;
 
       if (!stream) {
-        console.warn('[Debug Recording] No stream available from AudioRecorder');
         toast.error('녹음 스트림을 찾을 수 없습니다');
         return;
-      }
-
-      // 스트림 정보 로깅
-      const audioTrack = stream.getAudioTracks()[0];
-      if (audioTrack) {
-        const settings = audioTrack.getSettings();
-        console.log('[Debug Recording] Using same stream as AudioRecorder:', {
-          deviceId: settings.deviceId,
-          label: audioTrack.label,
-        });
       }
 
       debugAudioChunksRef.current = [];
@@ -1183,13 +1057,11 @@ function SpeakerContent() {
         const blob = new Blob(debugAudioChunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         setDebugAudioUrl(url);
-        console.log('[Debug Recording] Saved:', blob.size, 'bytes');
       };
 
       debugMediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start(1000); // 1초마다 데이터 수집
       setIsDebugRecording(true);
-      console.log('[Debug Recording] Started with same stream as AudioRecorder');
       toast.success('디버그 녹음 시작 (선택된 마이크 사용)');
     } catch (error) {
       console.error('[Debug Recording] Error:', error);
@@ -1202,9 +1074,7 @@ function SpeakerContent() {
       debugMediaRecorderRef.current.stop();
     }
     // ★ 스트림을 공유하므로 여기서 종료하면 안 됨! (AudioRecorder가 종료할 것)
-    // debugStreamRef는 더 이상 사용하지 않음
     setIsDebugRecording(false);
-    console.log('[Debug Recording] Stopped');
     toast.success('디버그 녹음 완료');
   };
 
