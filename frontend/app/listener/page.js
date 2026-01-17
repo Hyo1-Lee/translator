@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useToast } from '@/contexts/ToastContext';
 import io from 'socket.io-client';
 import styles from './listener.module.css';
 
@@ -28,6 +29,7 @@ function ListenerContent() {
   const transcriptEndRef = useRef(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const toast = useToast();
 
   // Get room from URL if provided
   const urlRoom = searchParams.get('room');
@@ -144,7 +146,7 @@ function ListenerContent() {
 
     socketRef.current.on('error', (data) => {
       console.error('Socket error:', data);
-      alert(data.message);
+      toast.error(data.message || '오류가 발생했습니다.');
       if (data.message === 'Room not found') {
         setIsJoined(false);
         setRoomCode('');
@@ -162,7 +164,7 @@ function ListenerContent() {
   // Join room
   const joinRoom = () => {
     if (!roomCode.trim()) {
-      alert('방 코드를 입력해주세요.');
+      toast.error('방 코드를 입력해주세요.');
       return;
     }
 

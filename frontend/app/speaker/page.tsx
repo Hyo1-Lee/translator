@@ -682,7 +682,7 @@ function SpeakerContent() {
     socketRef.current.on("reconnect_failed", () => {
       console.log("Reconnection failed");
       setStatus("재연결 실패");
-      alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
+      toast.error("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
     socketRef.current.on("room-created", (data: SocketData) => {
@@ -987,7 +987,7 @@ function SpeakerContent() {
         onError: (error) => {
           console.error("[Recording] ❌ Error:", error);
           setStatus("마이크 오류");
-          alert("마이크 접근 권한이 필요합니다.");
+          toast.error("마이크 접근 권한이 필요합니다.");
         },
         onDeviceSelected: (deviceInfo) => {
           console.log("[Recording] Actual device selected:", deviceInfo);
@@ -1154,18 +1154,18 @@ function SpeakerContent() {
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      alert("로그인이 필요합니다");
+      toast.error("로그인이 필요합니다");
       router.push("/login");
       return;
     }
 
     if (!roomId) {
-      alert("저장할 세션이 없습니다");
+      toast.error("저장할 세션이 없습니다");
       return;
     }
 
     if (transcripts.length === 0) {
-      alert("저장할 번역 내용이 없습니다");
+      toast.error("저장할 번역 내용이 없습니다");
       return;
     }
 
@@ -1190,13 +1190,13 @@ function SpeakerContent() {
 
       const data = await response.json();
       if (data.success) {
-        alert("세션이 저장되었습니다");
+        toast.success("세션이 저장되었습니다");
       } else {
-        alert(data.message || "저장에 실패했습니다");
+        toast.error(data.message || "저장에 실패했습니다");
       }
     } catch (error) {
       console.error("Save recording error:", error);
-      alert("저장 중 오류가 발생했습니다");
+      toast.error("저장 중 오류가 발생했습니다");
     }
   };
 
@@ -1288,7 +1288,7 @@ function SpeakerContent() {
   // Copy to clipboard
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    alert(`${label}이(가) 복사되었습니다.`);
+    toast.success(`${label}이(가) 복사되었습니다.`);
   };
 
   // Share room URL
@@ -1314,6 +1314,7 @@ function SpeakerContent() {
         <button
           onClick={() => router.push(user ? "/dashboard" : "/")}
           className={styles.backButton}
+          aria-label={user ? "대시보드로 돌아가기" : "홈으로 돌아가기"}
         >
           ← {user ? "대시보드" : "홈"}
         </button>
@@ -1366,6 +1367,7 @@ function SpeakerContent() {
                     onClick={() => copyToClipboard(roomId, "방 코드")}
                     className={styles.compactIconButton}
                     title="복사"
+                    aria-label="방 코드 복사"
                   >
                     <svg
                       width="16"
@@ -1383,6 +1385,7 @@ function SpeakerContent() {
                     onClick={() => setShowQRModal(true)}
                     className={styles.compactIconButton}
                     title="QR 코드"
+                    aria-label="QR 코드 보기"
                   >
                     <svg
                       width="16"
@@ -1402,6 +1405,7 @@ function SpeakerContent() {
                     onClick={shareRoom}
                     className={styles.compactIconButton}
                     title="공유"
+                    aria-label="방 공유하기"
                   >
                     <svg
                       width="16"
@@ -1435,6 +1439,8 @@ function SpeakerContent() {
                 : ""
             }`}
             disabled={recordingState === "recording"}
+            aria-label="마이크 선택"
+            aria-haspopup="dialog"
           >
             <span className={styles.micSelectButtonIcon}>
               <svg
@@ -1491,6 +1497,7 @@ function SpeakerContent() {
                     className={styles.playButton}
                     disabled={!roomId || !isConnected}
                     title="녹음 시작"
+                    aria-label="녹음 시작"
                   >
                     <svg
                       width="20"
@@ -1507,6 +1514,7 @@ function SpeakerContent() {
                       onClick={pauseRecording}
                       className={styles.pauseButton}
                       title="일시정지"
+                      aria-label="녹음 일시정지"
                     >
                       <svg
                         width="18"
@@ -1522,6 +1530,7 @@ function SpeakerContent() {
                       onClick={stopRecording}
                       className={styles.stopButton}
                       title="정지"
+                      aria-label="녹음 정지"
                     >
                       <svg
                         width="18"
@@ -1539,6 +1548,7 @@ function SpeakerContent() {
                       onClick={resumeRecording}
                       className={styles.playButton}
                       title="재개"
+                      aria-label="녹음 재개"
                     >
                       <svg
                         width="20"
@@ -1553,6 +1563,7 @@ function SpeakerContent() {
                       onClick={stopRecording}
                       className={styles.stopButton}
                       title="정지"
+                      aria-label="녹음 정지"
                     >
                       <svg
                         width="18"
@@ -1612,6 +1623,7 @@ function SpeakerContent() {
               onClick={() => setShowSettingsModal(true)}
               className={styles.compactActionButton}
               title="방 설정"
+              aria-label="방 설정 열기"
             >
               <svg
                 width="16"
@@ -1631,6 +1643,7 @@ function SpeakerContent() {
               className={styles.compactActionButton}
               disabled={!user || transcripts.length === 0}
               title="세션 저장"
+              aria-label="세션 저장"
             >
               <svg
                 width="16"
@@ -1650,6 +1663,7 @@ function SpeakerContent() {
               onClick={createNewRoom}
               className={styles.compactActionButton}
               title="새 방"
+              aria-label="새 방 만들기"
             >
               <svg
                 width="16"
@@ -1669,6 +1683,7 @@ function SpeakerContent() {
               className={`${styles.compactActionButton} ${debugAudioUrl ? styles.hasAudio : ''}`}
               disabled={!debugAudioUrl}
               title="원본 오디오 다운로드"
+              aria-label="원본 오디오 다운로드"
             >
               <svg
                 width="16"
@@ -1822,13 +1837,14 @@ function SpeakerContent() {
 
       {/* Settings Modal - Simplified */}
       {showSettingsModal && (
-        <div className={styles.modalOverlay}>
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
-              <h2>{roomId ? "세션 설정" : "새 세션 시작"}</h2>
+              <h2 id="settings-modal-title">{roomId ? "세션 설정" : "새 세션 시작"}</h2>
               <button
                 onClick={() => setShowSettingsModal(false)}
                 className={styles.closeModalButton}
+                aria-label="설정 닫기"
               >
                 <svg
                   width="20"
@@ -2005,16 +2021,17 @@ function SpeakerContent() {
 
       {/* QR Code Fullscreen Modal */}
       {showQRModal && (
-        <div className={styles.qrModalOverlay}>
+        <div className={styles.qrModalOverlay} role="dialog" aria-modal="true" aria-labelledby="qr-modal-title">
           <div className={styles.qrModalContent}>
             <button
               onClick={() => setShowQRModal(false)}
               className={styles.closeButton}
+              aria-label="QR 코드 닫기"
             >
               ✕
             </button>
             <div className={styles.qrFullscreen}>
-              <h1>{roomSettings.roomTitle || "번역 세션"}</h1>
+              <h1 id="qr-modal-title">{roomSettings.roomTitle || "번역 세션"}</h1>
               <p className={styles.roomCodeLarge}>{roomId}</p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrCodeUrl} alt="Room QR Code" />
@@ -2036,6 +2053,9 @@ function SpeakerContent() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowMicModal(false);
           }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mic-modal-title"
         >
           <div className={styles.micModal}>
             {/* Handle bar for mobile */}
@@ -2058,11 +2078,12 @@ function SpeakerContent() {
                   <line x1="12" y1="19" x2="12" y2="23" />
                   <line x1="8" y1="23" x2="16" y2="23" />
                 </svg>
-                <h3>마이크 선택</h3>
+                <h3 id="mic-modal-title">마이크 선택</h3>
               </div>
               <button
                 onClick={() => setShowMicModal(false)}
                 className={styles.micModalCloseButton}
+                aria-label="마이크 선택 닫기"
               >
                 <svg
                   width="20"
@@ -2112,6 +2133,22 @@ function SpeakerContent() {
                       deviceLabel: currentMicLabel,
                       useExternalMicMode: newMode,
                     });
+                  }}
+                  role="switch"
+                  aria-checked={useExternalMicMode}
+                  aria-label="외부 마이크 모드"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      const newMode = !useExternalMicMode;
+                      setUseExternalMicMode(newMode);
+                      saveMicrophoneSettings({
+                        deviceId: selectedMicId,
+                        deviceLabel: currentMicLabel,
+                        useExternalMicMode: newMode,
+                      });
+                    }
                   }}
                 >
                   <div
@@ -2223,7 +2260,7 @@ function SpeakerContent() {
               </div>
 
               {/* Refresh Button */}
-              <button onClick={loadMicDevices} className={styles.micRefreshButton}>
+              <button onClick={loadMicDevices} className={styles.micRefreshButton} aria-label="마이크 목록 새로고침">
                 <svg
                   width="16"
                   height="16"

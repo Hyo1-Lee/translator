@@ -673,3 +673,38 @@
     flex: 1;
   }
 }
+
+/* Mobile Touch Target Improvements */
+@media (max-width: 768px) {
+  /* Ensure minimum 44px touch targets */
+  .tab,
+  .tabActive {
+    min-height: 2.75rem; /* 44px */
+    padding: 0.75rem 1rem;
+  }
+
+  .createButton {
+    min-height: 2.75rem; /* 44px */
+  }
+
+  .actionButton,
+  .actionButtonPrimary,
+  .actionButtonDanger {
+    min-height: 2.75rem; /* 44px */
+    padding: 0.625rem 1rem;
+  }
+
+  .emptyButton {
+    min-height: 2.75rem; /* 44px */
+  }
+}
+
+@media (max-width: 480px) {
+  /* Full width action buttons on very small screens */
+  .actionButton,
+  .actionButtonPrimary,
+  .actionButtonDanger {
+    width: 100%;
+    justify-content: center;
+  }
+}

@@ -2799,3 +2799,83 @@
     width: 100%;
   }
 }
+
+/* Mobile Touch Target Improvements */
+@media (max-width: 768px) {
+  /* Ensure minimum 44px touch targets for accessibility */
+  .compactIconButton {
+    width: 2.75rem; /* 44px */
+    height: 2.75rem; /* 44px */
+  }
+
+  .compactActionButton {
+    min-height: 2.75rem; /* 44px */
+    padding: 0.875rem 0.625rem;
+  }
+
+  .backButton {
+    min-height: 2.75rem; /* 44px */
+    padding: 0.875rem 1.25rem;
+  }
+
+  .languageTab {
+    min-height: 2.75rem; /* 44px */
+    padding: 0.75rem 1rem;
+  }
+
+  /* Improve header layout on mobile */
+  .header {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  /* Stack action buttons on very small screens */
+  .compactActions {
+    gap: 0.5rem;
+  }
+
+  /* Make modal controls easier to tap */
+  .closeModalButton {
+    width: 2.75rem; /* 44px */
+    height: 2.75rem; /* 44px */
+  }
+
+  /* Improve preset cards on mobile */
+  .presetGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .presetCard {
+    min-height: 5rem;
+    padding: 1rem 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Single column layout for very small screens */
+  .compactActionButtons {
+    grid-template-columns: 1fr;
+  }
+
+  .compactStats {
+    grid-template-columns: 1fr;
+  }
+
+  /* Full width preset cards on very small screens */
+  .presetGrid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Larger recording buttons for easier access */
+  .playButton,
+  .pauseButton,
+  .stopButton {
+    width: 56px;
+    height: 56px;
+  }
+
+  /* Improve mic select button */
+  .micSelectButton {
+    min-height: 3rem;
+  }
+}

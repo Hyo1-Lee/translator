@@ -930,4 +930,61 @@
   .transcriptContainer {
     max-height: calc(100vh - 350px);
   }
+
+  /* Mobile touch target improvements */
+  .backBtn {
+    min-height: 2.75rem; /* 44px */
+    padding: 0.75rem 1rem;
+  }
+
+  .fontBtn {
+    min-height: 2.75rem; /* 44px */
+    padding: 0.75rem 1rem;
+  }
+
+  .saveBtn,
+  .exportBtn {
+    min-height: 2.75rem; /* 44px */
+  }
+
+  .fullscreenBtn {
+    width: 2.75rem; /* 44px */
+    height: 2.75rem; /* 44px */
+  }
+
+  .checkbox {
+    min-height: 2.75rem; /* 44px */
+    display: flex;
+    align-items: center;
+  }
+
+  .languageSelect {
+    min-height: 2.75rem; /* 44px */
+  }
+}
+
+@media (max-width: 480px) {
+  .fontButtons {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .fontBtn {
+    flex: 1;
+    min-width: 4rem;
+  }
+
+  .actionButtons {
+    flex-wrap: wrap;
+  }
+
+  .saveBtn,
+  .exportBtn {
+    flex: 1 1 45%;
+    min-width: 0;
+  }
+
+  .fullscreenExitBtn {
+    min-height: 2.75rem; /* 44px */
+  }
 }

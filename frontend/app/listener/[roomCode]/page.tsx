@@ -226,7 +226,7 @@ export default function ListenerRoom() {
 
     socketRef.current.on("reconnect_failed", () => {
       console.log("Reconnection failed");
-      alert("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
+      toast.error("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
     });
 
     socketRef.current.on("password-required", (data: SocketData) => {
@@ -386,11 +386,11 @@ export default function ListenerRoom() {
         setNeedsPassword(true); // Show password modal again
       } else if (data.message === "Room not found") {
         console.log("⚠️ Room not found:", roomCode);
-        alert("방을 찾을 수 없습니다.");
+        toast.error("방을 찾을 수 없습니다.");
         router.push("/");
       } else {
         console.log("⚠️ Other error:", data.message);
-        alert(data.message);
+        toast.error(data.message || "오류가 발생했습니다.");
       }
     });
 
@@ -573,9 +573,12 @@ export default function ListenerRoom() {
         <div
           className={styles.modalOverlay}
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="password-modal-title"
         >
           <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
-            <h2>🔒 {t("listener.passwordRequired")}</h2>
+            <h2 id="password-modal-title">🔒 {t("listener.passwordRequired")}</h2>
             <p>{t("listener.passwordRequiredDesc")}</p>
             <div className={styles.roomCodeBadge}>
               {t("listener.room")}: <strong>{roomCode}</strong>
@@ -599,8 +602,10 @@ export default function ListenerRoom() {
                 }}
                 className={styles.input}
                 autoFocus
+                aria-label={t("listener.passwordPlaceholder")}
+                aria-describedby={passwordError ? "password-error" : undefined}
               />
-              {passwordError && <p className={styles.error}>{passwordError}</p>}
+              {passwordError && <p id="password-error" className={styles.error} role="alert">{passwordError}</p>}
               <div className={styles.modalActions}>
                 <button
                   type="button"
@@ -638,7 +643,7 @@ export default function ListenerRoom() {
         {/* Header */}
         <header className={styles.header}>
           <div className={styles.headerLeft}>
-            <button onClick={() => router.push("/")} className={styles.backBtn}>
+            <button onClick={() => router.push("/")} className={styles.backBtn} aria-label={t("common.back")}>
               ← {t("common.back")}
             </button>
             <div className={styles.sessionInfo}>
@@ -675,6 +680,7 @@ export default function ListenerRoom() {
                 className={`${styles.fontBtn} ${
                   fontSize === "small" ? styles.active : ""
                 }`}
+                aria-pressed={fontSize === "small"}
               >
                 {t("listener.fontSmall")}
               </button>
@@ -683,6 +689,7 @@ export default function ListenerRoom() {
                 className={`${styles.fontBtn} ${
                   fontSize === "medium" ? styles.active : ""
                 }`}
+                aria-pressed={fontSize === "medium"}
               >
                 {t("listener.fontMedium")}
               </button>
@@ -691,6 +698,7 @@ export default function ListenerRoom() {
                 className={`${styles.fontBtn} ${
                   fontSize === "large" ? styles.active : ""
                 }`}
+                aria-pressed={fontSize === "large"}
               >
                 {t("listener.fontLarge")}
               </button>
@@ -704,6 +712,7 @@ export default function ListenerRoom() {
                 value={selectedLanguage}
                 onChange={(e) => setSelectedLanguage(e.target.value)}
                 className={styles.languageSelect}
+                aria-label={t("listener.language")}
               >
                 {availableLanguages.map((lang) => (
                   <option key={lang} value={lang}>
@@ -743,6 +752,7 @@ export default function ListenerRoom() {
                     ? t("listener.noContentToSave")
                     : t("listener.saveTranscript")
                 }
+                aria-label={t("listener.saveTranscript")}
               >
                 <svg
                   width="18"
@@ -760,7 +770,7 @@ export default function ListenerRoom() {
               </button>
             )}
 
-            <button onClick={exportTranscripts} className={styles.exportBtn}>
+            <button onClick={exportTranscripts} className={styles.exportBtn} aria-label={t("common.export")}>
               <svg
                 width="18"
                 height="18"
@@ -780,6 +790,8 @@ export default function ListenerRoom() {
               onClick={() => setIsFullscreen(!isFullscreen)}
               className={styles.fullscreenBtn}
               title={isFullscreen ? t("listener.exitFullscreen") : t("listener.fullscreen")}
+              aria-label={isFullscreen ? t("listener.exitFullscreen") : t("listener.fullscreen")}
+              aria-pressed={isFullscreen}
             >
               <svg
                 width="20"
@@ -808,6 +820,7 @@ export default function ListenerRoom() {
           <button
             onClick={() => setIsFullscreen(false)}
             className={styles.fullscreenExitBtn}
+            aria-label={t("listener.exitFullscreen")}
           >
             <svg
               width="20"

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useI18n } from "@/contexts/I18nContext";
+import { useToast } from "@/contexts/ToastContext";
 import Header from "@/components/Header";
 import styles from "./dashboard.module.css";
 
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const { user, accessToken, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const { t } = useI18n();
+  const toast = useToast();
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [savedTranscripts, setSavedTranscripts] = useState<SavedTranscript[]>(
@@ -136,7 +138,7 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error("Failed to delete room:", error);
-      alert("Failed to delete room");
+      toast.error("방 삭제에 실패했습니다");
     }
   };
 
@@ -165,15 +167,15 @@ export default function Dashboard() {
       const data = await response.json();
 
       if (response.ok) {
-        alert(data.message || "세션이 저장되었습니다!");
+        toast.success(data.message || "세션이 저장되었습니다!");
         // Refresh saved transcripts list
         fetchDashboardData();
       } else {
-        alert(data.message || "세션 저장에 실패했습니다.");
+        toast.error(data.message || "세션 저장에 실패했습니다.");
       }
     } catch (error) {
       console.error("Failed to save session:", error);
-      alert("세션 저장에 실패했습니다.");
+      toast.error("세션 저장에 실패했습니다.");
     }
   };
 
@@ -244,7 +246,7 @@ export default function Dashboard() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Failed to download transcript:", error);
-      alert("다운로드에 실패했습니다.");
+      toast.error("다운로드에 실패했습니다.");
     }
   };
 
@@ -276,7 +278,7 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error("Failed to delete transcript:", error);
-      alert("Failed to delete transcript");
+      toast.error("기록 삭제에 실패했습니다");
     }
   };
 
@@ -330,6 +332,7 @@ export default function Dashboard() {
             <button
               onClick={() => router.push("/speaker?forceNew=true")}
               className={styles.createButton}
+              aria-label={t("dashboard.createRoom")}
             >
               <svg
                 width="20"
@@ -347,10 +350,14 @@ export default function Dashboard() {
           </div>
 
           {/* Tabs */}
-          <div className={styles.tabs}>
+          <div className={styles.tabs} role="tablist">
             <button
+              id="rooms-tab"
               className={activeTab === "rooms" ? styles.tabActive : styles.tab}
               onClick={() => setActiveTab("rooms")}
+              role="tab"
+              aria-selected={activeTab === "rooms"}
+              aria-controls="rooms-panel"
             >
               <svg
                 width="18"
@@ -365,10 +372,14 @@ export default function Dashboard() {
               {t("dashboard.sessions")} ({rooms.length})
             </button>
             <button
+              id="transcripts-tab"
               className={
                 activeTab === "transcripts" ? styles.tabActive : styles.tab
               }
               onClick={() => setActiveTab("transcripts")}
+              role="tab"
+              aria-selected={activeTab === "transcripts"}
+              aria-controls="transcripts-panel"
             >
               <svg
                 width="18"
@@ -394,7 +405,7 @@ export default function Dashboard() {
             <>
               {/* Rooms Tab */}
               {activeTab === "rooms" && (
-                <div className={styles.content}>
+                <div className={styles.content} id="rooms-panel" role="tabpanel" aria-labelledby="rooms-tab">
                   {rooms.length === 0 ? (
                     <div className={styles.empty}>
                       <svg
@@ -520,6 +531,7 @@ export default function Dashboard() {
                             <button
                               onClick={() => deleteRoom(room.id)}
                               className={styles.actionButtonDanger}
+                              aria-label={`${room.roomSettings?.roomTitle || room.speakerName} 삭제`}
                             >
                               <svg
                                 width="16"
@@ -544,7 +556,7 @@ export default function Dashboard() {
 
               {/* Transcripts Tab */}
               {activeTab === "transcripts" && (
-                <div className={styles.content}>
+                <div className={styles.content} id="transcripts-panel" role="tabpanel" aria-labelledby="transcripts-tab">
                   {savedTranscripts.length === 0 ? (
                     <div className={styles.empty}>
                       <svg
@@ -622,6 +634,7 @@ export default function Dashboard() {
                             <button
                               onClick={() => deleteTranscript(transcript.id)}
                               className={styles.actionButtonDanger}
+                              aria-label={`${transcript.roomName || transcript.roomCode} 삭제`}
                             >
                               <svg
                                 width="16"
