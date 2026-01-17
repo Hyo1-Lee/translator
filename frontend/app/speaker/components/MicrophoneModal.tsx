@@ -1,13 +1,7 @@
 "use client";
 
+import { MicrophoneDevice } from "@/lib/microphone-manager";
 import styles from "../speaker.module.css";
-
-export interface MicrophoneDevice {
-  deviceId: string;
-  label: string;
-  isDefault: boolean;
-  isExternal: boolean;
-}
 
 interface MicrophoneModalProps {
   isOpen: boolean;

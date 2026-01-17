@@ -18,109 +18,17 @@ import {
 } from "@/lib/microphone-manager";
 import { getDisplayText } from "@/lib/text-display";
 import styles from "./speaker.module.css";
-
-// Constants
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
-const FRONTEND_URL =
-  process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
-const STORAGE_KEY = "speaker_room_info";
-const SETTINGS_STORAGE_KEY = "speaker_default_settings";
-
-// Session type presets (simplified from prompt templates + environment presets)
-const SESSION_PRESETS = [
-  { value: "church", label: "교회/예배", icon: "🛐", description: "예배, 설교, 찬양" },
-  { value: "lecture", label: "강의/세미나", icon: "🎓", description: "강연, 교육, 발표" },
-  { value: "meeting", label: "회의/비즈니스", icon: "💼", description: "회의, 컨퍼런스" },
-  { value: "general", label: "일반 대화", icon: "💬", description: "일상 대화, 기타" },
-];
-
-// Target languages (for display, currently only English supported)
-const TARGET_LANGUAGES = [
-  { code: "en", name: "English" },
-];
-
-// Source languages (commonly used)
-const SOURCE_LANGUAGES = [
-  { code: "ko", name: "한국어" },
-  { code: "en", name: "English" },
-  { code: "ja", name: "日本語" },
-  { code: "zh", name: "中文" },
-  { code: "es", name: "Español" },
-  { code: "fr", name: "Français" },
-];
-
-interface RoomSettings {
-  roomTitle: string;
-  sessionType: string; // Unified: replaces promptTemplate + environmentPreset
-  sourceLanguage: string;
-  targetLanguages: string[];
-  // Advanced settings (hidden by default)
-  maxListeners: number;
-  enableStreaming: boolean;
-  // Legacy fields for backend compatibility
-  promptTemplate?: string;
-  customPrompt?: string;
-  enableTranslation?: boolean;
-  environmentPreset?: string;
-  customEnvironmentDescription?: string;
-  customGlossary?: Record<string, string> | null;
-  speakerName?: string;
-  password?: string;
-}
-
-interface Transcript {
-  id?: string;
-  type?: string;
-  text?: string;
-  translations?: Record<string, string>;
-  timestamp?: string;
-  isFinal?: boolean;
-  targetLanguage?: string;
-  originalText?: string;
-  isPartial?: boolean;
-  contextSummary?: string;
-  isHistory?: boolean;
-  korean?: string;
-  english?: string;
-  batchId?: string;
-}
-
-interface SocketData {
-  roomId?: string;
-  roomCode?: string;
-  roomStatus?: string;
-  message?: string;
-  count?: number;
-  text?: string;
-  language?: string;
-  translations?: Record<string, string>;
-  transcripts?: Transcript[];
-  isRejoined?: boolean;
-  roomSettings?: {
-    roomTitle?: string;
-    promptTemplate?: string;
-    customPrompt?: string;
-    targetLanguagesArray?: string[];
-    maxListeners?: number;
-    enableTranslation?: boolean;
-    sourceLanguage?: string;
-    environmentPreset?: string;
-    customEnvironmentDescription?: string;
-    customGlossary?: Record<string, string> | null;
-    enableStreaming?: boolean;
-  };
-  timestamp?: string;
-  isFinal?: boolean;
-  targetLanguage?: string;
-  originalText?: string;
-  isPartial?: boolean;
-  contextSummary?: string;
-  isHistory?: boolean;
-  korean?: string;
-  english?: string;
-  batchId?: string;
-}
+import {
+  RoomSettings,
+  Transcript,
+  SocketData,
+  TARGET_LANGUAGES,
+  BACKEND_URL,
+  FRONTEND_URL,
+  STORAGE_KEY,
+  SETTINGS_STORAGE_KEY,
+} from "./types";
+import { SettingsModal, QRModal, MicrophoneModal, AudioLevelMeter, MicSelectButton, RecordingControls } from "./components";
 
 function SpeakerContent() {
   const { user, accessToken } = useAuth();
@@ -1334,128 +1242,14 @@ function SpeakerContent() {
     }
   };
 
-  // Recording controls component (shared between mobile and desktop)
-  const RecordingControls = () => (
-    <>
-      {isReadOnly ? (
-        <div className={styles.readOnlyBadge}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-          기록 보기 모드 (종료된 세션)
-        </div>
-      ) : (
-        <div className={styles.recordingControls}>
-          {recordingState === "idle" ? (
-            <button
-              onClick={startRecording}
-              className={styles.recordButton}
-              disabled={!roomId || !isConnected}
-              title="녹음 시작"
-            >
-              <span className={styles.recordIcon}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-              </span>
-              녹음 시작
-            </button>
-          ) : recordingState === "recording" ? (
-            <div className={styles.recordingActive}>
-              <span className={styles.recordingIndicator}>
-                <span className={styles.recordingDot} />
-                녹음 중
-              </span>
-              <div className={styles.recordingButtons}>
-                <button onClick={pauseRecording} className={styles.pauseBtn} title="일시정지">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="4" width="4" height="16" rx="1" />
-                    <rect x="14" y="4" width="4" height="16" rx="1" />
-                  </svg>
-                </button>
-                <button onClick={stopRecording} className={styles.stopBtn} title="정지">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="4" y="4" width="16" height="16" rx="2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className={styles.recordingActive}>
-              <span className={styles.recordingIndicator}>
-                <span className={styles.pausedDot} />
-                일시정지
-              </span>
-              <div className={styles.recordingButtons}>
-                <button onClick={resumeRecording} className={styles.resumeBtn} title="재개">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                </button>
-                <button onClick={stopRecording} className={styles.stopBtn} title="정지">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="4" y="4" width="16" height="16" rx="2" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </>
-  );
+  // Helper for mic select button click
+  const handleMicButtonClick = useCallback(() => {
+    loadMicDevices();
+    setShowMicModal(true);
+  }, [loadMicDevices]);
 
-  // Audio level meter component
-  const AudioLevelMeter = () => (
-    recordingState === "recording" ? (
-      <div className={styles.audioLevel}>
-        <div className={styles.audioLevelHeader}>
-          <span className={styles.audioLevelLabel} style={micMismatch ? { color: "#f59e0b" } : undefined}>
-            {micMismatch ? "⚠️ " : "🎤 "}
-            {activeMicLabel ? (activeMicLabel.length > 25 ? activeMicLabel.substring(0, 25) + "..." : activeMicLabel) : "마이크"}
-          </span>
-          <span className={styles.audioLevelPercent}>{audioLevel}%</span>
-        </div>
-        <div className={styles.audioLevelBar}>
-          <div
-            className={styles.audioLevelFill}
-            style={{
-              width: `${audioLevel}%`,
-              backgroundColor: audioLevel > 70 ? "#ef4444" : audioLevel > 30 ? "#22c55e" : "#64748b",
-            }}
-          />
-        </div>
-      </div>
-    ) : null
-  );
-
-  // Microphone select button component
-  const MicSelectButton = () => (
-    <button
-      onClick={() => { loadMicDevices(); setShowMicModal(true); }}
-      className={`${styles.micSelectButton} ${micDevices.find((d) => d.deviceId === selectedMicId)?.isExternal ? styles.hasExternal : ""}`}
-      disabled={recordingState === "recording"}
-    >
-      <span className={styles.micSelectButtonIcon}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-          <line x1="12" y1="19" x2="12" y2="23" />
-          <line x1="8" y1="23" x2="16" y2="23" />
-        </svg>
-      </span>
-      <span className={styles.micSelectButtonText}>{currentMicLabel}</span>
-      <span className={styles.micSelectButtonArrow}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </span>
-    </button>
-  );
+  // Check if selected mic is external
+  const hasExternalMic = micDevices.find((d) => d.deviceId === selectedMicId)?.isExternal ?? false;
 
   return (
     <main className={styles.main}>
@@ -1561,9 +1355,28 @@ function SpeakerContent() {
         {/* Mobile Content */}
         <div className={styles.mobileContent}>
           <div className={styles.mobileControls}>
-            <MicSelectButton />
-            <RecordingControls />
-            <AudioLevelMeter />
+            <MicSelectButton
+              currentMicLabel={currentMicLabel}
+              hasExternalMic={hasExternalMic}
+              isRecording={recordingState === "recording"}
+              onClick={handleMicButtonClick}
+            />
+            <RecordingControls
+              recordingState={recordingState}
+              roomId={roomId}
+              isConnected={isConnected}
+              isReadOnly={isReadOnly}
+              onStart={startRecording}
+              onPause={pauseRecording}
+              onResume={resumeRecording}
+              onStop={stopRecording}
+            />
+            <AudioLevelMeter
+              audioLevel={audioLevel}
+              activeMicLabel={activeMicLabel}
+              micMismatch={micMismatch}
+              isRecording={recordingState === "recording"}
+            />
           </div>
           <div className={styles.mobileTranslation}>
             <div className={styles.translationHeader}>
@@ -1691,9 +1504,28 @@ function SpeakerContent() {
             </div>
 
             {/* Mic & Recording */}
-            <MicSelectButton />
-            <RecordingControls />
-            <AudioLevelMeter />
+            <MicSelectButton
+              currentMicLabel={currentMicLabel}
+              hasExternalMic={hasExternalMic}
+              isRecording={recordingState === "recording"}
+              onClick={handleMicButtonClick}
+            />
+            <RecordingControls
+              recordingState={recordingState}
+              roomId={roomId}
+              isConnected={isConnected}
+              isReadOnly={isReadOnly}
+              onStart={startRecording}
+              onPause={pauseRecording}
+              onResume={resumeRecording}
+              onStop={stopRecording}
+            />
+            <AudioLevelMeter
+              audioLevel={audioLevel}
+              activeMicLabel={activeMicLabel}
+              micMismatch={micMismatch}
+              isRecording={recordingState === "recording"}
+            />
 
             {/* Action Buttons */}
             <div className={styles.actionButtons}>
@@ -1792,450 +1624,49 @@ function SpeakerContent() {
         </div>
       </div>
 
-      {/* Settings Modal - Simplified */}
-      {showSettingsModal && (
-        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-          <div className={styles.modal}>
-            <div className={styles.modalHeader}>
-              <h2 id="settings-modal-title">{roomId ? "세션 설정" : "새 세션 시작"}</h2>
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className={styles.closeModalButton}
-                aria-label="설정 닫기"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        roomId={roomId}
+        roomSettings={roomSettings}
+        onSettingsChange={setRoomSettings}
+        onSave={updateRoomSettings}
+        onCreate={createRoom}
+        showAdvancedSettings={showAdvancedSettings}
+        onToggleAdvanced={() => setShowAdvancedSettings(!showAdvancedSettings)}
+        saveAsDefault={saveAsDefault}
+        onSaveAsDefaultChange={setSaveAsDefault}
+      />
 
-            <div className={styles.modalBody}>
-              {/* Session Type - Preset Cards */}
-              <div className={styles.settingGroup}>
-                <label>세션 유형</label>
-                <div className={styles.presetGrid}>
-                  {SESSION_PRESETS.map((preset) => (
-                    <button
-                      key={preset.value}
-                      type="button"
-                      className={`${styles.presetCard} ${
-                        roomSettings.sessionType === preset.value ? styles.presetCardActive : ""
-                      }`}
-                      onClick={() =>
-                        setRoomSettings({
-                          ...roomSettings,
-                          sessionType: preset.value,
-                        })
-                      }
-                    >
-                      <span className={styles.presetIcon}>{preset.icon}</span>
-                      <span className={styles.presetLabel}>{preset.label}</span>
-                      <span className={styles.presetDesc}>{preset.description}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Language Settings - Side by side */}
-              <div className={styles.languageRow}>
-                <div className={styles.settingGroup}>
-                  <label>출발 언어</label>
-                  <select
-                    value={roomSettings.sourceLanguage}
-                    onChange={(e) =>
-                      setRoomSettings({
-                        ...roomSettings,
-                        sourceLanguage: e.target.value,
-                      })
-                    }
-                    className={styles.select}
-                  >
-                    {SOURCE_LANGUAGES.map((lang) => (
-                      <option key={lang.code} value={lang.code}>
-                        {lang.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className={styles.settingGroup}>
-                  <label>번역 언어</label>
-                  <div className={styles.fixedLanguage}>
-                    <span className={styles.fixedLanguageText}>English</span>
-                    <span className={styles.fixedLanguageBadge}>지원</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Session Name (Optional) */}
-              <div className={styles.settingGroup}>
-                <label>세션 이름 (선택)</label>
-                <input
-                  type="text"
-                  value={roomSettings.roomTitle}
-                  onChange={(e) =>
-                    setRoomSettings({
-                      ...roomSettings,
-                      roomTitle: e.target.value,
-                    })
-                  }
-                  className={styles.input}
-                  placeholder="예: 주일 예배, 월례 회의"
-                />
-              </div>
-
-              {/* Save as Default Checkbox (only for new rooms) */}
-              {!roomId && (
-                <div className={styles.checkboxRow}>
-                  <label className={styles.checkboxLabel}>
-                    <input
-                      type="checkbox"
-                      checked={saveAsDefault}
-                      onChange={(e) => setSaveAsDefault(e.target.checked)}
-                    />
-                    <span>다음에도 이 설정 사용</span>
-                  </label>
-                </div>
-              )}
-
-              {/* Advanced Settings Toggle */}
-              <button
-                type="button"
-                className={styles.advancedToggle}
-                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-              >
-                <span>{showAdvancedSettings ? "▼" : "▶"} 고급 설정</span>
-              </button>
-
-              {/* Advanced Settings (Collapsed by default) */}
-              {showAdvancedSettings && (
-                <div className={styles.advancedSettings}>
-                  {/* Streaming + Max Listeners in row */}
-                  <div className={styles.advancedRow}>
-                    <div className={styles.checkboxRow}>
-                      <label className={styles.checkboxLabel}>
-                        <input
-                          type="checkbox"
-                          checked={roomSettings.enableStreaming}
-                          onChange={(e) =>
-                            setRoomSettings({
-                              ...roomSettings,
-                              enableStreaming: e.target.checked,
-                            })
-                          }
-                        />
-                        <span>스트리밍 번역</span>
-                      </label>
-                    </div>
-
-                    <div className={styles.compactInputGroup}>
-                      <label>최대 청취자</label>
-                      <input
-                        type="number"
-                        value={roomSettings.maxListeners}
-                        onChange={(e) =>
-                          setRoomSettings({
-                            ...roomSettings,
-                            maxListeners: parseInt(e.target.value) || 100,
-                          })
-                        }
-                        className={styles.compactInput}
-                        min="1"
-                        max="1000"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className={styles.modalActions}>
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className={styles.cancelButton}
-                >
-                  {roomId ? "닫기" : "취소"}
-                </button>
-                <button
-                  onClick={roomId ? updateRoomSettings : createRoom}
-                  className={styles.createButton}
-                >
-                  {roomId ? "설정 저장" : "시작하기"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* QR Code Fullscreen Modal */}
-      {showQRModal && (
-        <div className={styles.qrModalOverlay} role="dialog" aria-modal="true" aria-labelledby="qr-modal-title">
-          <div className={styles.qrModalContent}>
-            <button
-              onClick={() => setShowQRModal(false)}
-              className={styles.closeButton}
-              aria-label="QR 코드 닫기"
-            >
-              ✕
-            </button>
-            <div className={styles.qrFullscreen}>
-              <h1 id="qr-modal-title">{roomSettings.roomTitle || "번역 세션"}</h1>
-              <p className={styles.roomCodeLarge}>{roomId}</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={qrCodeUrl} alt="Room QR Code" />
-              <p className={styles.instruction}>
-                QR 코드를 스캔하여 세션에 참여하세요
-              </p>
-              <p
-                className={styles.urlText}
-              >{`${FRONTEND_URL}/listener/${roomId}`}</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* QR Code Modal */}
+      <QRModal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        roomId={roomId}
+        roomTitle={roomSettings.roomTitle}
+        qrCodeUrl={qrCodeUrl}
+      />
 
       {/* Microphone Selection Modal */}
-      {showMicModal && (
-        <div
-          className={styles.micModalOverlay}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowMicModal(false);
-          }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="mic-modal-title"
-        >
-          <div className={styles.micModal}>
-            {/* Handle bar for mobile */}
-            <div className={styles.micModalHandle}>
-              <div className={styles.micModalHandleBar}></div>
-            </div>
-
-            <div className={styles.micModalHeader}>
-              <div className={styles.micModalTitle}>
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-                <h3 id="mic-modal-title">마이크 선택</h3>
-              </div>
-              <button
-                onClick={() => setShowMicModal(false)}
-                className={styles.micModalCloseButton}
-                aria-label="마이크 선택 닫기"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            <div className={styles.micModalBody}>
-              {/* Current Mic Info */}
-              <div className={styles.currentMicInfo}>
-                <div className={styles.currentMicIcon}>
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  </svg>
-                </div>
-                <div className={styles.currentMicDetails}>
-                  <div className={styles.currentMicLabel}>현재 선택</div>
-                  <div className={styles.currentMicName}>{currentMicLabel}</div>
-                </div>
-              </div>
-
-              {/* External Mic Mode Toggle */}
-              <div className={styles.externalMicModeSection}>
-                <div
-                  className={styles.externalMicModeToggle}
-                  onClick={() => {
-                    const newMode = !useExternalMicMode;
-                    setUseExternalMicMode(newMode);
-                    saveMicrophoneSettings({
-                      deviceId: selectedMicId,
-                      deviceLabel: currentMicLabel,
-                      useExternalMicMode: newMode,
-                    });
-                  }}
-                  role="switch"
-                  aria-checked={useExternalMicMode}
-                  aria-label="외부 마이크 모드"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      const newMode = !useExternalMicMode;
-                      setUseExternalMicMode(newMode);
-                      saveMicrophoneSettings({
-                        deviceId: selectedMicId,
-                        deviceLabel: currentMicLabel,
-                        useExternalMicMode: newMode,
-                      });
-                    }
-                  }}
-                >
-                  <div
-                    className={`${styles.toggleSwitch} ${
-                      useExternalMicMode ? styles.active : ""
-                    }`}
-                  ></div>
-                  <div className={styles.externalMicModeInfo}>
-                    <div className={styles.externalMicModeLabel}>
-                      외부 마이크 모드
-                    </div>
-                    <div className={styles.externalMicModeDesc}>
-                      핀마이크/블루투스 사용 시 켜주세요. 에코 제거와 노이즈
-                      억제를 비활성화하여 더 선명한 음질을 제공합니다.
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mic List */}
-              <div className={styles.micListSection}>
-                <div className={styles.micListLabel}>사용 가능한 마이크</div>
-                <div className={styles.micList}>
-                  {micDevices.length === 0 ? (
-                    <div className={styles.emptyMicList}>
-                      <svg
-                        width="48"
-                        height="48"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
-                      <p>마이크를 찾을 수 없습니다</p>
-                      <span>마이크 권한을 허용하거나 장치를 연결해주세요</span>
-                    </div>
-                  ) : (
-                    micDevices.map((device) => (
-                      <button
-                        key={device.deviceId}
-                        className={`${styles.micItem} ${
-                          selectedMicId === device.deviceId ? styles.selected : ""
-                        } ${device.isExternal ? styles.external : ""}`}
-                        onClick={() => handleMicSelect(device)}
-                      >
-                        <div className={styles.micItemIcon}>
-                          {device.isExternal ? (
-                            <svg
-                              width="20"
-                              height="20"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                              <circle cx="18" cy="5" r="3" />
-                            </svg>
-                          ) : (
-                            <svg
-                              width="20"
-                              height="20"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className={styles.micItemInfo}>
-                          <div className={styles.micItemName}>{device.label}</div>
-                          <div className={styles.micItemBadges}>
-                            {device.isDefault && (
-                              <span className={`${styles.micBadge} ${styles.default}`}>
-                                기본
-                              </span>
-                            )}
-                            {device.isExternal && (
-                              <span className={`${styles.micBadge} ${styles.external}`}>
-                                외부
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className={styles.micItemCheck}>
-                          <svg
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                          >
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        </div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Refresh Button */}
-              <button onClick={loadMicDevices} className={styles.micRefreshButton} aria-label="마이크 목록 새로고침">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline points="23 4 23 10 17 10" />
-                  <polyline points="1 20 1 14 7 14" />
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                </svg>
-                마이크 목록 새로고침
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MicrophoneModal
+        isOpen={showMicModal}
+        onClose={() => setShowMicModal(false)}
+        micDevices={micDevices}
+        selectedMicId={selectedMicId || ""}
+        currentMicLabel={currentMicLabel}
+        useExternalMicMode={useExternalMicMode}
+        onExternalMicModeChange={(enabled) => {
+          setUseExternalMicMode(enabled);
+          saveMicrophoneSettings({
+            deviceId: selectedMicId,
+            deviceLabel: currentMicLabel,
+            useExternalMicMode: enabled,
+          });
+        }}
+        onMicSelect={handleMicSelect}
+        onRefresh={loadMicDevices}
+      />
     </main>
   );
 }

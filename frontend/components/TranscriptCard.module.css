@@ -1,0 +1,60 @@
+.transcriptCard {
+  background: var(--bg-card, #ffffff);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.transcriptCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.timestamp {
+  font-size: 0.75rem;
+  color: var(--text-muted, #94a3b8);
+  margin-bottom: 8px;
+}
+
+.originalText {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-light, #e2e8f0);
+  margin: 8px 0;
+}
+
+.translatedText {
+  font-size: 1rem;
+  color: var(--text-primary, #1e293b);
+  line-height: 1.6;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .transcriptCard {
+    background: var(--bg-card-dark, #1e293b);
+  }
+
+  .timestamp {
+    color: var(--text-muted-dark, #64748b);
+  }
+
+  .originalText {
+    color: var(--text-secondary-dark, #94a3b8);
+  }
+
+  .divider {
+    background: var(--border-dark, #334155);
+  }
+
+  .translatedText {
+    color: var(--text-primary-dark, #f1f5f9);
+  }
+}

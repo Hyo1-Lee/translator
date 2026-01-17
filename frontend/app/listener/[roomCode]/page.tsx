@@ -8,6 +8,7 @@ import { useI18n } from "@/contexts/I18nContext";
 import io from "socket.io-client";
 import { getDisplayText } from "@/lib/text-display";
 import styles from "./listener.module.css";
+import { PasswordModal, ListenerMenu } from "./components";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
@@ -323,20 +324,6 @@ export default function ListenerRoom() {
     }
   }, [isConnected, isJoined, needsPassword, joinRoom]);
 
-  // Handle password submit
-  const handlePasswordSubmit = (e?: React.FormEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    if (!password.trim()) {
-      setPasswordError("비밀번호를 입력해주세요.");
-      return;
-    }
-    setPasswordError("");
-    joinRoom(password);
-  };
-
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
@@ -412,37 +399,11 @@ export default function ListenerRoom() {
   // Password modal
   if (needsPassword && !isJoined) {
     return (
-      <main className={styles.main}>
-        <div className={styles.modalOverlay} onClick={(e) => e.stopPropagation()}>
-          <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
-            <h2>🔒 {t("listener.passwordRequired")}</h2>
-            <p>{t("listener.passwordRequiredDesc")}</p>
-            <div className={styles.roomCodeBadge}>
-              {t("listener.room")}: <strong>{roomCode}</strong>
-            </div>
-            <form onSubmit={handlePasswordSubmit}>
-              <input
-                type="password"
-                placeholder={t("listener.passwordPlaceholder")}
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handlePasswordSubmit(e); } }}
-                className={styles.input}
-                autoFocus
-              />
-              {passwordError && <p className={styles.error}>{passwordError}</p>}
-              <div className={styles.modalActions}>
-                <button type="button" onClick={() => router.push("/")} className={styles.cancelBtn}>
-                  {t("common.cancel")}
-                </button>
-                <button type="submit" className={styles.submitBtn}>
-                  {t("listener.enter")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </main>
+      <PasswordModal
+        roomCode={roomCode}
+        onSubmit={(pwd) => joinRoom(pwd)}
+        error={passwordError}
+      />
     );
   }
 
@@ -501,84 +462,21 @@ export default function ListenerRoom() {
               </button>
 
               {/* Dropdown Menu */}
-              {showMenu && (
-                <div className={styles.dropdownMenu}>
-                  {/* Language Selection */}
-                  <div className={styles.menuSection}>
-                    <div className={styles.menuLabel}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                      </svg>
-                      {t("listener.language")}
-                    </div>
-                    <select
-                      value={selectedLanguage}
-                      onChange={(e) => setSelectedLanguage(e.target.value)}
-                      className={styles.menuSelect}
-                    >
-                      {ALL_LANGUAGES.map((lang) => (
-                        <option key={lang} value={lang}>
-                          {LANGUAGE_MAP[lang] || lang}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Font Size */}
-                  <div className={styles.menuSection}>
-                    <div className={styles.menuLabel}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M4 7V4h16v3M9 20h6M12 4v16" />
-                      </svg>
-                      {t("listener.fontSize")}
-                    </div>
-                    <div className={styles.fontSizeButtons}>
-                      <button onClick={() => setFontSize("small")} className={`${styles.fontSizeBtn} ${fontSize === "small" ? styles.active : ""}`}>
-                        {t("listener.fontSmall")}
-                      </button>
-                      <button onClick={() => setFontSize("medium")} className={`${styles.fontSizeBtn} ${fontSize === "medium" ? styles.active : ""}`}>
-                        {t("listener.fontMedium")}
-                      </button>
-                      <button onClick={() => setFontSize("large")} className={`${styles.fontSizeBtn} ${fontSize === "large" ? styles.active : ""}`}>
-                        {t("listener.fontLarge")}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className={styles.menuDivider} />
-
-                  {/* Auto Scroll Toggle */}
-                  <label className={styles.menuToggle}>
-                    <span>{t("listener.autoScroll")}</span>
-                    <input type="checkbox" checked={autoScroll} onChange={() => setAutoScroll(!autoScroll)} />
-                    <span className={styles.toggleSwitch} />
-                  </label>
-
-                  <div className={styles.menuDivider} />
-
-                  {/* Action Buttons */}
-                  <button onClick={exportTranscripts} className={styles.menuAction}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    {t("common.export")}
-                  </button>
-
-                  {user && (
-                    <button onClick={saveRecording} className={styles.menuAction} disabled={transcripts.length === 0}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                        <polyline points="17 21 17 13 7 13 7 21" />
-                        <polyline points="7 3 7 8 15 8" />
-                      </svg>
-                      {t("common.save")}
-                    </button>
-                  )}
-                </div>
-              )}
+              <ListenerMenu
+                isOpen={showMenu}
+                selectedLanguage={selectedLanguage}
+                fontSize={fontSize}
+                autoScroll={autoScroll}
+                languageMap={LANGUAGE_MAP}
+                allLanguages={ALL_LANGUAGES}
+                showSaveButton={!!user}
+                hasTrans={transcripts.length > 0}
+                onLanguageChange={setSelectedLanguage}
+                onFontSizeChange={setFontSize}
+                onAutoScrollChange={setAutoScroll}
+                onExport={exportTranscripts}
+                onSave={saveRecording}
+              />
             </div>
           </div>
         </header>
