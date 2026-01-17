@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { toast } from "sonner";
 import {
   getMicrophoneDevices,
   saveMicrophoneSettings,
@@ -48,7 +47,7 @@ export function useMicrophone(): UseMicrophoneReturn {
             useExternalMicMode: true,
           });
           console.log("[Microphone] Auto-selected external mic:", externalMic.label);
-          toast.info(`외부 마이크 감지: ${externalMic.label}`);
+          console.log(`외부 마이크 감지: ${externalMic.label}`);
         }
       }
     } catch (error) {
@@ -140,12 +139,12 @@ export function useMicrophone(): UseMicrophoneReturn {
 
           if (reconnectResult.reconnected) {
             console.log("[Microphone] Auto-reconnected:", reconnectResult.message);
-            toast.info(`${reconnectResult.message}`, { duration: 5000 });
+            console.log(`${reconnectResult.message}`, { duration: 5000 });
           }
         } else {
           setSelectedMicId(null);
           setCurrentMicLabel("기본 마이크");
-          toast.error(`${reconnectResult.message}`, { duration: 5000 });
+          console.error(`${reconnectResult.message}`, { duration: 5000 });
         }
       }
     };

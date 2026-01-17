@@ -69,7 +69,6 @@ export async function handleCreateRoom(
 
     // Create STT client for this room
     if (!ctx.sttManager.hasActiveClient(room.roomCode)) {
-      console.log(`[Room][${room.roomCode}] Creating new STT client...`);
       try {
         await ctx.sttManager.createClient(
           room.roomCode,
@@ -94,20 +93,16 @@ export async function handleCreateRoom(
           undefined,
           room.roomSettings?.promptTemplate || 'general'
         );
-
-        console.log(`[Room][${room.roomCode}] STT client created and active`);
       } catch (error) {
         console.error(`[Room][${room.roomCode}] Failed to create STT client:`, error);
         socket.emit('error', { message: 'Failed to initialize STT service' });
         return;
       }
-    } else {
-      console.log(`[Room][${room.roomCode}] Reusing existing STT client`);
     }
 
-    // Create TranslationManager if translation is enabled
-    if (room.roomSettings?.enableTranslation) {
-      await ctx.createTranslationManager(room.roomCode, room.roomSettings);
+    // Always create TranslationManager
+    if (!ctx.translationManagers.has(room.roomCode)) {
+      await ctx.createTranslationManager(room.roomCode, room.roomSettings || {});
     }
 
     // Send room info to speaker
@@ -120,9 +115,10 @@ export async function handleCreateRoom(
 
     // Send existing transcripts and translations
     await ctx.sendTranscriptHistory(socket, room.roomCode);
-    if (room.roomSettings?.enableTranslation) {
-      await ctx.sendTranslationHistory(socket, room.roomCode);
-    }
+    await ctx.sendTranslationHistory(socket, room.roomCode);
+
+    // Translate any untranslated historical texts
+    await ctx.translateHistoricalTexts(room.roomCode);
 
     await sessionManager.registerSpeakerSocket(room.id, socket.id);
     await recordingStateService.syncRecordingState(room.id, socket.id);
@@ -184,8 +180,9 @@ export async function handleRejoinRoom(
       );
     }
 
-    if (room.roomSettings?.enableTranslation && !ctx.translationManagers.has(roomCode)) {
-      await ctx.createTranslationManager(roomCode, room.roomSettings);
+    // Always create TranslationManager
+    if (!ctx.translationManagers.has(roomCode)) {
+      await ctx.createTranslationManager(roomCode, room.roomSettings || {});
     }
 
     socket.emit('room-rejoined', {
@@ -198,9 +195,10 @@ export async function handleRejoinRoom(
     await recordingStateService.syncRecordingState(room.id, socket.id);
 
     await ctx.sendTranscriptHistory(socket, roomCode);
-    if (room.roomSettings?.enableTranslation) {
-      await ctx.sendTranslationHistory(socket, roomCode);
-    }
+    await ctx.sendTranslationHistory(socket, roomCode);
+
+    // Translate any untranslated historical texts
+    await ctx.translateHistoricalTexts(roomCode);
 
   } catch (error) {
     console.error('[Room] Rejoin error:', error);
@@ -247,9 +245,10 @@ export async function handleJoinRoom(
     });
 
     await ctx.sendTranscriptHistory(socket, roomId);
-    if (room.roomSettings?.enableTranslation) {
-      await ctx.sendTranslationHistory(socket, roomId);
-    }
+    await ctx.sendTranslationHistory(socket, roomId);
+
+    // Translate any untranslated historical texts
+    await ctx.translateHistoricalTexts(roomId);
 
     const listenerCount = await ctx.roomService.getListenerCount(roomId);
     ctx.io.to(roomId).emit('listener-count', { count: listenerCount });
@@ -276,14 +275,10 @@ export async function handleDisconnect(
       if (translationManager) {
         await translationManager.cleanup();
         ctx.translationManagers.delete(speakerRoom.roomCode);
-        console.log(`[Disconnect][${speakerRoom.roomCode}] TranslationManager cleaned up`);
       }
 
       ctx.sttIdCache.delete(speakerRoom.roomCode);
-      console.log(`[Disconnect][${speakerRoom.roomCode}] STT ID cache cleaned up`);
-
       await sessionManager.unregisterSpeakerSocket(speakerRoom.id, socket.id);
-      console.log(`[Disconnect][${speakerRoom.roomCode}] Speaker socket unregistered`);
     }
 
     await ctx.roomService.handleDisconnect(socket.id);

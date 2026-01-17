@@ -170,6 +170,13 @@ function SpeakerContent() {
   const [, setHasDefaultSettings] = useState(false);
   const [saveAsDefault, setSaveAsDefault] = useState(true);
 
+  // Auto-scroll state
+  const [autoScroll, setAutoScroll] = useState(true);
+  const isNearBottomRef = useRef(true); // Track if user is near bottom (separate from toggle)
+
+  // Menu dropdown state
+  const [showMenu, setShowMenu] = useState(false);
+
   // Refs
   const socketRef = useRef<
     (ReturnType<typeof io> & { __resumeRecording?: boolean }) | null
@@ -191,13 +198,33 @@ function SpeakerContent() {
     roomIdRef.current = roomId;
   }, [roomId]);
 
-  // Auto-scroll to latest translation
+  // Auto-scroll to latest translation - only when autoScroll is ON AND user is near bottom
   useEffect(() => {
-    if (translationListRef.current) {
+    if (autoScroll && isNearBottomRef.current && translationListRef.current) {
       translationListRef.current.scrollTop =
         translationListRef.current.scrollHeight;
     }
-  }, [transcripts]);
+  }, [transcripts, autoScroll]);
+
+  // Scroll detection - track if user is near bottom
+  const handleTranslationScroll = useCallback(() => {
+    if (!translationListRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = translationListRef.current;
+    const nearBottom = scrollHeight - scrollTop - clientHeight < 100;
+    isNearBottomRef.current = nearBottom;
+  }, []);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showMenu && !target.closest(`.${styles.menuContainer}`)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [showMenu]);
 
   // Generate QR code
   const generateQRCode = useCallback(async (roomCode: string) => {
@@ -1307,530 +1334,460 @@ function SpeakerContent() {
     }
   };
 
-  return (
-    <main className={styles.main}>
-      {/* Header */}
-      <div className={styles.header}>
-        <button
-          onClick={() => router.push(user ? "/dashboard" : "/")}
-          className={styles.backButton}
-          aria-label={user ? "대시보드로 돌아가기" : "홈으로 돌아가기"}
-        >
-          ← {user ? "대시보드" : "홈"}
-        </button>
-        <div className={styles.connectionStatus}>
-          <span
-            className={isConnected ? styles.connected : styles.disconnected}
-          >
-            {isConnected ? "● 연결됨" : "○ 연결 끊김"}
+  // Recording controls component (shared between mobile and desktop)
+  const RecordingControls = () => (
+    <>
+      {isReadOnly ? (
+        <div className={styles.readOnlyBadge}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+          기록 보기 모드 (종료된 세션)
+        </div>
+      ) : (
+        <div className={styles.recordingControls}>
+          {recordingState === "idle" ? (
+            <button
+              onClick={startRecording}
+              className={styles.recordButton}
+              disabled={!roomId || !isConnected}
+              title="녹음 시작"
+            >
+              <span className={styles.recordIcon}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              </span>
+              녹음 시작
+            </button>
+          ) : recordingState === "recording" ? (
+            <div className={styles.recordingActive}>
+              <span className={styles.recordingIndicator}>
+                <span className={styles.recordingDot} />
+                녹음 중
+              </span>
+              <div className={styles.recordingButtons}>
+                <button onClick={pauseRecording} className={styles.pauseBtn} title="일시정지">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="4" width="4" height="16" rx="1" />
+                    <rect x="14" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                </button>
+                <button onClick={stopRecording} className={styles.stopBtn} title="정지">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.recordingActive}>
+              <span className={styles.recordingIndicator}>
+                <span className={styles.pausedDot} />
+                일시정지
+              </span>
+              <div className={styles.recordingButtons}>
+                <button onClick={resumeRecording} className={styles.resumeBtn} title="재개">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </button>
+                <button onClick={stopRecording} className={styles.stopBtn} title="정지">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  // Audio level meter component
+  const AudioLevelMeter = () => (
+    recordingState === "recording" ? (
+      <div className={styles.audioLevel}>
+        <div className={styles.audioLevelHeader}>
+          <span className={styles.audioLevelLabel} style={micMismatch ? { color: "#f59e0b" } : undefined}>
+            {micMismatch ? "⚠️ " : "🎤 "}
+            {activeMicLabel ? (activeMicLabel.length > 25 ? activeMicLabel.substring(0, 25) + "..." : activeMicLabel) : "마이크"}
           </span>
+          <span className={styles.audioLevelPercent}>{audioLevel}%</span>
+        </div>
+        <div className={styles.audioLevelBar}>
+          <div
+            className={styles.audioLevelFill}
+            style={{
+              width: `${audioLevel}%`,
+              backgroundColor: audioLevel > 70 ? "#ef4444" : audioLevel > 30 ? "#22c55e" : "#64748b",
+            }}
+          />
         </div>
       </div>
+    ) : null
+  );
 
-      {/* Two-column layout */}
-      <div className={styles.twoColumnLayout}>
-        {/* Left Panel - Controls */}
-        <div className={styles.leftPanel}>
-          {/* Room Info - Compact */}
-          <div className={styles.compactRoomInfo}>
-            <div className={styles.compactHeader}>
-              <h2 className={styles.compactTitle}>
-                {roomSettings.roomTitle || speakerName || "Speaker"}
-              </h2>
-              {roomId && (
-                <div className={styles.compactListenerBadge}>
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                  <span>{listenerCount}</span>
-                </div>
-              )}
-            </div>
-            {roomId && (
-              <>
-                <div className={styles.compactRoomCode}>
-                  <span className={styles.compactCodeLabel}>방 코드</span>
-                  <span className={styles.compactCodeValue}>{roomId}</span>
-                </div>
-                <div className={styles.compactActions}>
-                  <button
-                    onClick={() => copyToClipboard(roomId, "방 코드")}
-                    className={styles.compactIconButton}
-                    title="복사"
-                    aria-label="방 코드 복사"
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setShowQRModal(true)}
-                    className={styles.compactIconButton}
-                    title="QR 코드"
-                    aria-label="QR 코드 보기"
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <rect x="3" y="3" width="7" height="7" rx="1" />
-                      <rect x="14" y="3" width="7" height="7" rx="1" />
-                      <rect x="3" y="14" width="7" height="7" rx="1" />
-                      <rect x="14" y="14" width="7" height="7" rx="1" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={shareRoom}
-                    className={styles.compactIconButton}
-                    title="공유"
-                    aria-label="방 공유하기"
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <circle cx="18" cy="5" r="3" />
-                      <circle cx="6" cy="12" r="3" />
-                      <circle cx="18" cy="19" r="3" />
-                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                    </svg>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+  // Microphone select button component
+  const MicSelectButton = () => (
+    <button
+      onClick={() => { loadMicDevices(); setShowMicModal(true); }}
+      className={`${styles.micSelectButton} ${micDevices.find((d) => d.deviceId === selectedMicId)?.isExternal ? styles.hasExternal : ""}`}
+      disabled={recordingState === "recording"}
+    >
+      <span className={styles.micSelectButtonIcon}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+          <line x1="12" y1="19" x2="12" y2="23" />
+          <line x1="8" y1="23" x2="16" y2="23" />
+        </svg>
+      </span>
+      <span className={styles.micSelectButtonText}>{currentMicLabel}</span>
+      <span className={styles.micSelectButtonArrow}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </span>
+    </button>
+  );
 
-          {/* Microphone Selection Button */}
-          <button
-            onClick={() => {
-              loadMicDevices();
-              setShowMicModal(true);
-            }}
-            className={`${styles.micSelectButton} ${
-              micDevices.find((d) => d.deviceId === selectedMicId)?.isExternal
-                ? styles.hasExternal
-                : ""
-            }`}
-            disabled={recordingState === "recording"}
-            aria-label="마이크 선택"
-            aria-haspopup="dialog"
-          >
-            <span className={styles.micSelectButtonIcon}>
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            </span>
-            <span className={styles.micSelectButtonText}>{currentMicLabel}</span>
-            <span className={styles.micSelectButtonArrow}>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </span>
+  return (
+    <main className={styles.main}>
+      {/* ========== MOBILE LAYOUT (< 1024px) ========== */}
+      <div className={styles.mobileLayout}>
+        {/* Mobile Header */}
+        <header className={styles.mobileHeader}>
+          <button onClick={() => router.push(user ? "/dashboard" : "/")} className={styles.iconBtn}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
           </button>
 
-          {/* Controls */}
-          <div className={styles.compactControls}>
-            {isReadOnly ? (
-              <div className={styles.readOnlyBadge}>
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                기록 보기 모드 (종료된 세션)
-              </div>
+          <div className={styles.headerCenter}>
+            {roomId ? (
+              <>
+                <span className={styles.roomCodeTitle}>{roomId}</span>
+                <span className={styles.listenerBadge}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                  </svg>
+                  {listenerCount}
+                </span>
+              </>
             ) : (
-              <div className={styles.recordingControls}>
-                {recordingState === "idle" ? (
-                  <button
-                    onClick={startRecording}
-                    className={styles.playButton}
-                    disabled={!roomId || !isConnected}
-                    title="녹음 시작"
-                    aria-label="녹음 시작"
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </button>
-                ) : recordingState === "recording" ? (
+              <span className={styles.roomCodeTitle}>새 세션</span>
+            )}
+            <span className={`${styles.statusDot} ${isConnected ? styles.online : styles.offline}`} />
+          </div>
+
+          <div className={styles.menuContainer}>
+            <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} className={`${styles.iconBtn} ${showMenu ? styles.active : ''}`}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" />
+              </svg>
+            </button>
+            {showMenu && (
+              <div className={styles.dropdownMenu}>
+                {roomId && (
                   <>
-                    <button
-                      onClick={pauseRecording}
-                      className={styles.pauseButton}
-                      title="일시정지"
-                      aria-label="녹음 일시정지"
-                    >
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <rect x="6" y="4" width="4" height="16" rx="1" />
-                        <rect x="14" y="4" width="4" height="16" rx="1" />
+                    <button onClick={() => { setShowQRModal(true); setShowMenu(false); }} className={styles.menuAction}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                       </svg>
+                      QR 코드
                     </button>
-                    <button
-                      onClick={stopRecording}
-                      className={styles.stopButton}
-                      title="정지"
-                      aria-label="녹음 정지"
-                    >
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <rect x="5" y="5" width="14" height="14" rx="1.5" />
+                    <button onClick={() => { shareRoom(); setShowMenu(false); }} className={styles.menuAction}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                       </svg>
+                      공유
                     </button>
+                    <button onClick={() => { copyToClipboard(roomId, "방 코드"); setShowMenu(false); }} className={styles.menuAction}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      복사
+                    </button>
+                    <div className={styles.menuDivider} />
                   </>
-                ) : (
+                )}
+                <button onClick={() => { setShowSettingsModal(true); setShowMenu(false); }} className={styles.menuAction}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                  설정
+                </button>
+                {user && (
+                  <button onClick={() => { saveRecording(); setShowMenu(false); }} className={styles.menuAction} disabled={transcripts.length === 0}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
+                    </svg>
+                    저장
+                  </button>
+                )}
+                <button onClick={() => { createNewRoom(); setShowMenu(false); }} className={styles.menuAction}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  새 방
+                </button>
+                {debugAudioUrl && (
                   <>
-                    <button
-                      onClick={resumeRecording}
-                      className={styles.playButton}
-                      title="재개"
-                      aria-label="녹음 재개"
-                    >
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M8 5v14l11-7z" />
+                    <div className={styles.menuDivider} />
+                    <button onClick={() => { downloadDebugAudio(); setShowMenu(false); }} className={styles.menuAction}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
-                    </button>
-                    <button
-                      onClick={stopRecording}
-                      className={styles.stopButton}
-                      title="정지"
-                      aria-label="녹음 정지"
-                    >
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <rect x="5" y="5" width="14" height="14" rx="1.5" />
-                      </svg>
+                      오디오
                     </button>
                   </>
                 )}
               </div>
             )}
           </div>
+        </header>
 
-          {/* Audio level meter */}
-          {recordingState === "recording" && (
-            <div className={styles.compactAudioLevel}>
-              <div className={styles.compactAudioHeader}>
-                <span
-                  className={styles.compactAudioLabel}
-                  style={micMismatch ? { color: "#f59e0b" } : undefined}
-                  title={activeMicLabel || currentMicLabel}
+        {/* Mobile Content */}
+        <div className={styles.mobileContent}>
+          <div className={styles.mobileControls}>
+            <MicSelectButton />
+            <RecordingControls />
+            <AudioLevelMeter />
+          </div>
+          <div className={styles.mobileTranslation}>
+            <div className={styles.translationHeader}>
+              <h3>실시간 번역</h3>
+              <div className={styles.translationHeaderRight}>
+                <span className={styles.translationCount}>{transcripts.length}</span>
+                <button
+                  onClick={() => setAutoScroll(!autoScroll)}
+                  className={`${styles.autoScrollBtn} ${autoScroll ? styles.active : ''}`}
+                  title={autoScroll ? "자동 스크롤 끄기" : "자동 스크롤 켜기"}
                 >
-                  {micMismatch ? "⚠️ " : "🎤 "}
-                  {activeMicLabel
-                    ? activeMicLabel.length > 20
-                      ? activeMicLabel.substring(0, 20) + "..."
-                      : activeMicLabel
-                    : "마이크"}
-                </span>
-                <span className={styles.compactAudioPercent}>
-                  {audioLevel}%
-                </span>
-              </div>
-              <div className={styles.compactAudioMeter}>
-                <div
-                  className={styles.audioBar}
-                  style={{
-                    width: `${audioLevel}%`,
-                    backgroundColor:
-                      audioLevel > 70
-                        ? "#ef4444"
-                        : audioLevel > 30
-                        ? "#22c55e"
-                        : "#64748b",
-                  }}
-                />
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="7 13 12 18 17 13" /><polyline points="7 6 12 11 17 6" />
+                  </svg>
+                </button>
               </div>
             </div>
-          )}
-
-          {/* Action Buttons - Compact */}
-          <div className={styles.compactActionButtons}>
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className={styles.compactActionButton}
-              title="방 설정"
-              aria-label="방 설정 열기"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
-              </svg>
-              설정
-            </button>
-            <button
-              onClick={saveRecording}
-              className={styles.compactActionButton}
-              disabled={!user || transcripts.length === 0}
-              title="세션 저장"
-              aria-label="세션 저장"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" />
-                <polyline points="7 3 7 8 15 8" />
-              </svg>
-              저장
-            </button>
-            <button
-              onClick={createNewRoom}
-              className={styles.compactActionButton}
-              title="새 방"
-              aria-label="새 방 만들기"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              새 방
-            </button>
-            <button
-              onClick={downloadDebugAudio}
-              className={`${styles.compactActionButton} ${debugAudioUrl ? styles.hasAudio : ''}`}
-              disabled={!debugAudioUrl}
-              title="원본 오디오 다운로드"
-              aria-label="원본 오디오 다운로드"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              오디오
-            </button>
-          </div>
-
-        </div>
-
-        {/* Right Panel - Real-time Translation */}
-        <div className={styles.rightPanel}>
-          <div className={styles.translationHeader}>
-            <h3>실시간 번역</h3>
-            <span className={styles.translationCount}>
-              {transcripts.length} 항목
-            </span>
-          </div>
-
-          {/* Language Filter Tabs */}
-          {roomSettings.enableTranslation &&
-            roomSettings.targetLanguages.length > 0 && (
+            {roomSettings.enableTranslation && roomSettings.targetLanguages.length > 0 && (
               <div className={styles.languageTabs}>
-                <button
-                  className={`${styles.languageTab} ${
-                    selectedLanguage === null ? styles.active : ""
-                  }`}
-                  onClick={() => setSelectedLanguage(null)}
-                >
-                  전체
-                </button>
+                <button className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`} onClick={() => setSelectedLanguage(null)}>전체</button>
                 {roomSettings.targetLanguages.map((langCode) => {
-                  const lang = TARGET_LANGUAGES.find(
-                    (l) => l.code === langCode
-                  );
-                  return (
-                    <button
-                      key={langCode}
-                      className={`${styles.languageTab} ${
-                        selectedLanguage === langCode ? styles.active : ""
-                      }`}
-                      onClick={() => setSelectedLanguage(langCode)}
-                    >
-                      {lang?.name || langCode}
-                    </button>
-                  );
+                  const lang = TARGET_LANGUAGES.find((l) => l.code === langCode);
+                  return <button key={langCode} className={`${styles.languageTab} ${selectedLanguage === langCode ? styles.active : ""}`} onClick={() => setSelectedLanguage(langCode)}>{lang?.name || langCode}</button>;
                 })}
               </div>
             )}
-
-          <div className={styles.translationContent} ref={translationListRef}>
-            {transcripts.length === 0 ? (
-              <div className={styles.emptyState}>
-                <svg
-                  width="64"
-                  height="64"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                <p>{`녹음을 시작하면 \n실시간 번역이 여기에 표시됩니다`}</p>
-              </div>
-            ) : (
-              <div className={styles.translationList}>
-                {transcripts
-                  .filter((item) => {
-                    // Hide STT blocks - only show translations
+            <div className={styles.translationContent} ref={translationListRef} onScroll={handleTranslationScroll}>
+              {transcripts.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <p>녹음을 시작하면<br/>실시간 번역이 표시됩니다</p>
+                </div>
+              ) : (
+                <div className={styles.translationList}>
+                  {transcripts.filter((item) => {
                     if (item.type === "stt") return false;
-
-                    // Hide partial translations
-                    if (item.type === "translation" && item.isPartial)
-                      return false;
-
-                    // Filter by selected language
+                    if (item.type === "translation" && item.isPartial) return false;
                     if (selectedLanguage === null) return true;
-                    if (item.type === "translation" && item.targetLanguage) {
-                      return item.targetLanguage === selectedLanguage;
-                    }
-                    // Old translation-batch format
+                    if (item.type === "translation" && item.targetLanguage) return item.targetLanguage === selectedLanguage;
                     return true;
-                  })
-                  .map((item, index) => (
+                  }).map((item, index) => (
                     <div key={index} className={styles.translationCard}>
                       {item.targetLanguage ? (
-                        // New translation-text format
                         <div className={styles.translationCardContent}>
-                          {item.isPartial && (
-                            <div className={styles.translationBadge}>
-                              진행 중...
-                            </div>
-                          )}
-
-                          <div className={styles.translationTexts}>
-                            {item.originalText && (
-                              <>
-                                <p className={styles.koreanTextLarge}>
-                                  {getDisplayText(item.originalText)}
-                                </p>
-                                <div className={styles.divider}></div>
-                              </>
-                            )}
-                            <p
-                              className={`${styles.englishTextLarge} ${
-                                item.isPartial ? styles.partialText : ""
-                              }`}
-                            >
-                              {getDisplayText(item.text || "")}
-                              {item.isPartial && (
-                                <span className={styles.partialIndicator}>
-                                  {" "}
-                                  ...
-                                </span>
-                              )}
-                            </p>
-                          </div>
+                          {item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
+                          <p className={styles.translatedText}>{getDisplayText(item.text || "")}</p>
                         </div>
                       ) : (
-                        // Old translation-batch format
                         <div className={styles.translationCardContent}>
-                          <div className={styles.translationBadge}>번역</div>
-                          <div className={styles.translationTexts}>
-                            <p className={styles.koreanTextLarge}>
-                              {getDisplayText(item.korean || "")}
-                            </p>
-                            <div className={styles.divider}></div>
-                            <p className={styles.englishTextLarge}>
-                              {getDisplayText(item.english || "")}
-                            </p>
-                          </div>
+                          {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
+                          <p className={styles.translatedText}>{getDisplayText(item.english || "")}</p>
                         </div>
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========== DESKTOP LAYOUT (>= 1024px) ========== */}
+      <div className={styles.desktopLayout}>
+        {/* Desktop Header */}
+        <header className={styles.desktopHeader}>
+          <button onClick={() => router.push(user ? "/dashboard" : "/")} className={styles.backButton}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            {user ? "대시보드" : "홈"}
+          </button>
+          <div className={styles.connectionStatus}>
+            <span className={`${styles.statusDot} ${isConnected ? styles.online : styles.offline}`} />
+            {isConnected ? "연결됨" : "연결 끊김"}
+          </div>
+        </header>
+
+        {/* Desktop Two-Column Layout */}
+        <div className={styles.twoColumnLayout}>
+          {/* Left Panel */}
+          <div className={styles.leftPanel}>
+            {/* Room Info */}
+            <div className={styles.roomInfoCard}>
+              <div className={styles.roomInfoHeader}>
+                <h2 className={styles.roomTitle}>{roomSettings.roomTitle || speakerName || "Speaker"}</h2>
+                {roomId && (
+                  <span className={styles.listenerCount}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                    </svg>
+                    {listenerCount}
+                  </span>
+                )}
+              </div>
+              {roomId && (
+                <>
+                  <div className={styles.roomCode}>
+                    <span className={styles.roomCodeLabel}>방 코드</span>
+                    <span className={styles.roomCodeValue}>{roomId}</span>
+                  </div>
+                  <div className={styles.roomActions}>
+                    <button onClick={() => copyToClipboard(roomId, "방 코드")} className={styles.actionIconBtn} title="복사">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </button>
+                    <button onClick={() => setShowQRModal(true)} className={styles.actionIconBtn} title="QR 코드">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                      </svg>
+                    </button>
+                    <button onClick={shareRoom} className={styles.actionIconBtn} title="공유">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                      </svg>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Mic & Recording */}
+            <MicSelectButton />
+            <RecordingControls />
+            <AudioLevelMeter />
+
+            {/* Action Buttons */}
+            <div className={styles.actionButtons}>
+              <button onClick={() => setShowSettingsModal(true)} className={styles.actionButton}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+                설정
+              </button>
+              <button onClick={saveRecording} className={styles.actionButton} disabled={!user || transcripts.length === 0}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
+                </svg>
+                저장
+              </button>
+              <button onClick={createNewRoom} className={styles.actionButton}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                새 방
+              </button>
+              {debugAudioUrl && (
+                <button onClick={downloadDebugAudio} className={`${styles.actionButton} ${styles.hasAudio}`}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  오디오
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Right Panel - Translation */}
+          <div className={styles.rightPanel}>
+            <div className={styles.translationHeader}>
+              <h3>실시간 번역</h3>
+              <div className={styles.translationHeaderRight}>
+                <span className={styles.translationCount}>{transcripts.length}</span>
+                <button
+                  onClick={() => setAutoScroll(!autoScroll)}
+                  className={`${styles.autoScrollBtn} ${autoScroll ? styles.active : ''}`}
+                  title={autoScroll ? "자동 스크롤 끄기" : "자동 스크롤 켜기"}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="7 13 12 18 17 13" /><polyline points="7 6 12 11 17 6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {roomSettings.enableTranslation && roomSettings.targetLanguages.length > 0 && (
+              <div className={styles.languageTabs}>
+                <button className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`} onClick={() => setSelectedLanguage(null)}>전체</button>
+                {roomSettings.targetLanguages.map((langCode) => {
+                  const lang = TARGET_LANGUAGES.find((l) => l.code === langCode);
+                  return <button key={langCode} className={`${styles.languageTab} ${selectedLanguage === langCode ? styles.active : ""}`} onClick={() => setSelectedLanguage(langCode)}>{lang?.name || langCode}</button>;
+                })}
               </div>
             )}
+            <div className={styles.translationContent} ref={translationListRef} onScroll={handleTranslationScroll}>
+              {transcripts.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <p>녹음을 시작하면<br/>실시간 번역이 여기에 표시됩니다</p>
+                </div>
+              ) : (
+                <div className={styles.translationList}>
+                  {transcripts.filter((item) => {
+                    if (item.type === "stt") return false;
+                    if (item.type === "translation" && item.isPartial) return false;
+                    if (selectedLanguage === null) return true;
+                    if (item.type === "translation" && item.targetLanguage) return item.targetLanguage === selectedLanguage;
+                    return true;
+                  }).map((item, index) => (
+                    <div key={index} className={styles.translationCard}>
+                      {item.targetLanguage ? (
+                        <div className={styles.translationCardContent}>
+                          {item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
+                          <p className={styles.translatedText}>{getDisplayText(item.text || "")}</p>
+                        </div>
+                      ) : (
+                        <div className={styles.translationCardContent}>
+                          {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
+                          <p className={styles.translatedText}>{getDisplayText(item.english || "")}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

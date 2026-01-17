@@ -34,12 +34,10 @@ export async function handleStartRecording(
 
     // Check if STT client already exists and is active
     if (ctx.sttManager.hasActiveClient(roomId)) {
-      console.log(`[Recording][${roomId}] STT client already active`);
       return;
     }
 
     // Create new STT client
-    console.log(`[Recording][${roomId}] Creating new STT client...`);
     try {
       await ctx.sttManager.createClient(
         roomId,
@@ -65,11 +63,9 @@ export async function handleStartRecording(
         room.roomSettings?.promptTemplate || 'general'
       );
 
-      console.log(`[Recording][${roomId}] STT client created and ready`);
-
-      // Create TranslationManager if needed
-      if (room.roomSettings?.enableTranslation && !ctx.translationManagers.has(roomId)) {
-        await ctx.createTranslationManager(roomId, room.roomSettings);
+      // Always create TranslationManager
+      if (!ctx.translationManagers.has(roomId)) {
+        await ctx.createTranslationManager(roomId, room.roomSettings || {});
       }
 
       // Update recording state
@@ -113,11 +109,9 @@ export async function handleStopRecording(
       return;
     }
 
-    // Close STT client to prevent Deepgram timeout
-    console.log(`[Recording][${roomId}] Closing STT client...`);
+    // Close STT client
     ctx.sttManager.removeClient(roomId);
     ctx.audioChunksReceived.delete(roomId);
-    console.log(`[Recording][${roomId}] STT client closed`);
 
     // Update recording state
     await recordingStateService.stopRecording(room.id);

@@ -113,9 +113,10 @@ export default function SettingsModal({
             <div className={styles.settingGroup}>
               <label>번역 언어</label>
               <div className={styles.fixedLanguage}>
-                <span className={styles.fixedLanguageText}>English</span>
-                <span className={styles.fixedLanguageBadge}>지원</span>
+                <span className={styles.fixedLanguageText}>15개 언어</span>
+                <span className={styles.fixedLanguageBadge}>자동</span>
               </div>
+              <span className={styles.settingHint}>영어, 일본어, 중국어 등 15개 언어로 자동 번역</span>
             </div>
           </div>
 

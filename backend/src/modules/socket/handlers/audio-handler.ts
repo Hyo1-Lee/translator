@@ -98,16 +98,6 @@ export async function handleAudioStream(
     const count = (ctx.audioChunksReceived.get(roomId) || 0) + 1;
     ctx.audioChunksReceived.set(roomId, count);
 
-    if (count === 1) {
-      console.log(`[Audio][${roomId}] First chunk received:`);
-      console.log(`  - Buffer size: ${audioBuffer.length} bytes`);
-      console.log(`  - Base64 size: ${audio.length} chars`);
-      console.log(`  - Expected format: 16-bit PCM, 16kHz mono`);
-      console.log(`  - Sample count: ~${audioBuffer.length / 2} samples`);
-      console.log(`  - Duration: ~${(audioBuffer.length / 2 / 16000).toFixed(3)}s`);
-    } else if (count === 10) {
-      console.log(`[Audio][${roomId}] 10 chunks received and processing`);
-    }
 
     // Check if STT client exists
     if (!ctx.sttManager.hasActiveClient(roomId)) {

@@ -147,6 +147,46 @@ export class TranscriptService {
   }
 
   /**
+   * 번역되지 않은 STT 텍스트 조회
+   * TranslationText에 English 번역이 없는 SttText 찾기
+   */
+  async getUntranslatedSttTexts(roomCode: string): Promise<any[]> {
+    const room = await Room.findOne({
+      where: { roomCode }
+    });
+
+    if (!room) return [];
+
+    // 모든 STT 텍스트 가져오기
+    const allSttTexts = await SttText.findAll({
+      where: { roomId: room.id },
+      order: [['timestamp', 'ASC']]
+    });
+
+    if (allSttTexts.length === 0) return [];
+
+    // 이미 번역된 sttTextId 목록 가져오기 (English 기준)
+    const translatedSttIds = await TranslationText.findAll({
+      where: {
+        roomId: room.id,
+        targetLanguage: 'en',
+        isPartial: false,
+        sttTextId: { [Op.ne]: null }
+      },
+      attributes: ['sttTextId']
+    });
+
+    const translatedIds = new Set(translatedSttIds.map(t => t.sttTextId));
+
+    // 번역되지 않은 STT 텍스트 필터링
+    const untranslated = allSttTexts.filter(stt => !translatedIds.has(stt.id));
+
+    console.log(`[TranscriptService][${roomCode}] Found ${untranslated.length} untranslated STT texts out of ${allSttTexts.length} total`);
+
+    return untranslated;
+  }
+
+  /**
    * 새로운 번역 텍스트 저장 (TranslationText 모델)
    */
   async saveTranslationText(

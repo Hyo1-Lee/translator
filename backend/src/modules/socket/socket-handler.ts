@@ -3,7 +3,7 @@ import { RoomService } from '../room/room-service';
 import { TranscriptService } from '../room/transcript-service';
 import { STTManager } from '../stt/stt-manager';
 import { TranslationService } from '../translation/translation-service';
-import { GoogleTranslateService } from '../translation/google-translate.service';
+import { AzureTranslateService, SUPPORTED_LANGUAGES } from '../translation/azure-translate.service';
 import { TranslationManager, TranslationData } from '../translation/translation-manager';
 import { EnvironmentPreset } from '../translation/presets';
 import { recordingStateService } from '../../services/recording-state-service';
@@ -29,7 +29,7 @@ export class SocketHandler {
   private transcriptService: TranscriptService;
   private sttManager: STTManager;
   private translationService: TranslationService;
-  private googleTranslateService: GoogleTranslateService;
+  private azureTranslateService: AzureTranslateService;
   private translationManagers: Map<string, TranslationManager> = new Map();
   private sttIdCache: Map<string, Map<string, SttIdCacheEntry>> = new Map();
   private audioChunksReceived: Map<string, number> = new Map();
@@ -40,14 +40,14 @@ export class SocketHandler {
     transcriptService: TranscriptService,
     sttManager: STTManager,
     translationService: TranslationService,
-    googleTranslateService: GoogleTranslateService
+    azureTranslateService: AzureTranslateService
   ) {
     this.io = io;
     this.roomService = roomService;
     this.transcriptService = transcriptService;
     this.sttManager = sttManager;
     this.translationService = translationService;
-    this.googleTranslateService = googleTranslateService;
+    this.azureTranslateService = azureTranslateService;
     this.initialize();
     recordingStateService.setSocketIO(io);
   }
@@ -59,13 +59,14 @@ export class SocketHandler {
       transcriptService: this.transcriptService,
       sttManager: this.sttManager,
       translationService: this.translationService,
-      googleTranslateService: this.googleTranslateService,
+      azureTranslateService: this.azureTranslateService,
       translationManagers: this.translationManagers,
       sttIdCache: this.sttIdCache,
       audioChunksReceived: this.audioChunksReceived,
       createTranslationManager: this.createTranslationManager.bind(this),
       sendTranscriptHistory: this.sendTranscriptHistory.bind(this),
-      sendTranslationHistory: this.sendTranslationHistory.bind(this)
+      sendTranslationHistory: this.sendTranslationHistory.bind(this),
+      translateHistoricalTexts: this.translateHistoricalTexts.bind(this)
     };
   }
 
@@ -145,18 +146,60 @@ export class SocketHandler {
     }
   }
 
+  // Translate historical (untranslated) STT texts
+  private async translateHistoricalTexts(roomCode: string): Promise<void> {
+    try {
+      const untranslatedTexts = await this.transcriptService.getUntranslatedSttTexts(roomCode);
+
+      if (untranslatedTexts.length === 0) {
+        return;
+      }
+
+      console.log(`[HistoricalTranslation][${roomCode}] Found ${untranslatedTexts.length} untranslated texts`);
+
+      // Get or create TranslationManager
+      let translationManager = this.translationManagers.get(roomCode);
+
+      if (!translationManager) {
+        const room = await this.roomService.getRoom(roomCode);
+        if (!room) {
+          console.error(`[HistoricalTranslation][${roomCode}] Room not found`);
+          return;
+        }
+        await this.createTranslationManager(roomCode, room.roomSettings || {});
+        translationManager = this.translationManagers.get(roomCode);
+      }
+
+      if (!translationManager) {
+        console.error(`[HistoricalTranslation][${roomCode}] Failed to get TranslationManager`);
+        return;
+      }
+
+      // Pre-populate the sttIdCache with existing STT text IDs
+      if (!this.sttIdCache.has(roomCode)) {
+        this.sttIdCache.set(roomCode, new Map());
+      }
+      const roomCache = this.sttIdCache.get(roomCode)!;
+      const now = Date.now();
+
+      for (const sttText of untranslatedTexts) {
+        roomCache.set(sttText.text, { id: sttText.id, timestamp: now });
+        translationManager.addTranscript(sttText.text, true, sttText.confidence);
+      }
+
+    } catch (error) {
+      console.error(`[HistoricalTranslation][${roomCode}] Error:`, error);
+    }
+  }
+
   // Create TranslationManager for a room
   private async createTranslationManager(
     roomCode: string,
     roomSettings: any
   ): Promise<void> {
     try {
-      const targetLanguages = roomSettings.targetLanguagesArray || ['en'];
-
-      console.log(`[TranslationManager][${roomCode}] Creating TranslationManager...`);
-      console.log(`[TranslationManager][${roomCode}] Source: ${roomSettings.sourceLanguage || 'ko'}`);
-      console.log(`[TranslationManager][${roomCode}] Targets: ${targetLanguages.join(', ')}`);
-      console.log(`[TranslationManager][${roomCode}] Preset: ${roomSettings.environmentPreset || 'general'}`);
+      const sourceLanguage = roomSettings.sourceLanguage || 'ko';
+      const targetLanguages = Object.keys(SUPPORTED_LANGUAGES).filter(lang => lang !== sourceLanguage);
 
       const translationManager = new TranslationManager({
         roomId: roomCode,
@@ -167,7 +210,7 @@ export class SocketHandler {
         targetLanguages,
         enableStreaming: roomSettings.enableStreaming ?? true,
         translationService: this.translationService,
-        googleTranslateService: this.googleTranslateService,
+        azureTranslateService: this.azureTranslateService,
         onTranslation: async (data: TranslationData) => {
           await this.handleTranslationData(roomCode, data);
         },
@@ -177,7 +220,7 @@ export class SocketHandler {
       });
 
       this.translationManagers.set(roomCode, translationManager);
-      console.log(`[TranslationManager][${roomCode}] Created and ready`);
+      console.log(`[TranslationManager][${roomCode}] Created (${targetLanguages.length} languages)`);
 
     } catch (error) {
       console.error(`[TranslationManager][${roomCode}] Failed to create:`, error);
@@ -204,28 +247,7 @@ export class SocketHandler {
         }
       }
 
-      // Check if we already saved STT text for this originalText
-      const cachedEntry = roomCache.get(data.originalText);
-      if (cachedEntry) {
-        sttTextId = cachedEntry.id;
-        console.log(`[TranslationManager][${roomCode}] Using cached STT ID: ${sttTextId} for "${data.originalText.substring(0, 50)}..."`);
-      } else if (!data.sttTextId && !data.isPartial) {
-        // Save STT text on first translation only
-        const savedStt = await this.transcriptService.saveSttText(
-          roomCode,
-          data.originalText,
-          data.confidence
-        );
-        sttTextId = savedStt?.id;
-
-        if (sttTextId) {
-          roomCache.set(data.originalText, { id: sttTextId, timestamp: now });
-        }
-
-        console.log(`[TranslationManager][${roomCode}] Saved STT text: "${data.originalText.substring(0, 50)}..." (ID: ${sttTextId})`);
-      }
-
-      // Skip saving partial translations
+      // Skip saving partial translations (streaming)
       if (data.isPartial) {
         this.io.to(roomCode).emit('translation-text', {
           targetLanguage: data.targetLanguage,
@@ -238,7 +260,50 @@ export class SocketHandler {
         return;
       }
 
-      // Save final translation to database
+      // Check if we already saved STT text for this originalText
+      const cachedEntry = roomCache.get(data.originalText);
+      if (cachedEntry) {
+        sttTextId = cachedEntry.id;
+      } else if (!data.sttTextId) {
+        // Save STT text on first translation only
+        const savedStt = await this.transcriptService.saveSttText(
+          roomCode,
+          data.originalText,
+          data.confidence
+        );
+        sttTextId = savedStt?.id;
+
+        if (sttTextId) {
+          roomCache.set(data.originalText, { id: sttTextId, timestamp: now });
+        }
+      }
+
+      // Batch mode: save all translations and emit as single batch event
+      if (data.isBatch && data.translations) {
+        // Save English translation to DB
+        await this.transcriptService.saveTranslationText(
+          roomCode,
+          'en',
+          data.originalText,
+          data.translations['en'] || data.translatedText,
+          data.contextSummary,
+          false,
+          sttTextId
+        );
+
+        const batchPayload = {
+          korean: data.originalText,
+          english: data.translations['en'] || data.translatedText,
+          translations: data.translations,
+          timestamp: data.timestamp.getTime(),
+          batchId: `${roomCode}-${data.timestamp.getTime()}`
+        };
+
+        this.io.to(roomCode).emit('translation-batch', batchPayload);
+        return;
+      }
+
+      // Single language mode (fallback)
       await this.transcriptService.saveTranslationText(
         roomCode,
         data.targetLanguage,
@@ -249,7 +314,6 @@ export class SocketHandler {
         sttTextId
       );
 
-      // Broadcast via socket
       this.io.to(roomCode).emit('translation-text', {
         targetLanguage: data.targetLanguage,
         text: data.translatedText,
@@ -259,7 +323,6 @@ export class SocketHandler {
         timestamp: data.timestamp.getTime()
       });
 
-      console.log(`[TranslationManager][${roomCode}] Saved & broadcasted ${data.targetLanguage} translation`);
     } catch (error) {
       console.error(`[TranslationManager][${roomCode}] Failed to save/broadcast translation:`, error);
     }
