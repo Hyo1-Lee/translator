@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -8,7 +8,7 @@ import { useI18n } from "@/contexts/I18nContext";
 import io from "socket.io-client";
 import { getDisplayText } from "@/lib/text-display";
 import styles from "./listener.module.css";
-import { PasswordModal, ListenerMenu } from "./components";
+import { PasswordModal, ListenerMenu, LanguageSelector } from "./components";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
@@ -134,6 +134,19 @@ export default function ListenerRoom() {
     const nearBottom = scrollHeight - scrollTop - clientHeight < 100;
     isNearBottomRef.current = nearBottom;
   }, []);
+
+  // 필터링 최적화: useMemo로 매 렌더링마다 필터링 방지
+  const filteredTranscripts = useMemo(() => {
+    return transcripts.filter((item) => {
+      // Only show translations (not STT)
+      if (item.type !== "translation") return false;
+      if (item.isPartial) return false;
+      if (item.targetLanguage) {
+        return item.targetLanguage === selectedLanguage;
+      }
+      return true;
+    });
+  }, [transcripts, selectedLanguage]);
 
   useEffect(() => {
     const container = transcriptContainerRef.current;
@@ -438,6 +451,14 @@ export default function ListenerRoom() {
           </div>
 
           <div className={styles.headerActions}>
+            {/* Language Selector - Primary Action */}
+            <LanguageSelector
+              selectedLanguage={selectedLanguage}
+              availableLanguages={availableLanguages}
+              languageMap={LANGUAGE_MAP}
+              onLanguageChange={setSelectedLanguage}
+            />
+
             {/* Show Original Toggle Button */}
             <button
               onClick={() => setShowOriginal(!showOriginal)}
@@ -477,14 +498,10 @@ export default function ListenerRoom() {
               {/* Dropdown Menu */}
               <ListenerMenu
                 isOpen={showMenu}
-                selectedLanguage={selectedLanguage}
                 fontSize={fontSize}
                 autoScroll={autoScroll}
-                languageMap={LANGUAGE_MAP}
-                allLanguages={availableLanguages}
                 showSaveButton={!!user}
                 hasTrans={transcripts.length > 0}
-                onLanguageChange={setSelectedLanguage}
                 onFontSizeChange={setFontSize}
                 onAutoScrollChange={setAutoScroll}
                 onExport={exportTranscripts}
@@ -496,25 +513,22 @@ export default function ListenerRoom() {
 
         {/* Transcripts */}
         <div ref={transcriptContainerRef} className={`${styles.transcriptContainer} ${styles[fontSize]}`}>
-          {transcripts.length === 0 ? (
+          {filteredTranscripts.length === 0 ? (
             <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>💬</div>
+              <div className={styles.emptyIconWrapper}>
+                <div className={styles.emptyIconPulse} />
+                <div className={styles.emptyIcon}>🎧</div>
+              </div>
               <p className={styles.emptyTitle}>{t("listener.noTranscripts")}</p>
               <p className={styles.emptyText}>{t("listener.noTranscriptsDesc")}</p>
+              <div className={styles.currentLangBadge}>
+                <span className={styles.badgeLabel}>번역 언어</span>
+                <span className={styles.badgeLang}>{LANGUAGE_MAP[selectedLanguage] || selectedLanguage}</span>
+              </div>
             </div>
           ) : (
             <>
-              {transcripts
-                .filter((item) => {
-                  // Only show translations (not STT)
-                  if (item.type !== "translation") return false;
-                  if (item.isPartial) return false;
-                  if (item.targetLanguage) {
-                    return item.targetLanguage === selectedLanguage;
-                  }
-                  return true;
-                })
-                .map((item, index) => (
+              {filteredTranscripts.map((item, index) => (
                   <div key={index} className={styles.transcriptCard}>
                     <div className={styles.timestamp}>
                       {formatTime(

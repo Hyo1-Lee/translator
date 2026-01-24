@@ -34,6 +34,9 @@ export class SocketHandler {
   private sttIdCache: Map<string, Map<string, SttIdCacheEntry>> = new Map();
   private audioChunksReceived: Map<string, number> = new Map();
 
+  // 캐시 크기 제한 (메모리 누수 방지)
+  private readonly MAX_CACHE_SIZE_PER_ROOM = 500;
+
   constructor(
     io: Server,
     roomService: RoomService,
@@ -252,6 +255,9 @@ export class SocketHandler {
         }
       }
 
+      // 캐시 크기 제한 적용 (메모리 누수 방지)
+      this.cleanupSttIdCache(roomCode);
+
       // Skip saving partial translations (streaming)
       if (data.isPartial) {
         this.io.to(roomCode).emit('translation-text', {
@@ -333,6 +339,26 @@ export class SocketHandler {
 
     } catch (error) {
       console.error(`[TranslationManager][${roomCode}] Failed to save/broadcast translation:`, error);
+    }
+  }
+
+  /**
+   * sttIdCache 크기 제한 정리
+   * 최대 크기 초과 시 오래된 항목 제거
+   */
+  private cleanupSttIdCache(roomCode: string): void {
+    const roomCache = this.sttIdCache.get(roomCode);
+    if (!roomCache) return;
+
+    // 크기 초과 시 오래된 항목 제거
+    if (roomCache.size > this.MAX_CACHE_SIZE_PER_ROOM) {
+      const sorted = Array.from(roomCache.entries())
+        .sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const toRemove = sorted.length - this.MAX_CACHE_SIZE_PER_ROOM;
+      for (let i = 0; i < toRemove; i++) {
+        roomCache.delete(sorted[i][0]);
+      }
+      console.log(`[SocketHandler][${roomCode}] Cleaned up ${toRemove} old sttIdCache entries`);
     }
   }
 }

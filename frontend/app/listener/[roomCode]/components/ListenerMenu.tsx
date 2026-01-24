@@ -5,14 +5,10 @@ import styles from "../listener.module.css";
 
 interface ListenerMenuProps {
   isOpen: boolean;
-  selectedLanguage: string;
   fontSize: string;
   autoScroll: boolean;
-  languageMap: Record<string, string>;
-  allLanguages: string[];
   showSaveButton: boolean;
   hasTrans: boolean;
-  onLanguageChange: (lang: string) => void;
   onFontSizeChange: (size: string) => void;
   onAutoScrollChange: (enabled: boolean) => void;
   onExport: () => void;
@@ -21,14 +17,10 @@ interface ListenerMenuProps {
 
 export default function ListenerMenu({
   isOpen,
-  selectedLanguage,
   fontSize,
   autoScroll,
-  languageMap,
-  allLanguages,
   showSaveButton,
   hasTrans,
-  onLanguageChange,
   onFontSizeChange,
   onAutoScrollChange,
   onExport,
@@ -40,35 +32,6 @@ export default function ListenerMenu({
 
   return (
     <div className={styles.dropdownMenu}>
-      {/* Language Selection */}
-      <div className={styles.menuSection}>
-        <div className={styles.menuLabel}>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-          </svg>
-          {t("listener.language")}
-        </div>
-        <select
-          value={selectedLanguage}
-          onChange={(e) => onLanguageChange(e.target.value)}
-          className={styles.menuSelect}
-        >
-          {allLanguages.map((lang) => (
-            <option key={lang} value={lang}>
-              {languageMap[lang] || lang}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {/* Font Size */}
       <div className={styles.menuSection}>
         <div className={styles.menuLabel}>

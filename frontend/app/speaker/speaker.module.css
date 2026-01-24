@@ -3,7 +3,7 @@
 .main {
   min-height: 100vh;
   min-height: 100dvh;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1a2744 50%, #1e3a5f 100%);
   padding: 0;
 }
 
@@ -65,10 +65,10 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.125rem 0.5rem;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 9999px;
-  color: #60a5fa;
+  color: #7dd3fc;
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -81,7 +81,7 @@
 }
 
 .statusDot.online {
-  background: #4ade80;
+  background: #34d399;
   box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
   animation: pulse 2s infinite;
 }
@@ -124,8 +124,8 @@
 }
 
 .iconBtn.active {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.2);
+  color: #7dd3fc;
 }
 
 /* ===== Dropdown Menu ===== */
@@ -138,7 +138,7 @@
   top: calc(100% + 8px);
   right: 0;
   width: 220px;
-  background: rgba(30, 41, 59, 0.98);
+  background: rgba(30, 58, 95, 0.98);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
   border: 1px solid rgba(148, 163, 184, 0.15);
@@ -181,7 +181,7 @@
 }
 
 .menuAction svg {
-  color: #94a3b8;
+  color: #a5b4c6;
   flex-shrink: 0;
 }
 
@@ -225,7 +225,7 @@
 /* Translation Panel */
 .translationPanel {
   flex: 1;
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1rem;
@@ -247,12 +247,12 @@
 }
 
 .disconnected {
-  color: #94a3b8;
+  color: #a5b4c6;
 }
 
 /* Room Info */
 .roomInfo {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1.5rem;
@@ -296,7 +296,7 @@
 
 .codeLabel {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-weight: 600;
@@ -344,17 +344,17 @@
   justify-content: center;
   width: 2.5rem;
   height: 2.5rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.2);
   border-radius: 0.5rem;
-  color: #60a5fa;
+  color: #7dd3fc;
   transition: all 0.2s;
   cursor: pointer;
 }
 
 .iconButton:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
   transform: translateY(-2px);
   color: #93c5fd;
 }
@@ -367,7 +367,7 @@
 /* Old styles kept for backward compatibility */
 .label {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   margin-bottom: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -396,7 +396,7 @@
 }
 
 .statCard {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1rem;
@@ -406,7 +406,7 @@
 }
 
 .statCard:hover {
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(30, 58, 95, 0.8);
   border-color: rgba(148, 163, 184, 0.2);
   transform: translateY(-4px);
 }
@@ -422,7 +422,7 @@
 .statLabel {
   display: block;
   font-size: 0.875rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-weight: 500;
 }
 
@@ -432,7 +432,7 @@
   align-items: center;
   gap: 1rem;
   padding: 1.5rem;
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1rem;
   margin-bottom: 2rem;
@@ -591,7 +591,7 @@
 
 /* Transcript Preview */
 .transcriptPreview {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1rem;
   padding: 2rem;
@@ -630,7 +630,7 @@
 }
 
 .partialIndicator {
-  color: #60a5fa;
+  color: #7dd3fc;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -652,7 +652,7 @@
 }
 
 .englishText {
-  color: #94a3b8;
+  color: #a5b4c6;
   font-size: 0.9375rem;
   font-style: italic;
   margin: 0;
@@ -678,7 +678,7 @@
 }
 
 .modal {
-  background: rgba(30, 41, 59, 0.95);
+  background: rgba(30, 58, 95, 0.95);
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -703,7 +703,7 @@
   height: 200px;
   background: radial-gradient(
     ellipse at top,
-    rgba(59, 130, 246, 0.15) 0%,
+    rgba(96, 165, 250, 0.15) 0%,
     transparent 70%
   );
   pointer-events: none;
@@ -809,8 +809,8 @@
 .textarea:focus {
   outline: none;
   background: rgba(15, 23, 42, 0.7);
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  border-color: #7dd3fc;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
 }
 
 .input::placeholder,
@@ -846,7 +846,7 @@
 
 .checkbox:hover {
   background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(96, 165, 250, 0.3);
 }
 
 .checkbox input[type="checkbox"] {
@@ -863,12 +863,12 @@
 }
 
 .checkbox input[type="checkbox"]:hover {
-  border-color: rgba(59, 130, 246, 0.5);
+  border-color: rgba(96, 165, 250, 0.5);
 }
 
 .checkbox input[type="checkbox"]:checked {
   background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border-color: #3b82f6;
+  border-color: #60a5fa;
 }
 
 .checkbox input[type="checkbox"]:checked::after {
@@ -884,8 +884,8 @@
 }
 
 .checkbox:has(input:checked) {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(96, 165, 250, 0.1);
+  border-color: rgba(96, 165, 250, 0.4);
 }
 
 .checkbox span {
@@ -972,10 +972,10 @@
 }
 
 .createButton {
-  background: rgba(59, 130, 246, 0.2);
+  background: rgba(96, 165, 250, 0.2);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1),
+  box-shadow: 0 4px 16px rgba(96, 165, 250, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
@@ -997,14 +997,14 @@
 
 .createButton:hover {
   transform: translateY(-2px);
-  background: rgba(59, 130, 246, 0.25);
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15),
+  background: rgba(96, 165, 250, 0.25);
+  box-shadow: 0 8px 24px rgba(96, 165, 250, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(0, 0, 0, 0.15);
 }
 
 .createButton:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2), 0 1px 4px rgba(0, 0, 0, 0.1),
+  box-shadow: 0 2px 8px rgba(96, 165, 250, 0.2), 0 1px 4px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
@@ -1139,16 +1139,16 @@
 }
 
 .settingsButtonNew {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.1);
+  color: #7dd3fc;
+  border: 1px solid rgba(96, 165, 250, 0.3);
 }
 
 .settingsButtonNew:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(96, 165, 250, 0.15);
+  border-color: rgba(96, 165, 250, 0.5);
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 10px 20px -10px rgba(96, 165, 250, 0.3);
 }
 
 /* QR Button Group */
@@ -1161,9 +1161,9 @@
 .fullscreenButton {
   flex: 1;
   padding: 0.75rem 1rem;
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.1);
+  color: #7dd3fc;
+  border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 0.75rem;
   font-size: 0.875rem;
   font-weight: 500;
@@ -1172,8 +1172,8 @@
 }
 
 .fullscreenButton:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.5);
   transform: translateY(-2px);
 }
 
@@ -1262,7 +1262,7 @@
 
 .urlText {
   font-size: 1.125rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-family: "Courier New", monospace;
   margin: 0;
 }
@@ -1294,7 +1294,7 @@
 
 /* Compact Left Panel Styles */
 .compactRoomInfo {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 0.875rem;
@@ -1330,10 +1330,10 @@
   align-items: center;
   gap: 0.375rem;
   padding: 0.375rem 0.75rem;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 9999px;
-  color: #60a5fa;
+  color: #7dd3fc;
   font-size: 0.875rem;
   font-weight: 600;
   white-space: nowrap;
@@ -1357,7 +1357,7 @@
 
 .compactCodeLabel {
   font-size: 0.625rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-weight: 600;
@@ -1383,17 +1383,17 @@
   justify-content: center;
   width: 2rem;
   height: 2rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.2);
   border-radius: 0.5rem;
-  color: #60a5fa;
+  color: #7dd3fc;
   transition: all 0.2s;
   cursor: pointer;
 }
 
 .compactIconButton:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
   transform: translateY(-2px);
 }
 
@@ -1405,7 +1405,7 @@
 }
 
 .compactStatItem {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 0.75rem;
@@ -1415,7 +1415,7 @@
 }
 
 .compactStatItem:hover {
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(30, 58, 95, 0.8);
   border-color: rgba(148, 163, 184, 0.2);
   transform: translateY(-2px);
 }
@@ -1431,7 +1431,7 @@
 .compactStatLabel {
   display: block;
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-weight: 500;
 }
 
@@ -1449,7 +1449,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 0.75rem;
   backdrop-filter: blur(20px);
@@ -1615,7 +1615,7 @@
   background: rgba(100, 116, 139, 0.2);
   border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 0.875rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-size: 0.9375rem;
   font-weight: 600;
   backdrop-filter: blur(20px);
@@ -1668,7 +1668,7 @@
 
 /* Compact Audio Level */
 .compactAudioLevel {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 0.75rem;
   padding: 1rem;
@@ -1782,8 +1782,8 @@
 
 .translationCount {
   font-size: 0.75rem;
-  color: #94a3b8;
-  background: rgba(59, 130, 246, 0.1);
+  color: #a5b4c6;
+  background: rgba(96, 165, 250, 0.1);
   padding: 0.25rem 0.625rem;
   border-radius: 9999px;
   font-weight: 600;
@@ -1806,7 +1806,7 @@
   background: rgba(148, 163, 184, 0.1);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 0.5rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -1818,14 +1818,14 @@
 }
 
 .autoScrollButton.autoScrollOn {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
-  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.15);
+  border-color: rgba(96, 165, 250, 0.3);
+  color: #7dd3fc;
 }
 
 .autoScrollButton.autoScrollOn:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(96, 165, 250, 0.25);
+  border-color: rgba(96, 165, 250, 0.5);
 }
 
 .translationContent {
@@ -1930,9 +1930,9 @@
 }
 
 .sttBadge {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.15);
+  color: #7dd3fc;
+  border: 1px solid rgba(96, 165, 250, 0.3);
 }
 
 .translationBadge {
@@ -1963,7 +1963,7 @@
 }
 
 .englishTextLarge {
-  color: #94a3b8;
+  color: #a5b4c6;
   font-size: 1.125rem;
   font-style: italic;
   line-height: 1.6;
@@ -2024,10 +2024,10 @@
 
 .languageTab {
   padding: 0.5rem 1rem;
-  background: rgba(30, 41, 59, 0.5);
+  background: rgba(30, 58, 95, 0.5);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 0.5rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -2036,19 +2036,19 @@
 }
 
 .languageTab:hover {
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(30, 58, 95, 0.8);
   border-color: rgba(148, 163, 184, 0.2);
   color: #cbd5e1;
 }
 
 .languageTab.active {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
-  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #7dd3fc;
 }
 
 .languageTab.active:hover {
-  background: rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.3);
 }
 
 /* Microphone Selection Modal - Mobile Bottom Sheet Style */
@@ -2071,7 +2071,7 @@
 }
 
 .micModal {
-  background: rgba(30, 41, 59, 0.98);
+  background: rgba(30, 58, 95, 0.98);
   backdrop-filter: blur(40px) saturate(150%);
   -webkit-backdrop-filter: blur(40px) saturate(150%);
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -2148,7 +2148,7 @@
 }
 
 .micModalTitle svg {
-  color: #60a5fa;
+  color: #7dd3fc;
 }
 
 .micModalTitle h3 {
@@ -2196,8 +2196,8 @@
   align-items: center;
   gap: 0.75rem;
   padding: 1rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 0.875rem;
   margin-bottom: 1.25rem;
 }
@@ -2208,9 +2208,9 @@
   justify-content: center;
   width: 2.5rem;
   height: 2.5rem;
-  background: rgba(59, 130, 246, 0.2);
+  background: rgba(96, 165, 250, 0.2);
   border-radius: 0.625rem;
-  color: #60a5fa;
+  color: #7dd3fc;
   flex-shrink: 0;
 }
 
@@ -2221,7 +2221,7 @@
 
 .currentMicLabel {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   margin-bottom: 0.25rem;
 }
 
@@ -2242,7 +2242,7 @@
 .micListLabel {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #a5b4c6;
   margin-bottom: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -2275,12 +2275,12 @@
 }
 
 .micItem.selected {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(96, 165, 250, 0.15);
+  border-color: rgba(96, 165, 250, 0.4);
 }
 
 .micItem.selected:hover {
-  background: rgba(59, 130, 246, 0.2);
+  background: rgba(96, 165, 250, 0.2);
 }
 
 .micItemIcon {
@@ -2291,14 +2291,14 @@
   height: 2.5rem;
   background: rgba(148, 163, 184, 0.1);
   border-radius: 0.625rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   flex-shrink: 0;
   transition: all 0.2s;
 }
 
 .micItem.selected .micItemIcon {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.2);
+  color: #7dd3fc;
 }
 
 .micItem.external .micItemIcon {
@@ -2340,9 +2340,9 @@
 }
 
 .micBadge.default {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.15);
+  color: #7dd3fc;
+  border: 1px solid rgba(96, 165, 250, 0.3);
 }
 
 .micBadge.external {
@@ -2357,7 +2357,7 @@
   justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
-  color: #60a5fa;
+  color: #7dd3fc;
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -2426,7 +2426,7 @@
 
 .externalMicModeDesc {
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   line-height: 1.4;
 }
 
@@ -2469,7 +2469,7 @@
   justify-content: center;
   padding: 2rem;
   text-align: center;
-  color: #94a3b8;
+  color: #a5b4c6;
 }
 
 .emptyMicList svg {
@@ -2494,7 +2494,7 @@
   justify-content: center;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 0.75rem;
   color: #cbd5e1;
@@ -2506,7 +2506,7 @@
 }
 
 .micSelectButton:hover {
-  background: rgba(30, 41, 59, 0.8);
+  background: rgba(30, 58, 95, 0.8);
   border-color: rgba(148, 163, 184, 0.3);
 }
 
@@ -2539,7 +2539,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #94a3b8;
+  color: #a5b4c6;
 }
 
 /* ===== New Simplified Modal Styles ===== */
@@ -2574,14 +2574,14 @@
 }
 
 .presetCardActive {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: rgba(96, 165, 250, 0.15);
+  border-color: rgba(96, 165, 250, 0.5);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
 }
 
 .presetCardActive:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.6);
 }
 
 .presetIcon {
@@ -2597,7 +2597,7 @@
 
 .presetDesc {
   font-size: 0.6875rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   line-height: 1.2;
 }
 
@@ -2686,12 +2686,12 @@
 }
 
 .languageCheckbox input[type="checkbox"]:hover {
-  border-color: rgba(59, 130, 246, 0.6);
+  border-color: rgba(96, 165, 250, 0.6);
 }
 
 .languageCheckbox input[type="checkbox"]:checked {
   background: #3b82f6;
-  border-color: #3b82f6;
+  border-color: #60a5fa;
 }
 
 .languageCheckbox input[type="checkbox"]:checked::after {
@@ -2759,12 +2759,12 @@
 }
 
 .checkboxLabel input[type="checkbox"]:hover {
-  border-color: rgba(59, 130, 246, 0.6);
+  border-color: rgba(96, 165, 250, 0.6);
 }
 
 .checkboxLabel input[type="checkbox"]:checked {
   background: #3b82f6;
-  border-color: #3b82f6;
+  border-color: #60a5fa;
 }
 
 .checkboxLabel input[type="checkbox"]:checked::after {
@@ -2805,7 +2805,7 @@
 }
 
 .advancedToggle:hover {
-  color: #94a3b8;
+  color: #a5b4c6;
 }
 
 .advancedToggle span {
@@ -2866,7 +2866,7 @@
 
 .compactInputGroup label {
   font-size: 0.8125rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -2884,8 +2884,8 @@
 
 .compactInput:focus {
   outline: none;
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  border-color: #7dd3fc;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.15);
 }
 
 /* Mobile adjustments */
@@ -2955,7 +2955,7 @@
 
 .debugHint {
   font-size: 0.6875rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-weight: 500;
 }
 
@@ -3230,7 +3230,7 @@
 
 .mobileTranslation {
   flex: 1;
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1rem;
@@ -3274,10 +3274,10 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 9999px;
-  color: #94a3b8;
+  color: #a5b4c6;
   font-size: 0.875rem;
   font-weight: 500;
 }
@@ -3300,7 +3300,7 @@
 .rightPanel {
   display: flex;
   flex-direction: column;
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1.25rem;
@@ -3310,7 +3310,7 @@
 
 /* ===== ROOM INFO CARD ===== */
 .roomInfoCard {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 1rem;
@@ -3336,10 +3336,10 @@
   align-items: center;
   gap: 0.375rem;
   padding: 0.375rem 0.75rem;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(96, 165, 250, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 9999px;
-  color: #60a5fa;
+  color: #7dd3fc;
   font-size: 0.875rem;
   font-weight: 600;
 }
@@ -3358,7 +3358,7 @@
 
 .roomCodeLabel {
   font-size: 0.625rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-weight: 600;
@@ -3384,17 +3384,17 @@
   justify-content: center;
   width: 2.5rem;
   height: 2.5rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.2);
   border-radius: 0.5rem;
-  color: #60a5fa;
+  color: #7dd3fc;
   transition: all 0.2s;
   cursor: pointer;
 }
 
 .actionIconBtn:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
   transform: translateY(-2px);
 }
 
@@ -3544,7 +3544,7 @@
 
 /* ===== AUDIO LEVEL METER (Desktop) ===== */
 .audioLevel {
-  background: rgba(30, 41, 59, 0.6);
+  background: rgba(30, 58, 95, 0.6);
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 0.75rem;
   padding: 1rem;
@@ -3570,7 +3570,7 @@
 .audioLevelPercent {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #a5b4c6;
 }
 
 .audioLevelBar {
@@ -3641,7 +3641,7 @@
   background: rgba(148, 163, 184, 0.1);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 0.5rem;
-  color: #94a3b8;
+  color: #a5b4c6;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -3653,14 +3653,14 @@
 }
 
 .autoScrollBtn.active {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.3);
-  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.15);
+  border-color: rgba(96, 165, 250, 0.3);
+  color: #7dd3fc;
 }
 
 .autoScrollBtn.active:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(96, 165, 250, 0.25);
+  border-color: rgba(96, 165, 250, 0.5);
 }
 
 /* ===== TRANSLATION TEXT STYLES ===== */
@@ -3673,7 +3673,7 @@
 }
 
 .translatedText {
-  color: #94a3b8;
+  color: #a5b4c6;
   font-size: 1rem;
   font-style: italic;
   line-height: 1.6;

@@ -327,7 +327,7 @@ export class TranslationManager {
   }
 
   /**
-   * 정리
+   * 정리 (개선: 대기 시간 단축, 강제 종료 경고)
    */
   async cleanup(): Promise<void> {
     if (this.batchTimer) {
@@ -335,24 +335,33 @@ export class TranslationManager {
       this.batchTimer = null;
     }
 
-    // 남은 번역 큐 처리
-    if (this.translationQueue.length > 0) {
-      const maxWaitTime = 10000;
-      const startTime = Date.now();
+    // 남은 번역 큐 처리 (대기 시간 단축: 10초 → 5초)
+    const maxWaitTime = 5000;
+    const startTime = Date.now();
 
+    if (this.translationQueue.length > 0) {
+      // 처리 중인 작업 완료 대기
       while (this.isProcessing && (Date.now() - startTime) < maxWaitTime) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
 
+      // 남은 큐 처리
       if (!this.isProcessing && this.translationQueue.length > 0) {
         await this.processTranslationBatch();
       }
 
+      // 처리 완료 대기
       while (this.isProcessing && (Date.now() - startTime) < maxWaitTime) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
 
+    // 강제 종료 경고
+    if (this.isProcessing) {
+      console.warn(`[TranslationManager][${this.config.roomId}] Cleanup timeout - forcing shutdown`);
+    }
+
+    // 상태 초기화
     this.contextBuffer = [];
     this.translationQueue = [];
     this.summary = '';

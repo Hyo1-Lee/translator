@@ -237,6 +237,317 @@ export function formatGlossary(glossary: Record<string, string>): string {
 }
 
 /**
+ * 언어 코드 → 언어 이름 (영어)
+ */
+function getLanguageName(code: string): string {
+  const languageNames: Record<string, string> = {
+    ko: 'Korean',
+    en: 'English',
+    ja: 'Japanese',
+    zh: 'Simplified Chinese',
+    'zh-TW': 'Traditional Chinese',
+    es: 'Spanish',
+    fr: 'French',
+    de: 'German',
+    ru: 'Russian',
+    ar: 'Arabic',
+    pt: 'Portuguese',
+    vi: 'Vietnamese',
+    th: 'Thai',
+    id: 'Indonesian',
+    hi: 'Hindi',
+    ur: 'Urdu',
+  };
+
+  return languageNames[code] || code;
+}
+
+/**
+ * 언어 코드 → 네이티브 이름 (해당 언어로)
+ */
+function getNativeLanguageName(code: string): string {
+  const nativeNames: Record<string, string> = {
+    ko: '한국어',
+    en: 'English',
+    ja: '日本語',
+    zh: '简体中文',
+    'zh-TW': '繁體中文',
+    es: 'español',
+    fr: 'français',
+    de: 'Deutsch',
+    ru: 'русский',
+    ar: 'العربية',
+    pt: 'português',
+    vi: 'tiếng Việt',
+    th: 'ภาษาไทย',
+    id: 'bahasa Indonesia',
+    hi: 'हिन्दी',
+    ur: 'اردو',
+  };
+
+  return nativeNames[code] || code;
+}
+
+/**
+ * 언어별 종교 용어 매핑 (LDS 교회)
+ * 주요 종교 용어의 각 언어별 공식/적절한 번역
+ */
+const LDS_TERMS_BY_LANGUAGE: Record<string, Record<string, string>> = {
+  en: {
+    'Savior': 'Savior',
+    'Atonement': 'Atonement',
+    'prophet': 'prophet',
+    'apostle': 'apostle',
+    'testimony': 'testimony',
+    'Holy Ghost': 'Holy Ghost',
+    'temple': 'temple',
+    'priesthood': 'priesthood',
+    'repentance': 'repentance',
+    'authority': 'authority',
+    'sinner': 'sinner',
+    'gospel': 'gospel',
+    'chapter': 'chapter',
+    'verse': 'verse',
+  },
+  ja: {
+    'Savior': '救い主',
+    'Atonement': '贖い',
+    'prophet': '預言者',
+    'apostle': '使徒',
+    'testimony': '証',
+    'Holy Ghost': '聖霊',
+    'temple': '神殿',
+    'priesthood': '神権',
+    'repentance': '悔い改め',
+    'authority': '権能',
+    'sinner': '罪人',
+    'gospel': '福音',
+    'chapter': '章',
+    'verse': '節',
+  },
+  zh: {
+    'Savior': '救主',
+    'Atonement': '赎罪',
+    'prophet': '先知',
+    'apostle': '使徒',
+    'testimony': '见证',
+    'Holy Ghost': '圣灵',
+    'temple': '圣殿',
+    'priesthood': '圣职',
+    'repentance': '悔改',
+    'authority': '权柄',
+    'sinner': '罪人',
+    'gospel': '福音',
+    'chapter': '章',
+    'verse': '节',
+  },
+  'zh-TW': {
+    'Savior': '救主',
+    'Atonement': '贖罪',
+    'prophet': '先知',
+    'apostle': '使徒',
+    'testimony': '見證',
+    'Holy Ghost': '聖靈',
+    'temple': '聖殿',
+    'priesthood': '聖職',
+    'repentance': '悔改',
+    'authority': '權柄',
+    'sinner': '罪人',
+    'gospel': '福音',
+    'chapter': '章',
+    'verse': '節',
+  },
+  es: {
+    'Savior': 'Salvador',
+    'Atonement': 'Expiación',
+    'prophet': 'profeta',
+    'apostle': 'apóstol',
+    'testimony': 'testimonio',
+    'Holy Ghost': 'Espíritu Santo',
+    'temple': 'templo',
+    'priesthood': 'sacerdocio',
+    'repentance': 'arrepentimiento',
+    'authority': 'autoridad',
+    'sinner': 'pecador',
+    'gospel': 'evangelio',
+    'chapter': 'capítulo',
+    'verse': 'versículo',
+  },
+  fr: {
+    'Savior': 'Sauveur',
+    'Atonement': 'Expiation',
+    'prophet': 'prophète',
+    'apostle': 'apôtre',
+    'testimony': 'témoignage',
+    'Holy Ghost': 'Saint-Esprit',
+    'temple': 'temple',
+    'priesthood': 'prêtrise',
+    'repentance': 'repentir',
+    'authority': 'autorité',
+    'sinner': 'pécheur',
+    'gospel': 'Évangile',
+    'chapter': 'chapitre',
+    'verse': 'verset',
+  },
+  de: {
+    'Savior': 'Erretter',
+    'Atonement': 'Sühnopfer',
+    'prophet': 'Prophet',
+    'apostle': 'Apostel',
+    'testimony': 'Zeugnis',
+    'Holy Ghost': 'Heiliger Geist',
+    'temple': 'Tempel',
+    'priesthood': 'Priestertum',
+    'repentance': 'Umkehr',
+    'authority': 'Vollmacht',
+    'sinner': 'Sünder',
+    'gospel': 'Evangelium',
+    'chapter': 'Kapitel',
+    'verse': 'Vers',
+  },
+  ru: {
+    'Savior': 'Спаситель',
+    'Atonement': 'Искупление',
+    'prophet': 'пророк',
+    'apostle': 'Апостол',
+    'testimony': 'свидетельство',
+    'Holy Ghost': 'Святой Дух',
+    'temple': 'храм',
+    'priesthood': 'священство',
+    'repentance': 'покаяние',
+    'authority': 'власть',
+    'sinner': 'грешник',
+    'gospel': 'Евангелие',
+    'chapter': 'глава',
+    'verse': 'стих',
+  },
+  ar: {
+    'Savior': 'المُخَلِّص',
+    'Atonement': 'الكفارة',
+    'prophet': 'نبي',
+    'apostle': 'رسول',
+    'testimony': 'شهادة',
+    'Holy Ghost': 'الروح القدس',
+    'temple': 'الهيكل',
+    'priesthood': 'الكهنوت',
+    'repentance': 'التوبة',
+    'authority': 'السلطة',
+    'sinner': 'خاطئ',
+    'gospel': 'الإنجيل',
+    'chapter': 'الفصل',
+    'verse': 'الآية',
+  },
+  pt: {
+    'Savior': 'Salvador',
+    'Atonement': 'Expiação',
+    'prophet': 'profeta',
+    'apostle': 'apóstolo',
+    'testimony': 'testemunho',
+    'Holy Ghost': 'Espírito Santo',
+    'temple': 'templo',
+    'priesthood': 'sacerdócio',
+    'repentance': 'arrependimento',
+    'authority': 'autoridade',
+    'sinner': 'pecador',
+    'gospel': 'evangelho',
+    'chapter': 'capítulo',
+    'verse': 'versículo',
+  },
+  vi: {
+    'Savior': 'Đấng Cứu Rỗi',
+    'Atonement': 'Sự Chuộc Tội',
+    'prophet': 'tiên tri',
+    'apostle': 'sứ đồ',
+    'testimony': 'chứng ngôn',
+    'Holy Ghost': 'Đức Thánh Linh',
+    'temple': 'đền thờ',
+    'priesthood': 'chức tư tế',
+    'repentance': 'sự hối cải',
+    'authority': 'thẩm quyền',
+    'sinner': 'tội nhân',
+    'gospel': 'phúc âm',
+    'chapter': 'chương',
+    'verse': 'câu',
+  },
+  th: {
+    'Savior': 'พระผู้ช่วยให้รอด',
+    'Atonement': 'การชดใช้',
+    'prophet': 'ศาสดาพยากรณ์',
+    'apostle': 'อัครสาวก',
+    'testimony': 'ประจักษ์พยาน',
+    'Holy Ghost': 'พระวิญญาณบริสุทธิ์',
+    'temple': 'พระวิหาร',
+    'priesthood': 'ฐานะปุโรหิต',
+    'repentance': 'การกลับใจ',
+    'authority': 'สิทธิอำนาจ',
+    'sinner': 'คนบาป',
+    'gospel': 'พระกิตติคุณ',
+    'chapter': 'บท',
+    'verse': 'ข้อ',
+  },
+  id: {
+    'Savior': 'Juruselamat',
+    'Atonement': 'Penebusan',
+    'prophet': 'nabi',
+    'apostle': 'rasul',
+    'testimony': 'kesaksian',
+    'Holy Ghost': 'Roh Kudus',
+    'temple': 'bait suci',
+    'priesthood': 'imamat',
+    'repentance': 'pertobatan',
+    'authority': 'wewenang',
+    'sinner': 'pendosa',
+    'gospel': 'Injil',
+    'chapter': 'pasal',
+    'verse': 'ayat',
+  },
+  hi: {
+    'Savior': 'उद्धारकर्ता',
+    'Atonement': 'प्रायश्चित',
+    'prophet': 'भविष्यवक्ता',
+    'apostle': 'प्रेरित',
+    'testimony': 'गवाही',
+    'Holy Ghost': 'पवित्र आत्मा',
+    'temple': 'मंदिर',
+    'priesthood': 'याजकपद',
+    'repentance': 'पश्चाताप',
+    'authority': 'अधिकार',
+    'sinner': 'पापी',
+    'gospel': 'सुसमाचार',
+    'chapter': 'अध्याय',
+    'verse': 'पद',
+  },
+  ur: {
+    'Savior': 'نجات دہندہ',
+    'Atonement': 'کفارہ',
+    'prophet': 'نبی',
+    'apostle': 'رسول',
+    'testimony': 'گواہی',
+    'Holy Ghost': 'روح القدس',
+    'temple': 'ہیکل',
+    'priesthood': 'کہانت',
+    'repentance': 'توبہ',
+    'authority': 'اختیار',
+    'sinner': 'گناہگار',
+    'gospel': 'انجیل',
+    'chapter': 'باب',
+    'verse': 'آیت',
+  },
+};
+
+/**
+ * 해당 언어의 종교 용어 매핑 생성
+ */
+function getReligiousTermsForLanguage(targetLang: string): string {
+  const terms = LDS_TERMS_BY_LANGUAGE[targetLang];
+  if (!terms) return '';
+
+  return Object.entries(terms)
+    .map(([en, local]) => `${en}=${local}`)
+    .join(', ');
+}
+
+/**
  * 동적 프롬프트 생성
  */
 export function buildTranslationPrompt(
@@ -262,155 +573,319 @@ export function buildTranslationPrompt(
 
   const sourceLangName = getLanguageName(sourceLanguage);
   const targetLangName = getLanguageName(targetLanguage);
+  const nativeTargetName = getNativeLanguageName(targetLanguage);
 
-  // LDS Church 특화 프롬프트 (간소화 + 고품질 유지)
+  // LDS Church 특화 프롬프트
   if (preset === 'church') {
-    return `You are an expert ${sourceLangName}-to-${targetLangName} interpreter for The Church of Jesus Christ of Latter-day Saints (LDS/Mormon Church).
+    const religiousTerms = getReligiousTermsForLanguage(targetLanguage);
 
-🏛️ YOUR EXPERTISE: You deeply understand LDS doctrine, scriptures (Book of Mormon, D&C, Pearl of Great Price), prophets (Joseph Smith to Russell M. Nelson), and sacred terminology (Atonement, priesthood, temple, sacrament).
+    return `You are an expert translator for The Church of Jesus Christ of Latter-day Saints.
+Translate ${sourceLangName} to ${targetLangName} (${nativeTargetName}).
 
-⚠️ CRITICAL: STT constantly errors LDS names/terms. Fix them using LDS context when you are CERTAIN.
+CONTEXT: LDS sermon/religious talk
 
-${Object.keys(glossary).length > 0 ? `🔑 KEY TERMS:\n${formatGlossary(glossary)}\n` : ''}
+${Object.keys(glossary).length > 0 ? `KOREAN→ENGLISH TERMS:\n${formatGlossary(glossary)}\n` : ''}
+${religiousTerms ? `ENGLISH→${targetLangName.toUpperCase()} TERMS:\n${religiousTerms}\n` : ''}
+STT ERRORS TO FIX: 주작스미스→Joseph Smith, 몰멍평→Book of Mormon, 고주/구주→Savior, 성심→Holy Ghost
 
-🚨 COMMON STT ERRORS - FIX ONLY IF CERTAIN:
-- "주작/조섭 스미스" → "Joseph Smith" (founder)
-- "앨몬/엘마" → "Alma" (prophet)
-- "몰멍평/몰몸경" → "Book of Mormon"
-- "고주/구주" → "Savior"
-- "성심" → "Holy Ghost" (NOT "heart")
-- "성전" → "temple" (NOT "castle")
-
-⚡ CRITICAL OUTPUT RULES:
-1. NEVER add explanations, notes, or commentary in parentheses like "(Note: ...)"
-2. NEVER add meta-text about translation choices
-3. If uncertain about STT correction, translate the text as-is without inferring missing information
-4. Output ONLY the direct translation, nothing else
-5. Do NOT explain why you made certain translation choices
-
-📖 PROCESS:
-1. Read as LDS member
-2. Identify OBVIOUS STT errors using LDS context
-3. Fix ONLY if you are 100% certain (e.g., "구주" is clearly "Savior")
-4. If uncertain or name is too garbled, translate literally without guessing
-5. Translate naturally (${tone})
-6. Output ONLY translation - NO notes, NO explanations
-
-🎯 GOOD EXAMPLES:
-
-Input: "선지자주작스미스"
-Output: "prophet Joseph Smith" ✅
-
-Input: "몰멍평의앨몬이"
-Output: "Alma in the Book of Mormon" ✅
-
-❌ BAD EXAMPLES (DO NOT DO THIS):
-
-Input: "관원님"
-Output: "Heavenly Father (Note: 관원님 is likely a mistranslation...)" ❌ WRONG - NO NOTES!
-Correct: "Heavenly Father" ✅ (if certain) OR "Gwanwonnim" ✅ (if uncertain)
-
-💡 GOLDEN RULE:
-- Fix ONLY obvious errors (구주→Savior, 성전→temple)
-- If name/term is too garbled or uncertain → Translate literally or transliterate
-- NEVER add explanatory notes in your output
-- Output translation ONLY, nothing else
-
-🔗 SENTENCE FLOW - CRITICAL:
-- This is CONTINUOUS SPEECH - sentences often span across segments
-- If Korean ends with comma, conjunction (그리고, 하지만, 그래서), or incomplete ending → English should also NOT end completely
-- If Korean starts mid-sentence (no subject, continues previous thought) → English should flow naturally from previous translation
-- PRESERVE the natural speech flow - do NOT artificially close sentences
+RULES:
+1. Output ONLY in ${nativeTargetName} - NO Korean, English, or other languages mixed in
+2. Translate ALL words including names (Jesus=appropriate translation in ${targetLangName})
+3. Use religious terms from the mapping above
+4. Fix obvious STT errors, translate literally if uncertain
+5. NO notes, explanations, or parenthetical comments
+6. Maintain sentence flow - don't artificially end incomplete sentences
 
 CONTEXT:
 Summary: {summary}
-Recent Korean: {recentContext}
-Previous English translation: {previousTranslation}
+Recent: {recentContext}
+Previous translation: {previousTranslation}
 
-CURRENT TEXT TO TRANSLATE:
+TRANSLATE TO ${targetLangName.toUpperCase()}:
 {currentText}
 
-YOUR TRANSLATION (continue naturally from previous translation if applicable, no notes):`;
+OUTPUT (${nativeTargetName} only):`;
   }
 
-  // 일반 프롬프트 (다른 preset들)
-  return `You are an expert ${sourceLangName}-to-${targetLangName} interpreter.
+  // 일반 프롬프트
+  return `Translate ${sourceLangName} to ${targetLangName} (${nativeTargetName}).
 
 CONTEXT: ${environment}
 
-TASK: Translate the current segment, fixing ONLY obvious STT errors and maintaining context.
-
-${Object.keys(glossary).length > 0 ? `KEY TERMS:\n${formatGlossary(glossary)}\n` : ''}
-🔗 SENTENCE FLOW - CRITICAL:
-- This is CONTINUOUS SPEECH from real-time STT
-- Sentences often span across segments - DO NOT artificially end sentences
-- If Korean ends with comma or conjunction → English should also continue
-- If Korean starts mid-sentence → continue naturally from previous English
-
-CRITICAL RULES:
-1. Fix ONLY obvious STT errors using context
-2. Maintain ${tone} tone
-3. Translate concisely and faithfully to the source
-4. NEVER add explanatory notes, comments, or meta-text like "(Note: ...)"
-5. NEVER add parenthetical explanations about translation choices
-6. If uncertain about a word, translate it literally or transliterate it - DO NOT infer or guess
-7. Output ONLY the direct translation, nothing else
-8. PRESERVE sentence flow - if source doesn't end, translation shouldn't end either
+${Object.keys(glossary).length > 0 ? `KEY TERMS: ${formatGlossary(glossary)}\n` : ''}
+RULES:
+1. Output ONLY in ${nativeTargetName} - NO source language or other languages
+2. Translate ALL words completely
+3. Fix obvious STT errors, translate literally if uncertain
+4. Maintain ${tone} tone
+5. NO notes or explanations
+6. Preserve sentence flow
 
 CONTEXT:
 Summary: {summary}
-Recent Korean: {recentContext}
-Previous English translation: {previousTranslation}
+Recent: {recentContext}
+Previous: {previousTranslation}
 
-CURRENT TEXT TO TRANSLATE:
+TRANSLATE:
 {currentText}
 
-YOUR TRANSLATION (continue naturally from previous translation if applicable):`;
+OUTPUT (${nativeTargetName} only):`;
 }
 
 /**
- * 언어 코드 → 언어 이름
+ * Few-shot 예제 (언어별)
+ * 품질 향상의 핵심 - LLM이 정확한 번역 패턴을 학습
  */
-function getLanguageName(code: string): string {
-  const languageNames: Record<string, string> = {
-    ko: 'Korean',
-    en: 'English',
-    ja: 'Japanese',
-    zh: 'Chinese',
-    'zh-TW': 'Traditional Chinese',
-    es: 'Spanish',
-    fr: 'French',
-    de: 'German',
-    ru: 'Russian',
-    ar: 'Arabic',
-    pt: 'Portuguese',
-    vi: 'Vietnamese',
-    th: 'Thai',
-    id: 'Indonesian',
-    hi: 'Hindi',
-    ur: 'Urdu',
-  };
-
-  return languageNames[code] || code;
-}
-
-/**
- * 언어별 출력 지침 (다국어 LLM 번역용)
- */
-export const OUTPUT_INSTRUCTIONS: Record<string, string> = {
-  en: 'Output in natural English.',
-  ja: 'Output in natural Japanese. Use appropriate keigo (敬語) for formal speech.',
-  zh: 'Output in Simplified Chinese (简体中文).',
-  'zh-TW': 'Output in Traditional Chinese (繁體中文).',
-  es: 'Output in natural Spanish. Use appropriate formal/informal address (tú/usted) based on context.',
-  fr: 'Output in natural French. Use appropriate formal/informal address (tu/vous) based on context.',
-  de: 'Output in natural German. Use appropriate formal/informal address (Sie/du) based on context. Capitalize nouns properly.',
-  ru: 'Output in natural Russian. Use appropriate formal/informal address (вы/ты) based on context.',
-  ar: 'Output in Modern Standard Arabic (الفصحى).',
-  pt: 'Output in Brazilian Portuguese.',
-  vi: 'Output in natural Vietnamese with proper diacritics (dấu).',
-  th: 'Output in natural Thai with appropriate script and tone marks.',
-  id: 'Output in standard Indonesian (Bahasa Indonesia).',
-  hi: 'Output in natural Hindi using Devanagari script (देवनागरी).',
-  ur: 'Output in natural Urdu using Arabic script.',
+export const FEW_SHOT_EXAMPLES: Record<string, Array<{ korean: string; translation: string }>> = {
+  en: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'The Savior said in Alma chapter 9 that sinners can also be saved through mercy.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'The prophet Joseph Smith testified by the power of the Holy Ghost.' },
+  ],
+  ja: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: '救い主はアルマ書第9章で、罪人も憐れみによって救われると言われました。' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: '預言者ジョセフ・スミスは聖霊の力によって証しました。' },
+  ],
+  zh: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: '救主在阿尔玛书第9章说，罪人也可以通过慈悲得救。' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: '先知约瑟·斯密以圣灵的能力作见证。' },
+  ],
+  'zh-TW': [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: '救主在阿爾瑪書第9章說，罪人也可以通過慈悲得救。' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: '先知約瑟·斯密以聖靈的能力作見證。' },
+  ],
+  ur: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'نجات دہندہ نے المہ باب 9 میں فرمایا کہ گناہگار بھی رحم سے بچائے جا سکتے ہیں۔' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'نبی جوزف سمتھ نے روح القدس کی طاقت سے گواہی دی۔' },
+  ],
+  ar: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'قال المُخَلِّص في ألما الفصل 9 أن الخاطئين يمكن أن يخلصوا أيضًا بالرحمة.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'شهد النبي جوزيف سميث بقوة الروح القدس.' },
+  ],
+  hi: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'उद्धारकर्ता ने अलमा अध्याय 9 में कहा कि पापी भी दया से बचाए जा सकते हैं।' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'भविष्यवक्ता जोसेफ स्मिथ ने पवित्र आत्मा की शक्ति से गवाही दी।' },
+  ],
+  es: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'El Salvador dijo en Alma capítulo 9 que los pecadores también pueden ser salvados por la misericordia.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'El profeta José Smith testificó por el poder del Espíritu Santo.' },
+  ],
+  fr: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'Le Sauveur a dit dans Alma chapitre 9 que les pécheurs peuvent aussi être sauvés par la miséricorde.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'Le prophète Joseph Smith a témoigné par le pouvoir du Saint-Esprit.' },
+  ],
+  de: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'Der Erretter sagte in Alma Kapitel 9, dass Sünder auch durch Barmherzigkeit gerettet werden können.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'Der Prophet Joseph Smith gab durch die Macht des Heiligen Geistes Zeugnis.' },
+  ],
+  ru: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'Спаситель сказал в Алме глава 9, что грешники тоже могут быть спасены через милость.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'Пророк Джозеф Смит свидетельствовал силой Святого Духа.' },
+  ],
+  pt: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'O Salvador disse em Alma capítulo 9 que os pecadores também podem ser salvos pela misericórdia.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'O profeta Joseph Smith testificou pelo poder do Espírito Santo.' },
+  ],
+  vi: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'Đấng Cứu Rỗi đã nói trong An Ma chương 9 rằng tội nhân cũng có thể được cứu bởi lòng thương xót.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'Tiên tri Joseph Smith đã làm chứng bởi quyền năng của Đức Thánh Linh.' },
+  ],
+  th: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'พระผู้ช่วยให้รอดตรัสในแอลมาบท 9 ว่าคนบาปก็สามารถได้รับการช่วยให้รอดโดยความเมตตา' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'ศาสดาพยากรณ์โจเซฟ สมิธเป็นพยานโดยอำนาจของพระวิญญาณบริสุทธิ์' },
+  ],
+  id: [
+    { korean: '구주께서는 앨마서 9장에서 죄인들도 자비로 구원받을 수 있다고 말씀하셨습니다.', translation: 'Juruselamat berkata dalam Alma pasal 9 bahwa orang berdosa juga dapat diselamatkan melalui belas kasihan.' },
+    { korean: '선지자 조셉 스미스는 성신의 권능으로 간증했습니다.', translation: 'Nabi Joseph Smith bersaksi dengan kuasa Roh Kudus.' },
+  ],
 };
+
+/**
+ * 시스템 프롬프트 (역할 정의)
+ * user 메시지와 분리하여 더 나은 성능
+ */
+export function buildSystemPrompt(
+  targetLanguage: string,
+  preset: EnvironmentPreset
+): string {
+  const targetLangName = getLanguageName(targetLanguage);
+  const nativeTargetName = getNativeLanguageName(targetLanguage);
+  const religiousTerms = getReligiousTermsForLanguage(targetLanguage);
+
+  if (preset === 'church') {
+    return `You are an expert translator for The Church of Jesus Christ of Latter-day Saints.
+Your task: Translate Korean to ${targetLangName} (${nativeTargetName}).
+
+ABSOLUTE RULES:
+1. Output ONLY in ${nativeTargetName} - ZERO tolerance for Korean/English/other languages
+2. Translate EVERY word including proper names
+3. Use these religious terms: ${religiousTerms}
+4. Fix STT errors (주작스미스→Joseph Smith, 몰멍평→Book of Mormon, 고주→Savior)
+5. NO explanations, notes, or parenthetical comments
+6. Output the translation directly, nothing else`;
+  }
+
+  return `You are a professional translator.
+Your task: Translate Korean to ${targetLangName} (${nativeTargetName}).
+
+RULES:
+1. Output ONLY in ${nativeTargetName} - no source language
+2. Translate ALL words completely
+3. NO notes or explanations
+4. Output the translation directly`;
+}
+
+/**
+ * 사용자 프롬프트 (번역할 내용)
+ */
+export function buildUserPrompt(
+  currentText: string,
+  targetLanguage: string,
+  summary?: string,
+  recentContext?: string,
+  previousTranslation?: string
+): string {
+  const examples = FEW_SHOT_EXAMPLES[targetLanguage] || FEW_SHOT_EXAMPLES['en'];
+  const nativeTargetName = getNativeLanguageName(targetLanguage);
+
+  let prompt = '';
+
+  // Few-shot 예제 추가
+  if (examples && examples.length > 0) {
+    prompt += `EXAMPLES:\n`;
+    examples.forEach((ex, i) => {
+      prompt += `Korean: ${ex.korean}\n${nativeTargetName}: ${ex.translation}\n\n`;
+    });
+  }
+
+  // 컨텍스트 (있을 경우에만)
+  if (summary || recentContext || previousTranslation) {
+    prompt += `CONTEXT:\n`;
+    if (summary) prompt += `Topic: ${summary}\n`;
+    if (previousTranslation) prompt += `Previous: ${previousTranslation}\n`;
+    prompt += `\n`;
+  }
+
+  // 번역할 텍스트
+  prompt += `NOW TRANSLATE THIS:\nKorean: ${currentText}\n${nativeTargetName}:`;
+
+  return prompt;
+}
+
+/**
+ * 힌디어→우르두어 문자 변환 맵
+ * 힌디어와 우르두어는 동일 언어의 다른 문자 체계 (데바나가리 vs 아랍 문자)
+ */
+const HINDI_TO_URDU_MAP: Record<string, string> = {
+  // 종교 용어
+  'सचाई': 'سچائی',         // 진리
+  'सच्चाई': 'سچائی',       // 진리 (변형)
+  'भगवान': 'خدا',          // 신
+  'प्रभु': 'خداوند',        // 주님
+  'ईश्वर': 'خدا',          // 신 (변형)
+  'प्रार्थना': 'دعا',       // 기도
+  'आशीर्वाद': 'برکت',      // 축복
+  'पाप': 'گناہ',           // 죄
+  'पापी': 'گناہگار',        // 죄인
+  'क्षमा': 'معافی',         // 용서
+  'दया': 'رحم',            // 자비
+  'विश्वास': 'ایمان',       // 믿음
+  'आत्मा': 'روح',          // 영혼
+  'स्वर्ग': 'جنت',         // 천국
+  'नरक': 'جہنم',           // 지옥
+  'पवित्र': 'مقدس',        // 성스러운
+  'शांति': 'امن',          // 평화
+  'प्रेम': 'محبت',          // 사랑
+  'सेवा': 'خدمت',          // 봉사
+  'धर्म': 'مذہب',          // 종교
+  // LDS 특화 용어
+  'उद्धारकर्ता': 'نجات دہندہ',  // 구주
+  'प्रायश्चित': 'کفارہ',       // 속죄
+  'भविष्यवक्ता': 'نبی',        // 선지자
+  'प्रेरित': 'رسول',           // 사도
+  'गवाही': 'گواہی',            // 간증
+  'पवित्र आत्मा': 'روح القدس', // 성신
+  'मंदिर': 'ہیکل',             // 성전
+  'याजकपद': 'کہانت',          // 신권
+  'पश्चाताप': 'توبہ',          // 회개
+  'अधिकार': 'اختیار',          // 권능
+  'सुसमाचार': 'انجیل',         // 복음
+  'अध्याय': 'باب',             // 장
+  'पद': 'آیت',                 // 절
+};
+
+/**
+ * 힌디어 문자를 우르두어 문자로 변환
+ * @param text 힌디어가 포함된 텍스트
+ * @returns 우르두어로 변환된 텍스트
+ */
+export function convertHindiToUrdu(text: string): string {
+  let result = text;
+  for (const [hindi, urdu] of Object.entries(HINDI_TO_URDU_MAP)) {
+    result = result.replace(new RegExp(hindi, 'g'), urdu);
+  }
+  return result;
+}
+
+/**
+ * 혼합 언어 감지 (후처리용)
+ * 한국어/일본어/중국어 문자가 부적절하게 남아있는지 확인
+ */
+export function detectMixedLanguage(
+  text: string,
+  targetLanguage: string
+): { hasMixedLanguage: boolean; detectedPatterns: string[] } {
+  const detectedPatterns: string[] = [];
+
+  // 한글 감지 (모든 비한국어 타겟에서)
+  if (targetLanguage !== 'ko') {
+    const koreanPattern = /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]/g;
+    const koreanMatches = text.match(koreanPattern);
+    if (koreanMatches && koreanMatches.length > 0) {
+      detectedPatterns.push(`Korean: ${koreanMatches.slice(0, 5).join('')}`);
+    }
+  }
+
+  // 영어 단어 감지 (비라틴 문자 타겟에서)
+  const nonLatinTargets = ['ja', 'zh', 'zh-TW', 'ar', 'hi', 'ur', 'th', 'ru'];
+  if (nonLatinTargets.includes(targetLanguage)) {
+    // 일반 영어 단어 (종교 고유명사 제외)
+    const englishPattern = /\b(?!(?:Joseph|Smith|Alma|Nephi|Moroni|Jesus|Christ|LDS|Mormon)\b)[A-Za-z]{4,}\b/g;
+    const englishMatches = text.match(englishPattern);
+    if (englishMatches && englishMatches.length > 0) {
+      detectedPatterns.push(`English: ${englishMatches.slice(0, 3).join(', ')}`);
+    }
+  }
+
+  // 일본어/중국어 문자 감지 (해당 언어가 아닌 경우)
+  if (!['ja', 'zh', 'zh-TW'].includes(targetLanguage)) {
+    // 히라가나/가타카나 (일본어 전용)
+    const japanesePattern = /[\u3040-\u309F\u30A0-\u30FF]/g;
+    const japaneseMatches = text.match(japanesePattern);
+    if (japaneseMatches && japaneseMatches.length > 2) {
+      detectedPatterns.push(`Japanese: ${japaneseMatches.slice(0, 5).join('')}`);
+    }
+  }
+
+  // 데바나가리 문자 감지 (우르두어 타겟에서 - 힌디어 문자가 잘못 포함된 경우)
+  if (targetLanguage === 'ur') {
+    const devanagariPattern = /[\u0900-\u097F]/g;
+    const devanagariMatches = text.match(devanagariPattern);
+    if (devanagariMatches && devanagariMatches.length > 0) {
+      detectedPatterns.push(`Hindi: ${devanagariMatches.slice(0, 5).join('')}`);
+    }
+  }
+
+  // 아랍 문자 감지 (힌디어 타겟에서 - 우르두어/아랍 문자가 잘못 포함된 경우)
+  if (targetLanguage === 'hi') {
+    const arabicPattern = /[\u0600-\u06FF\u0750-\u077F]/g;
+    const arabicMatches = text.match(arabicPattern);
+    if (arabicMatches && arabicMatches.length > 0) {
+      detectedPatterns.push(`Arabic/Urdu: ${arabicMatches.slice(0, 5).join('')}`);
+    }
+  }
+
+  return {
+    hasMixedLanguage: detectedPatterns.length > 0,
+    detectedPatterns
+  };
+}

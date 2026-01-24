@@ -1,5 +1,12 @@
 import OpenAI from 'openai';
-import { buildTranslationPrompt, EnvironmentPreset, OUTPUT_INSTRUCTIONS } from './presets';
+import {
+  buildTranslationPrompt,
+  buildSystemPrompt,
+  buildUserPrompt,
+  detectMixedLanguage,
+  convertHindiToUrdu,
+  EnvironmentPreset
+} from './presets';
 
 interface TranslationConfig {
   apiKey: string;
@@ -73,8 +80,8 @@ export class TranslationService {
             content: `Translate the following Korean text to ${langName}:\n\n${correctedText}`
           }
         ],
-        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
-        temperature: 0.3
+        max_completion_tokens: 800,
+        temperature: 0.1
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
@@ -137,12 +144,16 @@ export class TranslationService {
         model: this.model,
         messages: [
           {
+            role: 'system',
+            content: 'You are an expert translator for The Church of Jesus Christ of Latter-day Saints. Translate Korean to the target language accurately. Output ONLY translations, keeping the [1], [2], [3] numbering format.'
+          },
+          {
             role: 'user',
             content: userPrompt
           }
         ],
-        max_completion_tokens: 2500,  // 최적화: 5000 → 2500 (배치당 ~800 토큰이면 충분)
-        temperature: 0.3
+        max_completion_tokens: 2000,  // 최적화: 배치에 충분
+        temperature: 0.1  // 최적화: 0.3 → 0.1 (일관된 번역)
       });
 
       const fullResponse = response.choices[0]?.message?.content?.trim();
@@ -226,9 +237,10 @@ export class TranslationService {
   }
 
   /**
-   * 프리셋 기반 문맥 번역 (신규)
-   * - 슬라이딩 윈도우 + 요약 기반
-   * - 프리셋 시스템 활용
+   * 프리셋 기반 문맥 번역 (최적화)
+   * - System/User 메시지 분리
+   * - Few-shot 예제
+   * - 혼합 언어 감지
    */
   async translateWithPreset(
     currentText: string,
@@ -242,24 +254,20 @@ export class TranslationService {
     previousTranslation?: string
   ): Promise<string | null> {
     try {
-      // ⚡ STT 오류 사전 보정 (LLM 호출 전에 정규식으로 빠르게 처리)
+      // ⚡ STT 오류 사전 보정
       const correctedText = await this.correctSttErrors(currentText);
 
-      // 프리셋 기반 프롬프트 생성
-      const systemPrompt = buildTranslationPrompt(
-        sourceLanguage,
-        targetLanguage,
-        environmentPreset,
-        customEnvironmentDescription,
-        customGlossary
-      );
+      // System 프롬프트 (역할 정의)
+      const systemPrompt = buildSystemPrompt(targetLanguage, environmentPreset);
 
-      // 컨텍스트 변수 치환 (correctedText 사용!)
-      const userPrompt = systemPrompt
-        .replace('{summary}', summary || '(No summary yet)')
-        .replace('{recentContext}', recentContext || '(No recent context)')
-        .replace('{previousTranslation}', previousTranslation || '(This is the first segment)')
-        .replace('{currentText}', correctedText);
+      // User 프롬프트 (Few-shot + 번역할 텍스트)
+      const userPrompt = buildUserPrompt(
+        correctedText,
+        targetLanguage,
+        summary,
+        recentContext,
+        previousTranslation
+      );
 
       const client = this.getClient();
 
@@ -267,16 +275,29 @@ export class TranslationService {
         model: this.model,
         messages: [
           {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
             role: 'user',
             content: userPrompt
           }
         ],
-        max_completion_tokens: 1500,  // 최적화: 3000 → 1500 (단일 문장에 충분)
-        temperature: 0.3  // 일관성 있는 번역을 위해 낮은 temperature
+        max_completion_tokens: 800,
+        temperature: 0.1
       });
 
-      const translation = response.choices[0]?.message?.content?.trim();
-      return translation || null;
+      let translation = response.choices[0]?.message?.content?.trim() || null;
+
+      // 🔍 후처리: 혼합 언어 감지
+      if (translation) {
+        const mixedCheck = detectMixedLanguage(translation, targetLanguage);
+        if (mixedCheck.hasMixedLanguage) {
+          console.warn(`[TranslationService][${targetLanguage}] Mixed language detected: ${mixedCheck.detectedPatterns.join(', ')}`);
+        }
+      }
+
+      return translation;
     } catch (error) {
       console.error('[Translation] Preset-based translation error:', error);
       return null;
@@ -284,9 +305,11 @@ export class TranslationService {
   }
 
   /**
-   * 다국어 LLM 번역 (신규)
-   * - 여러 타겟 언어를 병렬로 번역
-   * - 각 언어별 OUTPUT_INSTRUCTIONS 적용
+   * 🚀 다국어 LLM 번역 (최적화)
+   * - System/User 메시지 분리로 역할 명확화
+   * - Few-shot 예제로 품질 향상
+   * - 낮은 temperature(0.1)로 일관성 확보
+   * - 혼합 언어 감지 후처리
    */
   async translateWithPresetMultiLanguage(
     currentText: string,
@@ -307,25 +330,17 @@ export class TranslationService {
       const translationPromises = targetLanguages.map(async (targetLang) => {
         const previousTranslation = previousTranslations?.[targetLang] || '';
 
-        // 프리셋 기반 프롬프트 생성
-        const systemPrompt = buildTranslationPrompt(
-          sourceLanguage,
+        // System 프롬프트 (역할 정의)
+        const systemPrompt = buildSystemPrompt(targetLang, environmentPreset);
+
+        // User 프롬프트 (Few-shot + 번역할 텍스트)
+        const userPrompt = buildUserPrompt(
+          correctedText,
           targetLang,
-          environmentPreset,
-          customEnvironmentDescription,
-          customGlossary
+          summary,
+          recentContext,
+          previousTranslation
         );
-
-        // 언어별 출력 지침 추가
-        const outputInstruction = OUTPUT_INSTRUCTIONS[targetLang] || `Output in natural ${targetLang}.`;
-
-        // 컨텍스트 변수 치환
-        const userPrompt = systemPrompt
-          .replace('{summary}', summary || '(No summary yet)')
-          .replace('{recentContext}', recentContext || '(No recent context)')
-          .replace('{previousTranslation}', previousTranslation || '(This is the first segment)')
-          .replace('{currentText}', correctedText)
-          + `\n\n${outputInstruction}`;
 
         const client = this.getClient();
 
@@ -333,16 +348,49 @@ export class TranslationService {
           model: this.model,
           messages: [
             {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
               role: 'user',
               content: userPrompt
             }
           ],
-          max_completion_tokens: 1500,
-          temperature: 0.3
+          max_completion_tokens: 800,  // 최적화: 1500 → 800 (단일 문장에 충분)
+          temperature: 0.1  // 최적화: 0.3 → 0.1 (더 일관된 번역)
         });
 
-        const translation = response.choices[0]?.message?.content?.trim();
-        return { lang: targetLang, translation: translation || '' };
+        let translation = response.choices[0]?.message?.content?.trim() || '';
+
+        // 🔍 후처리: 혼합 언어 감지
+        if (translation) {
+          const mixedCheck = detectMixedLanguage(translation, targetLang);
+          if (mixedCheck.hasMixedLanguage) {
+            console.warn(`[TranslationService][${targetLang}] Mixed language detected: ${mixedCheck.detectedPatterns.join(', ')}`);
+            // 재번역 시도 (한 번만)
+            const retryResponse = await client.chat.completions.create({
+              model: this.model,
+              messages: [
+                {
+                  role: 'system',
+                  content: systemPrompt + `\n\nCRITICAL: Your previous output contained mixed languages (${mixedCheck.detectedPatterns.join(', ')}). This time, output ONLY in the target language with ZERO exceptions.`
+                },
+                {
+                  role: 'user',
+                  content: userPrompt
+                }
+              ],
+              max_completion_tokens: 800,
+              temperature: 0.05  // 더 낮은 temperature로 재시도
+            });
+            const retryTranslation = retryResponse.choices[0]?.message?.content?.trim();
+            if (retryTranslation) {
+              translation = retryTranslation;
+            }
+          }
+        }
+
+        return { lang: targetLang, translation };
       });
 
       const results = await Promise.all(translationPromises);
@@ -351,7 +399,14 @@ export class TranslationService {
       const translationsMap: Record<string, string> = {};
       for (const result of results) {
         if (result.translation) {
-          translationsMap[result.lang] = result.translation;
+          let finalTranslation = result.translation;
+
+          // 우르두어 번역 후처리: 힌디어 문자가 잔류한 경우 변환
+          if (result.lang === 'ur') {
+            finalTranslation = convertHindiToUrdu(finalTranslation);
+          }
+
+          translationsMap[result.lang] = finalTranslation;
         }
       }
 
@@ -402,12 +457,16 @@ export class TranslationService {
         model: this.model,
         messages: [
           {
+            role: 'system',
+            content: buildSystemPrompt(targetLanguage, environmentPreset)
+          },
+          {
             role: 'user',
             content: userPrompt
           }
         ],
-        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
-        temperature: 0.3,
+        max_completion_tokens: 800,
+        temperature: 0.1,
         stream: true
       });
 
@@ -508,8 +567,8 @@ OUTPUT REQUIREMENTS:
             content: `Translate this current segment (use context for clarity but translate ONLY this text):\n\n${correctedText}`
           }
         ],
-        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
-        temperature: 0.3
+        max_completion_tokens: 800,
+        temperature: 0.1
       });
 
       const translation = response.choices[0]?.message?.content?.trim();
@@ -962,8 +1021,8 @@ DO NOT:
             content: `Correct this religious speech STT output:\n${basicCorrected}`
           }
         ],
-        max_completion_tokens: 1500,  // 최적화: 3000 → 1500
-        temperature: 0.3
+        max_completion_tokens: 800,
+        temperature: 0.1
       });
 
       return response.choices[0]?.message?.content?.trim() || basicCorrected;

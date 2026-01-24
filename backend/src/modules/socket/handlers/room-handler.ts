@@ -43,17 +43,35 @@ export async function handleCreateRoom(
 
         const previousRoom = await ctx.roomService.getRoomBySpeakerId(socket.id);
         if (previousRoom && previousRoom.roomCode !== existingRoomCode) {
-          console.log(`[Room] Cleaning up old room client: ${previousRoom.roomCode}`);
-          ctx.sttManager.removeClient(previousRoom.roomCode);
-          ctx.audioChunksReceived.delete(previousRoom.roomCode);
+          const oldRoomCode = previousRoom.roomCode;
+          console.log(`[Room] Cleaning up old room client: ${oldRoomCode}`);
+          ctx.sttManager.removeClient(oldRoomCode);
+          ctx.audioChunksReceived.delete(oldRoomCode);
+
+          // TranslationManager cleanup
+          const translationManager = ctx.translationManagers.get(oldRoomCode);
+          if (translationManager) {
+            await translationManager.cleanup();
+            ctx.translationManagers.delete(oldRoomCode);
+          }
+          ctx.sttIdCache.delete(oldRoomCode);
         }
       }
     } else {
       const previousRoom = await ctx.roomService.getRoomBySpeakerId(socket.id);
       if (previousRoom) {
-        console.log(`[Room] Cleaning up previous room client: ${previousRoom.roomCode}`);
-        ctx.sttManager.removeClient(previousRoom.roomCode);
-        ctx.audioChunksReceived.delete(previousRoom.roomCode);
+        const oldRoomCode = previousRoom.roomCode;
+        console.log(`[Room] Cleaning up previous room client: ${oldRoomCode}`);
+        ctx.sttManager.removeClient(oldRoomCode);
+        ctx.audioChunksReceived.delete(oldRoomCode);
+
+        // TranslationManager cleanup
+        const translationManager = ctx.translationManagers.get(oldRoomCode);
+        if (translationManager) {
+          await translationManager.cleanup();
+          ctx.translationManagers.delete(oldRoomCode);
+        }
+        ctx.sttIdCache.delete(oldRoomCode);
       }
     }
 
@@ -299,6 +317,9 @@ export async function handleDisconnect(
 
       ctx.sttIdCache.delete(speakerRoom.roomCode);
       await sessionManager.unregisterSpeakerSocket(speakerRoom.id, socket.id);
+    } else {
+      // 리스너 cleanup
+      await ctx.roomService.removeListener(socket.id);
     }
 
     await ctx.roomService.handleDisconnect(socket.id);
