@@ -17,7 +17,13 @@ export async function handleCreateRoom(
       promptTemplate = 'general',
       customPrompt,
       maxListeners = 100,
-      existingRoomCode
+      existingRoomCode,
+      targetLanguagesArray,  // 스피커가 선택한 번역 언어들
+      sourceLanguage,
+      environmentPreset,
+      customEnvironmentDescription,
+      customGlossary,
+      enableStreaming
     } = data;
 
     let room;
@@ -61,8 +67,22 @@ export async function handleCreateRoom(
         password,
         promptTemplate,
         customPrompt,
-        maxListeners
+        maxListeners,
+        targetLanguages: targetLanguagesArray || ['en']
       });
+
+      // Update additional settings if provided
+      if (room && (sourceLanguage || environmentPreset || customEnvironmentDescription || customGlossary || enableStreaming !== undefined)) {
+        await ctx.roomService.updateRoomSettings(room.roomCode, {
+          sourceLanguage,
+          environmentPreset,
+          customEnvironmentDescription,
+          customGlossary,
+          enableStreaming
+        });
+        // Refresh room data
+        room = await ctx.roomService.getRoom(room.roomCode);
+      }
     }
 
     socket.join(room.roomCode);

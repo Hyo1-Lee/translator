@@ -388,7 +388,29 @@ function getLanguageName(code: string): string {
     th: 'Thai',
     id: 'Indonesian',
     hi: 'Hindi',
+    ur: 'Urdu',
   };
 
   return languageNames[code] || code;
 }
+
+/**
+ * 언어별 출력 지침 (다국어 LLM 번역용)
+ */
+export const OUTPUT_INSTRUCTIONS: Record<string, string> = {
+  en: 'Output in natural English.',
+  ja: 'Output in natural Japanese. Use appropriate keigo (敬語) for formal speech.',
+  zh: 'Output in Simplified Chinese (简体中文).',
+  'zh-TW': 'Output in Traditional Chinese (繁體中文).',
+  es: 'Output in natural Spanish. Use appropriate formal/informal address (tú/usted) based on context.',
+  fr: 'Output in natural French. Use appropriate formal/informal address (tu/vous) based on context.',
+  de: 'Output in natural German. Use appropriate formal/informal address (Sie/du) based on context. Capitalize nouns properly.',
+  ru: 'Output in natural Russian. Use appropriate formal/informal address (вы/ты) based on context.',
+  ar: 'Output in Modern Standard Arabic (الفصحى).',
+  pt: 'Output in Brazilian Portuguese.',
+  vi: 'Output in natural Vietnamese with proper diacritics (dấu).',
+  th: 'Output in natural Thai with appropriate script and tone marks.',
+  id: 'Output in standard Indonesian (Bahasa Indonesia).',
+  hi: 'Output in natural Hindi using Devanagari script (देवनागरी).',
+  ur: 'Output in natural Urdu using Arabic script.',
+};

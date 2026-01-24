@@ -81,9 +81,23 @@ export const SESSION_PRESETS = [
   { value: "general", label: "일반 대화", icon: "💬", description: "일상 대화, 기타" },
 ];
 
-// Target languages
+// Target languages (all supported languages)
 export const TARGET_LANGUAGES = [
   { code: "en", name: "English" },
+  { code: "ja", name: "日本語" },
+  { code: "zh", name: "中文 (简体)" },
+  { code: "zh-TW", name: "繁體中文" },
+  { code: "es", name: "Español" },
+  { code: "fr", name: "Français" },
+  { code: "de", name: "Deutsch" },
+  { code: "ru", name: "Русский" },
+  { code: "ar", name: "العربية" },
+  { code: "pt", name: "Português" },
+  { code: "vi", name: "Tiếng Việt" },
+  { code: "th", name: "ไทย" },
+  { code: "id", name: "Bahasa Indonesia" },
+  { code: "hi", name: "हिन्दी" },
+  { code: "ur", name: "اردو" },
 ];
 
 // Source languages

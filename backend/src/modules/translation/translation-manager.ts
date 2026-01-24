@@ -2,6 +2,8 @@ import { TranslationService } from './translation-service';
 import { AzureTranslateService } from './azure-translate.service';
 import { EnvironmentPreset } from './presets';
 
+// Note: AzureTranslateService is kept for potential fallback but LLM is now primary
+
 /**
  * TranslationManager 설정
  */
@@ -49,7 +51,7 @@ export class TranslationManager {
   private contextBuffer: string[] = [];      // LLM 문맥용 (최근 문장들)
   private summary: string = '';              // 대화 요약
   private translationQueue: Array<{ text: string; confidence?: number }> = [];
-  private previousEnglishTranslation: string = '';  // 이전 영어 번역 (문장 연속성용)
+  private previousTranslations: Record<string, string> = {};  // 이전 번역들 (언어별 문장 연속성용)
   private batchTimer: NodeJS.Timeout | null = null;
   private transcriptCount: number = 0;       // 요약 주기 계산용
   private isProcessing: boolean = false;     // 중복 처리 방지
@@ -182,64 +184,41 @@ export class TranslationManager {
 
   /**
    * 스마트 배치 처리: 여러 문장을 한 번의 LLM 호출로 번역 후 합쳐서 전송
+   * LLM 다국어 번역으로 전환 (Azure 제거)
    */
   private async processBatchSmart(batch: Array<{ text: string; confidence?: number }>): Promise<void> {
     const recentContext = this.contextBuffer.slice(-5).join(' ');
+    const combinedOriginal = batch.map(b => b.text).join(' ');
+    const avgConfidence = batch.reduce((sum, b) => sum + (b.confidence || 0), 0) / batch.length;
 
-    if (this.config.sourceLanguage === 'en') {
-      const combinedOriginal = batch.map(b => b.text).join(' ');
-      const avgConfidence = batch.reduce((sum, b) => sum + (b.confidence || 0), 0) / batch.length;
-      await this.translateToMultipleLanguages(combinedOriginal, avgConfidence);
-      return;
-    }
-
-    const batchResults = await (this.config.translationService as any).translateBatch(
-      batch,
+    // LLM 다국어 번역 사용
+    const allTranslations = await this.config.translationService.translateWithPresetMultiLanguage(
+      combinedOriginal,
       recentContext,
       this.summary,
       this.config.sourceLanguage,
-      'en',
+      this.config.targetLanguages,
       this.config.environmentPreset,
       this.config.customEnvironmentDescription,
       this.config.customGlossary,
-      this.previousEnglishTranslation  // 이전 번역 전달 (문장 연속성)
+      this.previousTranslations
     );
 
-    if (!batchResults || batchResults.length === 0) {
-      console.error(`[TranslationManager] Smart batch failed, fallback to sequential`);
-      // Fallback: 합쳐서 단일 번역
-      const combinedOriginal = batch.map(b => b.text).join(' ');
-      const avgConfidence = batch.reduce((sum, b) => sum + (b.confidence || 0), 0) / batch.length;
-      await this.translateToMultipleLanguages(combinedOriginal, avgConfidence);
+    if (Object.keys(allTranslations).length === 0) {
+      console.error(`[TranslationManager] Smart batch LLM translation failed`);
       return;
     }
 
-    // 원문들과 번역들을 합치기
-    const combinedOriginal = batchResults.map((r: any) => r.originalText).join(' ');
-    const combinedEnglish = batchResults.map((r: any) => r.translatedText).join(' ');
-    const avgConfidence = batchResults.reduce((sum: number, r: any) => sum + (r.confidence || 0), 0) / batchResults.length;
-
-    // 이전 번역 저장 (다음 배치에서 문장 연속성 유지용)
-    this.previousEnglishTranslation = combinedEnglish;
-
-    // 다른 언어들 - 합쳐진 영어를 Azure로 번역
-    const otherLanguages = this.config.targetLanguages.filter(lang => lang !== 'en');
-    let allTranslations: Record<string, string> = { en: combinedEnglish };
-
-    if (otherLanguages.length > 0) {
-      const azureTranslations = await this.config.azureTranslateService.translateToMultipleLanguages(
-        combinedEnglish,
-        otherLanguages
-      );
-      allTranslations = { ...allTranslations, ...azureTranslations };
-    }
+    // 이전 번역들 저장 (다음 배치에서 문장 연속성 유지용)
+    this.previousTranslations = { ...this.previousTranslations, ...allTranslations };
 
     // 모든 번역을 한 번에 전송 (배치)
+    const primaryLang = this.config.targetLanguages[0] || 'en';
     this.config.onTranslation({
       roomId: this.config.roomId,
-      targetLanguage: 'en',  // primary language
+      targetLanguage: primaryLang,
       originalText: combinedOriginal,
-      translatedText: combinedEnglish,
+      translatedText: allTranslations[primaryLang] || '',
       isPartial: false,
       contextSummary: this.summary,
       timestamp: new Date(),
@@ -251,7 +230,7 @@ export class TranslationManager {
   }
 
   /**
-   * 이중 번역: 출발어 → 영어 (GPT) → 다국어 (Azure Translate)
+   * LLM 다국어 번역 (Azure 제거, LLM 직접 번역)
    * 모든 번역을 한 번에 배치로 전송
    */
   private async translateToMultipleLanguages(
@@ -260,100 +239,37 @@ export class TranslationManager {
   ): Promise<void> {
     const recentContext = this.contextBuffer.slice(-5).join(' ');
 
-    // 영어가 출발 언어인 경우
-    if (this.config.sourceLanguage === 'en') {
-      const allTranslations = await this.config.azureTranslateService.translateToMultipleLanguages(
-        text,
-        this.config.targetLanguages
-      );
-      allTranslations['en'] = text;  // 원문도 포함
+    // LLM 다국어 번역 사용
+    const allTranslations = await this.config.translationService.translateWithPresetMultiLanguage(
+      text,
+      recentContext,
+      this.summary,
+      this.config.sourceLanguage,
+      this.config.targetLanguages,
+      this.config.environmentPreset,
+      this.config.customEnvironmentDescription,
+      this.config.customGlossary,
+      this.previousTranslations
+    );
 
-      this.config.onTranslation({
-        roomId: this.config.roomId,
-        targetLanguage: 'en',
-        originalText: text,
-        translatedText: text,
-        contextSummary: this.summary,
-        timestamp: new Date(),
-        confidence,
-        translations: allTranslations,
-        isBatch: true
-      });
-      return;
-    }
-
-    let englishTranslation: string | null = null;
-
-    if (this.config.enableStreaming) {
-      let streamingBuffer = '';
-
-      englishTranslation = await this.config.translationService.translateWithStreaming(
-        text,
-        recentContext,
-        this.summary,
-        this.config.sourceLanguage,
-        'en',
-        this.config.environmentPreset,
-        this.config.customEnvironmentDescription,
-        this.config.customGlossary,
-        (chunk: string) => {
-          streamingBuffer += chunk;
-          // 스트리밍 중간 결과는 영어만 전송
-          this.config.onTranslation({
-            roomId: this.config.roomId,
-            targetLanguage: 'en',
-            originalText: text,
-            translatedText: streamingBuffer,
-            isPartial: true,
-            contextSummary: this.summary,
-            timestamp: new Date()
-          });
-        },
-        this.previousEnglishTranslation
-      );
-    } else {
-      englishTranslation = await this.config.translationService.translateWithPreset(
-        text,
-        recentContext,
-        this.summary,
-        this.config.sourceLanguage,
-        'en',
-        this.config.environmentPreset,
-        this.config.customEnvironmentDescription,
-        this.config.customGlossary,
-        this.previousEnglishTranslation
-      );
-    }
-
-    if (!englishTranslation) {
-      console.error(`[TranslationManager][${this.config.roomId}] Failed to translate to English`);
+    if (Object.keys(allTranslations).length === 0) {
+      console.error(`[TranslationManager][${this.config.roomId}] Failed to translate`);
       if (this.config.onError) {
-        this.config.onError(new Error('Failed to translate to English'));
+        this.config.onError(new Error('Failed to translate'));
       }
       return;
     }
 
-    // 이전 번역 저장 (다음 번역에서 문장 연속성 유지용)
-    this.previousEnglishTranslation = englishTranslation;
-
-    // 다른 언어들로 Azure 번역
-    const otherLanguages = this.config.targetLanguages.filter(lang => lang !== 'en');
-    let allTranslations: Record<string, string> = { en: englishTranslation };
-
-    if (otherLanguages.length > 0) {
-      const azureTranslations = await this.config.azureTranslateService.translateToMultipleLanguages(
-        englishTranslation,
-        otherLanguages
-      );
-      allTranslations = { ...allTranslations, ...azureTranslations };
-    }
+    // 이전 번역들 저장 (다음 번역에서 문장 연속성 유지용)
+    this.previousTranslations = { ...this.previousTranslations, ...allTranslations };
 
     // 모든 번역을 한 번에 배치로 전송
+    const primaryLang = this.config.targetLanguages[0] || 'en';
     this.config.onTranslation({
       roomId: this.config.roomId,
-      targetLanguage: 'en',
+      targetLanguage: primaryLang,
       originalText: text,
-      translatedText: englishTranslation,
+      translatedText: allTranslations[primaryLang] || '',
       isPartial: false,
       contextSummary: this.summary,
       timestamp: new Date(),
@@ -443,6 +359,6 @@ export class TranslationManager {
     this.transcriptCount = 0;
     this.isProcessing = false;
     this.firstQueueItemTime = null;
-    this.previousEnglishTranslation = '';
+    this.previousTranslations = {};
   }
 }

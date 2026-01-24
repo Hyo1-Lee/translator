@@ -199,7 +199,12 @@ export class SocketHandler {
   ): Promise<void> {
     try {
       const sourceLanguage = roomSettings.sourceLanguage || 'ko';
-      const targetLanguages = Object.keys(SUPPORTED_LANGUAGES).filter(lang => lang !== sourceLanguage);
+      // 스피커가 선택한 언어 사용 (없으면 기본값 ['en'])
+      const targetLanguages = roomSettings.targetLanguagesArray
+        || (typeof roomSettings.targetLanguages === 'string'
+            ? roomSettings.targetLanguages.split(',').filter((l: string) => l.trim())
+            : roomSettings.targetLanguages)
+        || ['en'];
 
       const translationManager = new TranslationManager({
         roomId: roomCode,
@@ -280,16 +285,19 @@ export class SocketHandler {
 
       // Batch mode: save all translations and emit as single batch event
       if (data.isBatch && data.translations) {
-        // Save English translation to DB
-        await this.transcriptService.saveTranslationText(
-          roomCode,
-          'en',
-          data.originalText,
-          data.translations['en'] || data.translatedText,
-          data.contextSummary,
-          false,
-          sttTextId
+        // Save all translations to DB (병렬 저장)
+        const savePromises = Object.entries(data.translations).map(([lang, translatedText]) =>
+          this.transcriptService.saveTranslationText(
+            roomCode,
+            lang,
+            data.originalText,
+            translatedText,
+            data.contextSummary,
+            false,
+            sttTextId
+          )
         );
+        await Promise.all(savePromises);
 
         const batchPayload = {
           korean: data.originalText,

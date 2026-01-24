@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { buildTranslationPrompt, EnvironmentPreset } from './presets';
+import { buildTranslationPrompt, EnvironmentPreset, OUTPUT_INSTRUCTIONS } from './presets';
 
 interface TranslationConfig {
   apiKey: string;
@@ -280,6 +280,85 @@ export class TranslationService {
     } catch (error) {
       console.error('[Translation] Preset-based translation error:', error);
       return null;
+    }
+  }
+
+  /**
+   * 다국어 LLM 번역 (신규)
+   * - 여러 타겟 언어를 병렬로 번역
+   * - 각 언어별 OUTPUT_INSTRUCTIONS 적용
+   */
+  async translateWithPresetMultiLanguage(
+    currentText: string,
+    recentContext: string,
+    summary: string,
+    sourceLanguage: string,
+    targetLanguages: string[],
+    environmentPreset: EnvironmentPreset,
+    customEnvironmentDescription?: string,
+    customGlossary?: Record<string, string>,
+    previousTranslations?: Record<string, string>
+  ): Promise<Record<string, string>> {
+    try {
+      // ⚡ STT 오류 사전 보정
+      const correctedText = await this.correctSttErrors(currentText);
+
+      // 병렬 번역 실행
+      const translationPromises = targetLanguages.map(async (targetLang) => {
+        const previousTranslation = previousTranslations?.[targetLang] || '';
+
+        // 프리셋 기반 프롬프트 생성
+        const systemPrompt = buildTranslationPrompt(
+          sourceLanguage,
+          targetLang,
+          environmentPreset,
+          customEnvironmentDescription,
+          customGlossary
+        );
+
+        // 언어별 출력 지침 추가
+        const outputInstruction = OUTPUT_INSTRUCTIONS[targetLang] || `Output in natural ${targetLang}.`;
+
+        // 컨텍스트 변수 치환
+        const userPrompt = systemPrompt
+          .replace('{summary}', summary || '(No summary yet)')
+          .replace('{recentContext}', recentContext || '(No recent context)')
+          .replace('{previousTranslation}', previousTranslation || '(This is the first segment)')
+          .replace('{currentText}', correctedText)
+          + `\n\n${outputInstruction}`;
+
+        const client = this.getClient();
+
+        const response = await client.chat.completions.create({
+          model: this.model,
+          messages: [
+            {
+              role: 'user',
+              content: userPrompt
+            }
+          ],
+          max_completion_tokens: 1500,
+          temperature: 0.3
+        });
+
+        const translation = response.choices[0]?.message?.content?.trim();
+        return { lang: targetLang, translation: translation || '' };
+      });
+
+      const results = await Promise.all(translationPromises);
+
+      // 결과를 Record로 변환
+      const translationsMap: Record<string, string> = {};
+      for (const result of results) {
+        if (result.translation) {
+          translationsMap[result.lang] = result.translation;
+        }
+      }
+
+      return translationsMap;
+    } catch (error) {
+      console.error('[TranslationService] Multi-language translation error:', error);
+      return {};
     }
   }
 

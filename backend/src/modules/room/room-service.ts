@@ -54,8 +54,9 @@ export class RoomService {
       hashedPassword = await bcrypt.hash(options.password, 10);
     }
 
-    // Prepare target languages (comma-separated string)
-    const targetLanguages = options.targetLanguages?.join(',') || 'en';
+    // Prepare target languages
+    const targetLanguagesArray = options.targetLanguages || ['en'];
+    const targetLanguages = targetLanguagesArray.join(',');
 
     // Create room
     const room = await Room.create({
@@ -72,6 +73,7 @@ export class RoomService {
       roomId: room.id,
       roomTitle: options.roomTitle || null,
       targetLanguages,
+      targetLanguagesArray,
       promptTemplate: options.promptTemplate || 'general',
       customPrompt: options.customPrompt,
       enableTranslation: true,
@@ -307,9 +309,15 @@ export class RoomService {
       promptTemplate?: string;
       customPrompt?: string;
       targetLanguages?: string[];
+      targetLanguagesArray?: string[];
       maxListeners?: number;
       enableTranslation?: boolean;
       enableAutoScroll?: boolean;
+      sourceLanguage?: string;
+      environmentPreset?: string;
+      customEnvironmentDescription?: string;
+      customGlossary?: Record<string, string> | null;
+      enableStreaming?: boolean;
     }
   ): Promise<any> {
     const room = await Room.findOne({
@@ -334,6 +342,11 @@ export class RoomService {
     }
     if (settings.targetLanguages !== undefined) {
       updateData.targetLanguages = settings.targetLanguages.join(',');
+      updateData.targetLanguagesArray = settings.targetLanguages;
+    }
+    if (settings.targetLanguagesArray !== undefined) {
+      updateData.targetLanguagesArray = settings.targetLanguagesArray;
+      updateData.targetLanguages = settings.targetLanguagesArray.join(',');
     }
     if (settings.maxListeners !== undefined) {
       updateData.maxListeners = settings.maxListeners;
@@ -343,6 +356,21 @@ export class RoomService {
     }
     if (settings.enableAutoScroll !== undefined) {
       updateData.enableAutoScroll = settings.enableAutoScroll;
+    }
+    if (settings.sourceLanguage !== undefined) {
+      updateData.sourceLanguage = settings.sourceLanguage;
+    }
+    if (settings.environmentPreset !== undefined) {
+      updateData.environmentPreset = settings.environmentPreset;
+    }
+    if (settings.customEnvironmentDescription !== undefined) {
+      updateData.customEnvironmentDescription = settings.customEnvironmentDescription;
+    }
+    if (settings.customGlossary !== undefined) {
+      updateData.customGlossary = settings.customGlossary;
+    }
+    if (settings.enableStreaming !== undefined) {
+      updateData.enableStreaming = settings.enableStreaming;
     }
 
     return await room.roomSettings.update(updateData);

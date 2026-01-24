@@ -1,6 +1,6 @@
 "use client";
 
-import { RoomSettings, SESSION_PRESETS, SOURCE_LANGUAGES } from "../types";
+import { RoomSettings, SESSION_PRESETS, SOURCE_LANGUAGES, TARGET_LANGUAGES } from "../types";
 import styles from "../speaker.module.css";
 
 interface SettingsModalProps {
@@ -91,32 +91,53 @@ export default function SettingsModal({
             </div>
           </div>
 
-          {/* Language Settings - Side by side */}
-          <div className={styles.languageRow}>
-            <div className={styles.settingGroup}>
-              <label>출발 언어</label>
-              <select
-                value={roomSettings.sourceLanguage}
-                onChange={(e) =>
-                  updateSettings({ sourceLanguage: e.target.value })
-                }
-                className={styles.select}
-              >
-                {SOURCE_LANGUAGES.map((lang) => (
-                  <option key={lang.code} value={lang.code}>
-                    {lang.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Source Language Setting */}
+          <div className={styles.settingGroup}>
+            <label>출발 언어</label>
+            <select
+              value={roomSettings.sourceLanguage}
+              onChange={(e) =>
+                updateSettings({ sourceLanguage: e.target.value })
+              }
+              className={styles.select}
+            >
+              {SOURCE_LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            <div className={styles.settingGroup}>
-              <label>번역 언어</label>
-              <div className={styles.fixedLanguage}>
-                <span className={styles.fixedLanguageText}>English</span>
-                <span className={styles.fixedLanguageBadge}>지원</span>
-              </div>
+          {/* Target Languages - Multi-select Checkboxes */}
+          <div className={styles.settingGroup}>
+            <label>번역 언어 (다중 선택 가능)</label>
+            <div className={styles.languageCheckboxGrid}>
+              {TARGET_LANGUAGES.filter(
+                (lang) => lang.code !== roomSettings.sourceLanguage
+              ).map((lang) => (
+                <label key={lang.code} className={styles.languageCheckbox}>
+                  <input
+                    type="checkbox"
+                    checked={roomSettings.targetLanguages.includes(lang.code)}
+                    onChange={(e) => {
+                      const newLangs = e.target.checked
+                        ? [...roomSettings.targetLanguages, lang.code]
+                        : roomSettings.targetLanguages.filter(
+                            (l) => l !== lang.code
+                          );
+                      updateSettings({ targetLanguages: newLangs });
+                    }}
+                  />
+                  <span>{lang.name}</span>
+                </label>
+              ))}
             </div>
+            {roomSettings.targetLanguages.length === 0 && (
+              <p className={styles.settingHint}>
+                최소 1개 이상의 번역 언어를 선택해주세요.
+              </p>
+            )}
           </div>
 
           {/* Session Name (Optional) */}

@@ -26,7 +26,7 @@ export function useAutoScroll(
   deps: unknown[] = [],
   options: UseAutoScrollOptions = {}
 ): UseAutoScrollReturn {
-  const { threshold = 100 } = options;
+  const { threshold = 5 } = options;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);

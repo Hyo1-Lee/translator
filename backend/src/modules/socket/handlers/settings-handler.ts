@@ -22,7 +22,15 @@ export async function handleUpdateSettings(
       promptTemplate: settings.promptTemplate,
       customPrompt: settings.customPrompt,
       maxListeners: settings.maxListeners,
-      enableAutoScroll: settings.enableAutoScroll
+      enableAutoScroll: settings.enableAutoScroll,
+      // 번역 관련 설정
+      sourceLanguage: settings.sourceLanguage,
+      targetLanguagesArray: settings.targetLanguagesArray,
+      environmentPreset: settings.environmentPreset,
+      customEnvironmentDescription: settings.customEnvironmentDescription,
+      customGlossary: settings.customGlossary,
+      enableStreaming: settings.enableStreaming,
+      enableTranslation: settings.enableTranslation
     });
 
     // Update password if provided

@@ -32,8 +32,8 @@ const LANGUAGE_MAP: Record<string, string> = {
   ur: "اردو",
 };
 
-// All available languages (always show all)
-const ALL_LANGUAGES = Object.keys(LANGUAGE_MAP);
+// Note: availableLanguages state is now used instead of static ALL_LANGUAGES
+// to dynamically show only speaker-selected languages
 
 interface Transcript {
   type?: string;
@@ -96,6 +96,7 @@ export default function ListenerRoom() {
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [showOriginal, setShowOriginal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [availableLanguages, setAvailableLanguages] = useState<string[]>(["en"]);
 
   // Password state
   const [needsPassword, setNeedsPassword] = useState(false);
@@ -224,7 +225,19 @@ export default function ListenerRoom() {
       setNeedsPassword(false);
       setPasswordError("");
       setPassword("");
-      // Languages are always all available (ALL_LANGUAGES), no need to set from room settings
+
+      // Set available languages from room settings (speaker's selection)
+      const roomLangs = data.roomSettings?.targetLanguagesArray
+        || (typeof data.roomSettings?.targetLanguages === 'string'
+            ? data.roomSettings.targetLanguages.split(',')
+            : data.roomSettings?.targetLanguages)
+        || ['en'];
+      setAvailableLanguages(roomLangs);
+
+      // If current selected language is not available, switch to first available
+      if (!roomLangs.includes(selectedLanguage)) {
+        setSelectedLanguage(roomLangs[0] || 'en');
+      }
     });
 
     // Translation text only (no STT)
@@ -468,7 +481,7 @@ export default function ListenerRoom() {
                 fontSize={fontSize}
                 autoScroll={autoScroll}
                 languageMap={LANGUAGE_MAP}
-                allLanguages={ALL_LANGUAGES}
+                allLanguages={availableLanguages}
                 showSaveButton={!!user}
                 hasTrans={transcripts.length > 0}
                 onLanguageChange={setSelectedLanguage}
