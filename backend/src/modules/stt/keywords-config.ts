@@ -15,13 +15,44 @@ export interface KeywordConfig {
 /**
  * Church service keywords (Korean LDS)
  * Optimized for religious terminology and proper nouns
+ * Intensifier 조정: 핵심 용어는 높은 값 (4-5), 일반 용어는 중간 값 (2-3)
  */
 export const CHURCH_KEYWORDS: KeywordConfig[] = [
   // Core religious terms - highest priority
   { term: '예수그리스도', intensifier: 5 },
-  { term: '휴기성도', intensifier: 5 },
+  { term: '후기성도', intensifier: 5 },
   { term: '하나님', intensifier: 5 },
   { term: '성령', intensifier: 4 },
+  { term: '성신', intensifier: 4 },
+
+  // LDS 핵심 용어 (intensifier 상향)
+  { term: '성찬', intensifier: 5 },
+  { term: '성찬식', intensifier: 5 },
+  { term: '간증', intensifier: 5 },
+  { term: '간증하다', intensifier: 4 },
+  { term: '몰몬경', intensifier: 5 },
+  { term: '교리와 성약', intensifier: 5 },
+  { term: '값진 진주', intensifier: 4 },
+  { term: '선지자', intensifier: 5 },
+  { term: '속죄', intensifier: 5 },
+  { term: '침례', intensifier: 5 },
+  { term: '신권', intensifier: 4 },
+
+  // 경전 인물
+  { term: '니파이', intensifier: 4 },
+  { term: '앨마', intensifier: 4 },
+  { term: '앰율레크', intensifier: 4 },
+  { term: '베냐민', intensifier: 4 },
+  { term: '리하이', intensifier: 4 },
+  { term: '모로나이', intensifier: 4 },
+  { term: '힐라맨', intensifier: 3 },
+  { term: '이더', intensifier: 3 },
+
+  // 현대 선지자
+  { term: '조셉 스미스', intensifier: 5 },
+  { term: '브리검 영', intensifier: 4 },
+  { term: '러셀 넬슨', intensifier: 4 },
+  { term: '넬슨 회장', intensifier: 4 },
 
   // Common church terms
   { term: '교회', intensifier: 4 },
@@ -32,20 +63,36 @@ export const CHURCH_KEYWORDS: KeywordConfig[] = [
   { term: '은혜', intensifier: 3 },
 
   // Religious concepts
-  { term: '구원', intensifier: 3 },
-  { term: '영생', intensifier: 3 },
+  { term: '구원', intensifier: 4 },
+  { term: '구주', intensifier: 5 },
+  { term: '영생', intensifier: 4 },
   { term: '천국', intensifier: 3 },
   { term: '신앙', intensifier: 3 },
-  { term: '성찬', intensifier: 3 },
   { term: '안식일', intensifier: 3 },
+  { term: '회개', intensifier: 4 },
+  { term: '자비', intensifier: 4 },
+  { term: '공의', intensifier: 4 },
+  { term: '부활', intensifier: 4 },
+  { term: '권능', intensifier: 3 },
 
   // Church organization
-  { term: '감독', intensifier: 2 },
-  { term: '장로', intensifier: 2 },
+  { term: '감독', intensifier: 3 },
+  { term: '장로', intensifier: 3 },
   { term: '집사', intensifier: 2 },
-  { term: '선교사', intensifier: 2 },
-  { term: '와드', intensifier: 2 },
-  { term: '스테이크', intensifier: 2 },
+  { term: '선교사', intensifier: 3 },
+  { term: '선교부', intensifier: 3 },
+  { term: '와드', intensifier: 3 },
+  { term: '스테이크', intensifier: 3 },
+  { term: '지부', intensifier: 2 },
+  { term: '제일회장단', intensifier: 4 },
+  { term: '십이사도', intensifier: 4 },
+  { term: '사도', intensifier: 3 },
+
+  // 의식
+  { term: '성전', intensifier: 4 },
+  { term: '확인', intensifier: 2 },
+  { term: '멜기세덱', intensifier: 3 },
+  { term: '아론', intensifier: 3 },
 ];
 
 /**

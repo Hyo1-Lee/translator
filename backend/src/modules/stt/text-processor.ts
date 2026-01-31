@@ -4,6 +4,12 @@
  */
 
 /**
+ * 최소 문장 길이 (한글 기준 약 5-7단어)
+ * 너무 짧은 문장 분리 방지
+ */
+const MIN_SENTENCE_LENGTH = 15;
+
+/**
  * Korean sentence ending patterns (문장 완성 판단용)
  * 확장된 종결 어미 패턴
  */
@@ -16,6 +22,12 @@ const KOREAN_SENTENCE_ENDINGS = /(?:니다|습니다|ㅂ니다|세요|에요|어
 const INCOMPLETE_PATTERNS = /(?:그리고|하지만|그런데|그래서|만약|또는|그러면|그러나|그렇지만|왜냐하면|따라서|그러므로|즉|예를 들어|예를들어|다시 말해|다시말해|뿐만 아니라|때문에|에서|으로|에게|한테|께서|이나|이랑|랑|와|과|의|은|는|이|가|을|를|에|도|만|까지)[\s]*$/;
 
 /**
+ * 연결 표현 패턴 (문장이 이어질 가능성이 높은 표현)
+ * 이 패턴으로 끝나면 다음 단어와 합쳐서 처리
+ */
+const CONTINUATION_PATTERNS = /(?:그리고|또한|그래서|그러나|하지만|그런데|또|그리고서|그러면|만약|왜냐하면|따라서|그러므로)[\s]*$/;
+
+/**
  * Process transcript text
  * Deepgram 결과를 그대로 사용 (trim만)
  */
@@ -26,9 +38,10 @@ export function processTranscript(text: string): string {
 
 /**
  * Check if text is a complete sentence
+ * 개선: 최소 길이 + 종결 어미 조합 검사
  */
 export function isCompleteSentence(text: string): boolean {
-  if (!text || text.trim().length < 3) {
+  if (!text || text.trim().length < MIN_SENTENCE_LENGTH) {
     return false;
   }
 
@@ -39,6 +52,11 @@ export function isCompleteSentence(text: string): boolean {
     return false;
   }
 
+  // Check for continuation patterns (연결 표현으로 끝나면 대기)
+  if (CONTINUATION_PATTERNS.test(trimmed)) {
+    return false;
+  }
+
   // Check for punctuation endings
   if (/[.!?。！？]$/.test(trimmed)) {
     return true;
@@ -46,6 +64,32 @@ export function isCompleteSentence(text: string): boolean {
 
   // Check for Korean sentence endings
   if (KOREAN_SENTENCE_ENDINGS.test(trimmed)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if text should wait for more content
+ * 연결 표현으로 끝나는 경우 다음 내용을 기다림
+ */
+export function shouldWaitForMore(text: string): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+
+  // 최소 길이 미달
+  if (trimmed.length < MIN_SENTENCE_LENGTH) {
+    return true;
+  }
+
+  // 연결 표현으로 끝남
+  if (CONTINUATION_PATTERNS.test(trimmed)) {
+    return true;
+  }
+
+  // 불완전 패턴으로 끝남
+  if (INCOMPLETE_PATTERNS.test(trimmed)) {
     return true;
   }
 

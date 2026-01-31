@@ -28,7 +28,7 @@ export const PRESETS: Record<Exclude<EnvironmentPreset, 'custom'>, PresetConfig>
    */
   church: {
     name: 'LDS Church',
-    environment: 'This is a sermon or religious talk from The Church of Jesus Christ of Latter-day Saints (LDS/Mormon Church)',
+    environment: 'This is a sermon or religious talk from The Church of Jesus Christ of Latter-day Saints (LDS/Mormon Church). Maintain religious context and translate incomplete sentences naturally based on context.',
     glossary: {
       // 경전
       '몰몬경': 'Book of Mormon',
@@ -69,10 +69,12 @@ export const PRESETS: Record<Exclude<EnvironmentPreset, 'custom'>, PresetConfig>
       '자비': 'mercy',
       '공의': 'justice',
       '간증': 'testimony',
+      '증거하다': 'testify',
       '성신': 'Holy Ghost',
       '성령': 'Holy Spirit',
       '권능': 'authority',
       '회개': 'repentance',
+      '복음': 'gospel',
 
       // 조직 및 직책
       '제일회장단': 'First Presidency',
@@ -84,17 +86,24 @@ export const PRESETS: Record<Exclude<EnvironmentPreset, 'custom'>, PresetConfig>
       '와드': 'ward',
       '스테이크': 'stake',
       '지부': 'branch',
+      '지방부': 'stake',
+      '장로': 'elder',
+      '자매': 'sister',
+      '형제': 'brother',
+      '선교부': 'mission',
 
       // 의식 및 모임
       '성전': 'temple',
       '성찬': 'sacrament',
+      '성찬식': 'sacrament meeting',
       '침례': 'baptism',
       '확인': 'confirmation',
       '신권': 'priesthood',
       '멜기세덱': 'Melchizedek',
       '아론': 'Aaronic',
+      '간증회': 'testimony meeting',
     },
-    tone: 'formal and reverent',
+    tone: 'formal and reverent, maintaining LDS-specific expressions and religious context',
     description: '예수 그리스도 후기성도 교회 설교 및 종교 강연'
   },
 
@@ -582,11 +591,11 @@ export function buildTranslationPrompt(
     return `You are an expert translator for The Church of Jesus Christ of Latter-day Saints.
 Translate ${sourceLangName} to ${targetLangName} (${nativeTargetName}).
 
-CONTEXT: LDS sermon/religious talk
+CONTEXT: LDS sermon/religious talk (sacrament meeting, testimony meeting, etc.)
 
 ${Object.keys(glossary).length > 0 ? `KOREAN→ENGLISH TERMS:\n${formatGlossary(glossary)}\n` : ''}
 ${religiousTerms ? `ENGLISH→${targetLangName.toUpperCase()} TERMS:\n${religiousTerms}\n` : ''}
-STT ERRORS TO FIX: 주작스미스→Joseph Smith, 몰멍평→Book of Mormon, 고주/구주→Savior, 성심→Holy Ghost
+STT ERRORS TO FIX: 주작스미스→Joseph Smith, 몰멍평→Book of Mormon, 고주/구주→Savior, 성심/성차→성찬, 간정→간증
 
 RULES:
 1. Output ONLY in ${nativeTargetName} - NO Korean, English, or other languages mixed in
@@ -595,10 +604,12 @@ RULES:
 4. Fix obvious STT errors, translate literally if uncertain
 5. NO notes, explanations, or parenthetical comments
 6. Maintain sentence flow - don't artificially end incomplete sentences
+7. IMPORTANT: Even if the input is incomplete, translate naturally based on context
+8. Maintain the reverent, formal tone of LDS religious discourse
 
-CONTEXT:
+CONTEXT FOR CONTINUITY:
 Summary: {summary}
-Recent: {recentContext}
+Recent Korean: {recentContext}
 Previous translation: {previousTranslation}
 
 TRANSLATE TO ${targetLangName.toUpperCase()}:
@@ -719,9 +730,11 @@ ABSOLUTE RULES:
 1. Output ONLY in ${nativeTargetName} - ZERO tolerance for Korean/English/other languages
 2. Translate EVERY word including proper names
 3. Use these religious terms: ${religiousTerms}
-4. Fix STT errors (주작스미스→Joseph Smith, 몰멍평→Book of Mormon, 고주→Savior)
+4. Fix STT errors (주작스미스→Joseph Smith, 몰멍평→Book of Mormon, 고주→Savior, 성차→성찬, 간정→간증)
 5. NO explanations, notes, or parenthetical comments
-6. Output the translation directly, nothing else`;
+6. Output the translation directly, nothing else
+7. Even for incomplete sentences, translate naturally based on religious context
+8. Maintain the reverent, formal tone of LDS discourse`;
   }
 
   return `You are a professional translator.

@@ -56,12 +56,12 @@ export class TranslationManager {
   private transcriptCount: number = 0;       // 요약 주기 계산용
   private isProcessing: boolean = false;     // 중복 처리 방지
 
-  // 번역 큐 배치 설정
+  // 번역 큐 배치 설정 (교회 프리셋용 최적화)
   private firstQueueItemTime: number | null = null;
-  private readonly MIN_BATCH_SIZE = 3;        // 최소 배치 크기
-  private readonly MAX_WAIT_TIME_MS = 5000;   // 최대 5초 대기
-  private readonly BATCH_DELAY_MS = 1200;     // 기본 딜레이 (1.2초)
-  private readonly RETRY_DELAY_MS = 800;      // 재시도 딜레이 (0.8초)
+  private readonly MIN_BATCH_SIZE = 2;        // 최소 배치 크기 (3 → 2로 조정)
+  private readonly MAX_WAIT_TIME_MS = 6000;   // 최대 6초 대기 (5초 → 6초)
+  private readonly BATCH_DELAY_MS = 2000;     // 기본 딜레이 (1.2초 → 2초, 더 긴 배치 대기)
+  private readonly RETRY_DELAY_MS = 1000;     // 재시도 딜레이 (0.8초 → 1초)
 
   constructor(config: TranslationManagerConfig) {
     this.config = config;
@@ -84,9 +84,9 @@ export class TranslationManager {
     // 배치 처리 스케줄링
     this.scheduleBatchProcessing();
 
-    // 30개마다 요약 생성
+    // 요약 재생성 주기 조정: 30 → 20 (더 자주 요약 갱신)
     this.transcriptCount++;
-    if (this.transcriptCount % 30 === 0) {
+    if (this.transcriptCount % 20 === 0) {
       this.regenerateSummary();
     }
   }
@@ -187,7 +187,7 @@ export class TranslationManager {
    * LLM 다국어 번역으로 전환 (Azure 제거)
    */
   private async processBatchSmart(batch: Array<{ text: string; confidence?: number }>): Promise<void> {
-    const recentContext = this.contextBuffer.slice(-5).join(' ');
+    const recentContext = this.contextBuffer.slice(-10).join(' ');
     const combinedOriginal = batch.map(b => b.text).join(' ');
     const avgConfidence = batch.reduce((sum, b) => sum + (b.confidence || 0), 0) / batch.length;
 
@@ -237,7 +237,7 @@ export class TranslationManager {
     text: string,
     confidence?: number
   ): Promise<void> {
-    const recentContext = this.contextBuffer.slice(-5).join(' ');
+    const recentContext = this.contextBuffer.slice(-10).join(' ');
 
     // LLM 다국어 번역 사용
     const allTranslations = await this.config.translationService.translateWithPresetMultiLanguage(
@@ -285,7 +285,8 @@ export class TranslationManager {
   private updateContext(text: string): void {
     this.contextBuffer.push(text);
 
-    if (this.contextBuffer.length > 6) {
+    // 컨텍스트 버퍼 확장: 6 → 15 (더 많은 문맥 유지)
+    if (this.contextBuffer.length > 15) {
       this.contextBuffer.shift();
     }
   }

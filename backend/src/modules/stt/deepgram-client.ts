@@ -27,11 +27,12 @@ export class DeepgramClient extends STTProvider {
   private connection: any;
   private isReady: boolean = false;
 
-  // Sentence buffering
+  // Sentence buffering (교회 프리셋용 최적화)
   private sentenceBuffer: string[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
-  private readonly FLUSH_TIMEOUT_MS = 800;
+  private FLUSH_TIMEOUT_MS = 800;  // 기본값, church 프리셋에서 상향
   private readonly SENTENCE_ENDINGS = /[.!?。！？]/;
+  private readonly MIN_WORDS_TO_FLUSH = 5;  // 최소 5단어 이상일 때만 flush
 
   // 마지막 INTERIM 결과 저장 (disconnect 시 처리용)
   private lastInterimText: string = '';
@@ -55,6 +56,15 @@ export class DeepgramClient extends STTProvider {
 
     // Load keywords based on prompt template
     this.keywords = getKeywords(this.config.promptTemplate || 'general');
+
+    // Church 프리셋: flush 타이밍 조정 및 Nova-2 모델 사용 (keywords 지원)
+    if (this.config.promptTemplate === 'church') {
+      this.FLUSH_TIMEOUT_MS = 3500;  // 교회용: 800ms → 3500ms (더 긴 문장 대기)
+      // Nova-3는 keywords를 지원하지 않음, church에서는 Nova-2 권장
+      if (this.config.model === 'nova-3' && this.keywords.length > 0) {
+        this.config.model = 'nova-2';
+      }
+    }
   }
 
   /**
@@ -71,14 +81,16 @@ export class DeepgramClient extends STTProvider {
       this.client = createClient(this.config.apiKey);
 
       // Connection options - 한국어 최적화 설정
+      // Church 프리셋: 더 긴 침묵 허용 (설교 중 pause가 많음)
+      const isChurch = this.config.promptTemplate === 'church';
       const options: any = {
         model: this.config.model,
         language: this.config.language,
         smart_format: true,           // 자동 구두점 및 포맷팅
         punctuate: true,              // 마침표 자동 추가
         interim_results: this.config.interimResults,
-        endpointing: 1000,            // 1.5초 침묵 감지
-        utterance_end_ms: 2000,       // 2초 후 발화 종료 확정
+        endpointing: isChurch ? 1500 : 1000,      // church: 1.5초, 기본: 1초
+        utterance_end_ms: isChurch ? 3000 : 2000, // church: 3초, 기본: 2초
         vad_events: true,
         filler_words: false,
         numerals: true,
@@ -239,8 +251,9 @@ export class DeepgramClient extends STTProvider {
 
   /**
    * Flush sentence buffer - emit complete sentence with post-processing
+   * MIN_WORDS_TO_FLUSH: 너무 짧은 문장은 flush하지 않음
    */
-  private flushSentenceBuffer(confidence: number): void {
+  private flushSentenceBuffer(confidence: number, forceFlush: boolean = false): void {
     if (this.sentenceBuffer.length === 0) {
       return;
     }
@@ -255,6 +268,16 @@ export class DeepgramClient extends STTProvider {
 
     if (!processedSentence) {
       this.sentenceBuffer = [];
+      return;
+    }
+
+    // 최소 단어 수 체크 (강제 flush가 아닌 경우)
+    const wordCount = processedSentence.split(/\s+/).length;
+    if (!forceFlush && wordCount < this.MIN_WORDS_TO_FLUSH) {
+      // 단어 수가 부족하면 다시 타이머 설정
+      this.flushTimer = setTimeout(() => {
+        this.flushSentenceBuffer(confidence, true);  // 타임아웃 후엔 강제 flush
+      }, this.FLUSH_TIMEOUT_MS);
       return;
     }
 
@@ -280,7 +303,7 @@ export class DeepgramClient extends STTProvider {
     }
 
     if (this.sentenceBuffer.length > 0) {
-      this.flushSentenceBuffer(1.0);
+      this.flushSentenceBuffer(1.0, true);  // 종료 시 강제 flush
     }
 
     if (this.connection) {
@@ -303,7 +326,7 @@ export class DeepgramClient extends STTProvider {
     }
 
     if (this.sentenceBuffer.length > 0) {
-      this.flushSentenceBuffer(1.0);
+      this.flushSentenceBuffer(1.0, true);  // 종료 시 강제 flush
     }
 
     if (this.flushTimer) {
