@@ -3,7 +3,7 @@
 .main {
   min-height: 100vh;
   min-height: 100dvh;
-  background: linear-gradient(135deg, #0f172a 0%, #1a2744 50%, #1e3a5f 100%);
+  background: var(--bg-secondary);
   padding: 0;
 }
 
@@ -23,10 +23,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: var(--header-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--header-border);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -44,7 +44,7 @@
 .roomCodeTitle {
   font-size: 1.125rem;
   font-weight: 700;
-  color: white;
+  color: var(--text-primary);
   font-family: 'SF Mono', 'Fira Code', monospace;
   letter-spacing: 0.05em;
 }
@@ -85,7 +85,7 @@
   width: 40px;
   height: 40px;
   background: transparent;
-  color: #e2e8f0;
+  color: var(--text-secondary);
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -96,13 +96,13 @@
 
 .iconBtn:hover,
 .iconBtn:active {
-  background: rgba(148, 163, 184, 0.18);
-  color: white;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .iconBtn.active {
-  background: rgba(96, 165, 250, 0.25);
-  color: #7dd3fc;
+  background: var(--accent-light);
+  color: var(--accent-primary);
 }
 
 /* ===== Dropdown Menu ===== */
@@ -115,15 +115,11 @@
   top: calc(100% + 8px);
   right: 0;
   width: 280px;
-  background: rgba(22, 40, 65, 0.98);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
   border-radius: 16px;
   padding: 0.75rem;
-  box-shadow:
-    0 20px 40px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  box-shadow: var(--shadow-lg);
   z-index: 1000;
   animation: slideDown 0.2s ease;
 }
@@ -147,7 +143,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #a5b4c6;
+  color: var(--text-tertiary);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -158,16 +154,16 @@
 .menuSelect {
   width: 100%;
   padding: 0.625rem 0.875rem;
-  background: rgba(15, 30, 50, 0.6);
-  color: white;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
   border-radius: 10px;
   font-size: 0.9375rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a5b4c6' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   padding-right: 2.5rem;
@@ -175,8 +171,8 @@
 
 .menuSelect:focus {
   outline: none;
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .fontSizeButtons {
@@ -187,9 +183,9 @@
 .fontSizeBtn {
   flex: 1;
   padding: 0.5rem;
-  background: rgba(15, 30, 50, 0.6);
-  color: #a5b4c6;
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-primary);
   border-radius: 8px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -198,19 +194,19 @@
 }
 
 .fontSizeBtn:hover {
-  background: rgba(15, 30, 50, 0.8);
-  color: #e2e8f0;
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
 }
 
 .fontSizeBtn.active {
-  background: rgba(96, 165, 250, 0.22);
-  color: white;
-  border-color: rgba(96, 165, 250, 0.4);
+  background: var(--accent-light);
+  color: var(--accent-primary);
+  border-color: rgba(59, 130, 246, 0.3);
 }
 
 .menuDivider {
   height: 1px;
-  background: rgba(148, 163, 184, 0.1);
+  background: var(--border-primary);
   margin: 0.5rem 0;
 }
 
@@ -226,11 +222,11 @@
 }
 
 .menuToggle:hover {
-  background: rgba(148, 163, 184, 0.05);
+  background: var(--bg-surface-hover);
 }
 
 .menuToggle span:first-of-type {
-  color: #f1f5f9;
+  color: var(--text-primary);
   font-size: 0.9375rem;
   font-weight: 500;
 }
@@ -243,7 +239,7 @@
   position: relative;
   width: 44px;
   height: 26px;
-  background: rgba(148, 163, 184, 0.35);
+  background: #cbd5e1;
   border-radius: 13px;
   transition: all 0.2s ease;
 }
@@ -258,11 +254,11 @@
   background: white;
   border-radius: 50%;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .menuToggle input:checked + .toggleSwitch {
-  background: #60a5fa;
+  background: var(--accent-primary);
 }
 
 .menuToggle input:checked + .toggleSwitch::after {
@@ -277,7 +273,7 @@
   width: 100%;
   padding: 0.75rem 0.5rem;
   background: transparent;
-  color: #f1f5f9;
+  color: var(--text-primary);
   border: none;
   border-radius: 8px;
   font-size: 0.9375rem;
@@ -288,8 +284,8 @@
 }
 
 .menuAction:hover {
-  background: rgba(96, 165, 250, 0.12);
-  color: #7dd3fc;
+  background: var(--accent-light);
+  color: var(--accent-primary);
 }
 
 .menuAction:disabled {
@@ -307,6 +303,9 @@
   padding: 1rem;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 /* ===== Empty State ===== */
@@ -329,7 +328,7 @@
 .emptyIconPulse {
   position: absolute;
   inset: -12px;
-  background: rgba(96, 165, 250, 0.2);
+  background: rgba(59, 130, 246, 0.1);
   border-radius: 50%;
   animation: emptyPulse 2s ease-in-out infinite;
 }
@@ -354,13 +353,13 @@
 .emptyTitle {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
 .emptyText {
   font-size: 0.875rem;
-  color: #a5b4c6;
+  color: var(--text-tertiary);
   max-width: 280px;
   line-height: 1.6;
   margin-bottom: 1.25rem;
@@ -371,44 +370,47 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 1rem;
-  background: rgba(96, 165, 250, 0.12);
-  border: 1px solid rgba(96, 165, 250, 0.25);
+  background: var(--accent-light);
+  border: 1px solid rgba(59, 130, 246, 0.2);
   border-radius: 12px;
 }
 
 .badgeLabel {
   font-size: 0.75rem;
-  color: #a5b4c6;
+  color: var(--text-tertiary);
   font-weight: 500;
 }
 
 .badgeLang {
   font-size: 0.875rem;
-  color: #7dd3fc;
+  color: var(--accent-primary);
   font-weight: 600;
 }
 
-/* ===== Transcript Card ===== */
-.transcriptCard {
-  background: rgba(30, 58, 95, 0.35);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-left: 3px solid #60a5fa;
-  border-radius: 14px;
-  padding: 1rem 1.125rem;
-  margin-bottom: 0.75rem;
-  animation: fadeIn 0.3s ease;
-  transition: background 0.2s ease, border-color 0.2s ease;
+/* ===== Subtitle Line (Flowing Subtitles) ===== */
+.subtitleLine {
+  padding: 0.625rem 0.5rem;
+  margin-bottom: 0.25rem;
+  animation: fadeSlideIn 0.3s ease;
+  transition: opacity 0.3s ease;
 }
 
-.transcriptCard:hover {
-  background: rgba(30, 58, 95, 0.5);
-  border-color: rgba(148, 163, 184, 0.18);
+.opLatest {
+  opacity: 1;
 }
 
-@keyframes fadeIn {
+.opRecent {
+  opacity: 0.7;
+}
+
+.opOlder {
+  opacity: 0.4;
+}
+
+@keyframes fadeSlideIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -417,19 +419,20 @@
 }
 
 .timestamp {
-  display: inline-block;
+  display: none;
   font-size: 0.6875rem;
-  color: #7dd3fc;
-  font-weight: 600;
-  margin-bottom: 0.625rem;
-  padding: 0.25rem 0.5rem;
-  background: rgba(125, 211, 252, 0.1);
-  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  margin-bottom: 0.375rem;
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
+.subtitleLine:hover .timestamp {
+  display: inline-block;
+}
+
 .originalText {
-  color: #a5b4c6;
+  color: var(--text-tertiary);
   font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.6;
@@ -440,12 +443,12 @@
 
 .divider {
   height: 1px;
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.2), transparent);
+  background: linear-gradient(90deg, var(--border-primary), transparent);
   margin: 0.5rem 0;
 }
 
 .translatedText {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 1rem;
   font-weight: 500;
   line-height: 1.7;
@@ -482,9 +485,9 @@
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -493,27 +496,25 @@
 }
 
 .modalBox {
-  background: rgba(30, 41, 59, 0.98);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
   border-radius: 20px;
   padding: 2rem;
   max-width: 360px;
   width: 100%;
   text-align: center;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
 }
 
 .modalBox h2 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: white;
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
 .modalBox p {
-  color: #94a3b8;
+  color: var(--text-tertiary);
   font-size: 0.9375rem;
   margin-bottom: 1.25rem;
 }
@@ -521,16 +522,16 @@
 .roomCodeBadge {
   display: inline-block;
   padding: 0.625rem 1.25rem;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.25);
+  background: var(--accent-light);
+  border: 1px solid rgba(59, 130, 246, 0.2);
   border-radius: 10px;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   font-size: 0.875rem;
   margin-bottom: 1.25rem;
 }
 
 .roomCodeBadge strong {
-  color: #60a5fa;
+  color: var(--accent-primary);
   font-size: 1rem;
   font-family: 'SF Mono', 'Fira Code', monospace;
   margin-left: 0.375rem;
@@ -539,10 +540,10 @@
 .input {
   width: 100%;
   padding: 0.875rem 1rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
   border-radius: 12px;
-  color: white;
+  color: var(--text-primary);
   font-size: 1rem;
   margin-bottom: 0.75rem;
   transition: all 0.2s ease;
@@ -550,16 +551,16 @@
 
 .input:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .input::placeholder {
-  color: #64748b;
+  color: var(--text-tertiary);
 }
 
 .error {
-  color: #f87171;
+  color: #ef4444;
   font-size: 0.875rem;
   margin-top: -0.25rem;
   margin-bottom: 0.75rem;
@@ -584,22 +585,22 @@
 }
 
 .cancelBtn {
-  background: rgba(148, 163, 184, 0.15);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
 }
 
 .cancelBtn:hover {
-  background: rgba(148, 163, 184, 0.2);
+  background: var(--bg-surface-hover);
 }
 
 .submitBtn {
-  background: #3b82f6;
-  color: white;
+  background: var(--accent-primary);
+  color: #ffffff;
 }
 
 .submitBtn:hover {
-  background: #2563eb;
+  background: var(--accent-primary-hover);
   transform: translateY(-1px);
 }
 
@@ -616,15 +617,15 @@
   }
 
   .transcriptContainer {
-    background: rgba(30, 41, 59, 0.3);
-    border: 1px solid rgba(148, 163, 184, 0.1);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-primary);
     border-radius: 16px;
     max-height: calc(100vh - 180px);
+    box-shadow: var(--shadow-sm);
   }
 
-  .transcriptCard {
-    padding: 1.25rem;
-    border-radius: 14px;
+  .subtitleLine {
+    padding: 0.75rem 1rem;
   }
 
   .dropdownMenu {
@@ -647,18 +648,18 @@
     padding: 0;
     min-height: auto;
     height: calc(100vh - 4rem);
-    background: rgba(30, 41, 59, 0.4);
-    border: 1px solid rgba(148, 163, 184, 0.1);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-primary);
     border-radius: 1.5rem;
     overflow: hidden;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--shadow-lg);
   }
 
   .header {
     padding: 1.25rem 1.5rem;
     border-radius: 0;
     position: relative;
-    background: rgba(15, 23, 42, 0.8);
+    background: var(--header-bg);
   }
 
   .headerCenter {
@@ -685,14 +686,12 @@
     border-radius: 0;
   }
 
-  .transcriptCard {
-    padding: 1.5rem;
-    border-radius: 16px;
-    margin-bottom: 1rem;
+  .subtitleLine {
+    padding: 0.875rem 1.5rem;
+    margin-bottom: 0.25rem;
     max-width: 800px;
     margin-left: auto;
     margin-right: auto;
-    border-left-width: 4px;
   }
 
   .timestamp {
@@ -805,8 +804,8 @@
     padding: 2rem 3rem;
   }
 
-  .transcriptCard {
-    padding: 1.75rem;
+  .subtitleLine {
+    padding: 1rem 2rem;
     max-width: 900px;
   }
 

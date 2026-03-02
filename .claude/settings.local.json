@@ -40,7 +40,9 @@
       "Bash(npx tsc:*)",
       "mcp__ide__getDiagnostics",
       "Bash(npx next lint:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }

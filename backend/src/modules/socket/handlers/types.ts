@@ -15,11 +15,6 @@ export interface AudioBlobData {
   audio: Buffer;
 }
 
-export interface SttIdCacheEntry {
-  id: string;
-  timestamp: number;
-}
-
 export interface HandlerContext {
   io: Server;
   roomService: RoomService;
@@ -27,7 +22,6 @@ export interface HandlerContext {
   sttManager: STTManager;
   translationService: TranslationService;
   sessionService: SessionService;
-  sttIdCache: Map<string, Map<string, SttIdCacheEntry>>;
   audioChunksReceived: Map<string, number>;
   setupSttCallbacks: (roomCode: string, promptTemplate?: string) => Promise<void>;
   sendTranscriptHistory: (socket: Socket, roomId: string) => Promise<void>;

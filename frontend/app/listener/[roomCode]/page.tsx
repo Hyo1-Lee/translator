@@ -507,8 +507,16 @@ export default function ListenerRoom() {
             </div>
           ) : (
             <>
-              {filteredTranscripts.map((item, index) => (
-                  <div key={index} className={styles.transcriptCard}>
+              {filteredTranscripts.map((item, index) => {
+                const total = filteredTranscripts.length;
+                const fromEnd = total - 1 - index;
+                const opacityClass = fromEnd === 0
+                  ? styles.opLatest
+                  : fromEnd <= 2
+                    ? styles.opRecent
+                    : styles.opOlder;
+                return (
+                  <div key={index} className={`${styles.subtitleLine} ${opacityClass}`}>
                     <div className={styles.timestamp}>
                       {formatTime(
                         item.timestamp
@@ -519,20 +527,14 @@ export default function ListenerRoom() {
                     {item.targetLanguage ? (
                       <>
                         {showOriginal && item.originalText && (
-                          <>
-                            <div className={styles.originalText}>{getDisplayText(item.originalText)}</div>
-                            <div className={styles.divider}></div>
-                          </>
+                          <div className={styles.originalText}>{getDisplayText(item.originalText)}</div>
                         )}
                         <div className={styles.translatedText}>{getDisplayText(item.text || "")}</div>
                       </>
                     ) : (
                       <>
                         {showOriginal && item.korean && (
-                          <>
-                            <div className={styles.originalText}>{getDisplayText(item.korean)}</div>
-                            <div className={styles.divider}></div>
-                          </>
+                          <div className={styles.originalText}>{getDisplayText(item.korean)}</div>
                         )}
                         <div className={styles.translatedText}>
                           {getDisplayText(
@@ -542,7 +544,8 @@ export default function ListenerRoom() {
                       </>
                     )}
                   </div>
-                ))}
+                );
+              })}
               <div ref={transcriptEndRef} />
             </>
           )}

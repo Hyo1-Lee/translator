@@ -10,7 +10,6 @@ import { attachUserIdToSocket, AuthenticatedSocket } from '../../middleware/sock
 import {
   HandlerContext,
   AudioStreamData,
-  SttIdCacheEntry,
   handleCreateRoom,
   handleRejoinRoom,
   handleJoinRoom,
@@ -29,10 +28,7 @@ export class SocketHandler {
   private sttManager: STTManager;
   private translationService: TranslationService;
   private sessionService: SessionService;
-  private sttIdCache: Map<string, Map<string, SttIdCacheEntry>> = new Map();
   private audioChunksReceived: Map<string, number> = new Map();
-
-  private readonly MAX_CACHE_SIZE_PER_ROOM = 500;
 
   constructor(
     io: Server,
@@ -60,7 +56,6 @@ export class SocketHandler {
       sttManager: this.sttManager,
       translationService: this.translationService,
       sessionService: this.sessionService,
-      sttIdCache: this.sttIdCache,
       audioChunksReceived: this.audioChunksReceived,
       setupSttCallbacks: this.setupSttCallbacks.bind(this),
       sendTranscriptHistory: this.sendTranscriptHistory.bind(this),
@@ -140,15 +135,12 @@ export class SocketHandler {
         const room = await this.roomService.getRoom(roomId);
         if (!room) return;
 
-        const targetLanguages = room.roomSettings?.targetLanguagesArray
-          || (typeof room.roomSettings?.targetLanguages === 'string'
-              ? room.roomSettings.targetLanguages.split(',').filter((l: string) => l.trim())
-              : room.roomSettings?.targetLanguages)
-          || ['en'];
+        const targetLanguages = room.roomSettings?.targetLanguagesArray || ['en'];
 
         this.sessionService.setTranslationInFlight(roomId, true);
 
         try {
+          const translateStart = Date.now();
           const result = await this.translationService.translate(
             text,
             targetLanguages,
@@ -159,6 +151,7 @@ export class SocketHandler {
               glossary: room.roomSettings?.customGlossary || undefined,
             }
           );
+          const latencyMs = Date.now() - translateStart;
 
           if (result && Object.keys(result.translations).length > 0) {
             // 4. 이전 번역 업데이트
@@ -185,9 +178,11 @@ export class SocketHandler {
             };
             this.io.to(roomId).emit('translation-batch', batchPayload);
 
-            // 6. 비동기 DB 저장
-            this.saveToDatabase(roomId, result.korean, result.translations, transcriptData.confidence).catch(err => {
-              console.error(`[SocketHandler][${roomId}] DB save error:`, err);
+            // 6. 비동기 DB 저장 (Segment)
+            this.transcriptService.saveSegment(
+              roomId, sequence, text, result.korean, result.translations, latencyMs
+            ).catch(err => {
+              console.error(`[SocketHandler][${roomId}] Segment save error:`, err);
             });
 
             // 7. 비동기 요약 재생성
@@ -206,60 +201,6 @@ export class SocketHandler {
       undefined,
       promptTemplate || 'general'
     );
-  }
-
-  /**
-   * DB 저장 (비동기)
-   */
-  private async saveToDatabase(
-    roomCode: string,
-    koreanText: string,
-    translations: Record<string, string>,
-    confidence?: number
-  ): Promise<void> {
-    // Initialize cache for room
-    if (!this.sttIdCache.has(roomCode)) {
-      this.sttIdCache.set(roomCode, new Map());
-    }
-    const roomCache = this.sttIdCache.get(roomCode)!;
-
-    // Clean old entries
-    const now = Date.now();
-    for (const [text, entry] of roomCache.entries()) {
-      if (now - entry.timestamp > 30000) {
-        roomCache.delete(text);
-      }
-    }
-
-    // Save STT text
-    let sttTextId: string | undefined;
-    const cachedEntry = roomCache.get(koreanText);
-    if (cachedEntry) {
-      sttTextId = cachedEntry.id;
-    } else {
-      const savedStt = await this.transcriptService.saveSttText(roomCode, koreanText, confidence);
-      sttTextId = savedStt?.id;
-      if (sttTextId) {
-        roomCache.set(koreanText, { id: sttTextId, timestamp: now });
-      }
-    }
-
-    // Save translations (parallel)
-    const savePromises = Object.entries(translations).map(([lang, translatedText]) =>
-      this.transcriptService.saveTranslationText(
-        roomCode,
-        lang,
-        koreanText,
-        translatedText,
-        undefined,
-        false,
-        sttTextId
-      )
-    );
-    await Promise.all(savePromises);
-
-    // Cleanup cache size
-    this.cleanupSttIdCache(roomCode);
   }
 
   /**
@@ -294,42 +235,34 @@ export class SocketHandler {
     }
   }
 
-  // Send translation history
+  // Send translation history (Segment-based)
   private async sendTranslationHistory(socket: Socket, roomId: string): Promise<void> {
     try {
-      const translationsByLanguage = await this.transcriptService.getAllTranslationTexts(roomId);
+      const segments = await this.transcriptService.getAllSegments(roomId);
 
-      // Group translations by original text to emit as batches
-      const batchMap = new Map<string, { korean: string; translations: Record<string, string>; timestamp: number }>();
+      for (const seg of segments) {
+        socket.emit('segment', {
+          id: seg.id,
+          korean: seg.koreanCorrected,
+          translations: seg.translations || {},
+          timestamp: seg.timestamp ? new Date(seg.timestamp).getTime() : Date.now(),
+          sequence: seg.sequence,
+          isHistory: true,
+        });
 
-      for (const [_language, translations] of Object.entries(translationsByLanguage)) {
-        for (const translation of translations as any[]) {
-          const key = translation.originalText;
-          if (!batchMap.has(key)) {
-            batchMap.set(key, {
-              korean: translation.originalText,
-              translations: {},
-              timestamp: translation.timestamp ? new Date(translation.timestamp).getTime() : Date.now(),
-            });
-          }
-          batchMap.get(key)!.translations[translation.targetLanguage] = translation.translatedText;
-        }
-      }
-
-      // Emit as translation-batch for backward compatibility
-      for (const [_key, batch] of batchMap) {
+        // Backward compat
         socket.emit('translation-batch', {
-          korean: batch.korean,
-          english: batch.translations['en'] || '',
-          translations: batch.translations,
-          timestamp: batch.timestamp,
-          batchId: `history-${batch.timestamp}`,
+          korean: seg.koreanCorrected,
+          english: seg.translations?.en || '',
+          translations: seg.translations || {},
+          timestamp: seg.timestamp ? new Date(seg.timestamp).getTime() : Date.now(),
+          batchId: `history-${seg.id}`,
           isHistory: true,
         });
       }
 
     } catch (error) {
-      console.error('[History] Error loading translations:', error);
+      console.error('[History] Error loading segments:', error);
     }
   }
 
@@ -353,17 +286,8 @@ export class SocketHandler {
             : room.roomSettings?.targetLanguages)
         || ['en'];
 
-      // Pre-populate sttIdCache
-      if (!this.sttIdCache.has(roomCode)) {
-        this.sttIdCache.set(roomCode, new Map());
-      }
-      const roomCache = this.sttIdCache.get(roomCode)!;
-      const now = Date.now();
-
       for (const sttText of untranslatedTexts) {
-        roomCache.set(sttText.text, { id: sttText.id, timestamp: now });
-
-        // Translate each untranslated text
+        const translateStart = Date.now();
         const result = await this.translationService.translate(
           sttText.text,
           targetLanguages,
@@ -373,43 +297,38 @@ export class SocketHandler {
             previousTranslations: this.sessionService.getPreviousTranslations(roomCode),
           }
         );
+        const latencyMs = Date.now() - translateStart;
 
         if (result && Object.keys(result.translations).length > 0) {
-          this.sessionService.addSegment(roomCode, result.korean);
+          const sequence = this.sessionService.addSegment(roomCode, result.korean);
           this.sessionService.updatePreviousTranslations(roomCode, result.translations);
 
-          // Save and broadcast
-          await this.saveToDatabase(roomCode, result.korean, result.translations, sttText.confidence);
+          // Save as Segment
+          await this.transcriptService.saveSegment(
+            roomCode, sequence, sttText.text, result.korean, result.translations, latencyMs
+          );
+
+          const segmentId = uuidv4();
+          this.io.to(roomCode).emit('segment', {
+            id: segmentId,
+            korean: result.korean,
+            translations: result.translations,
+            timestamp: Date.now(),
+            sequence,
+          });
 
           this.io.to(roomCode).emit('translation-batch', {
             korean: result.korean,
             english: result.translations['en'] || '',
             translations: result.translations,
-            timestamp: now,
-            batchId: `${roomCode}-hist-${now}`,
+            timestamp: Date.now(),
+            batchId: `${roomCode}-hist-${Date.now()}`,
           });
         }
       }
 
     } catch (error) {
       console.error(`[HistoricalTranslation][${roomCode}] Error:`, error);
-    }
-  }
-
-  /**
-   * sttIdCache 크기 제한 정리
-   */
-  private cleanupSttIdCache(roomCode: string): void {
-    const roomCache = this.sttIdCache.get(roomCode);
-    if (!roomCache) return;
-
-    if (roomCache.size > this.MAX_CACHE_SIZE_PER_ROOM) {
-      const sorted = Array.from(roomCache.entries())
-        .sort((a, b) => a[1].timestamp - b[1].timestamp);
-      const toRemove = sorted.length - this.MAX_CACHE_SIZE_PER_ROOM;
-      for (let i = 0; i < toRemove; i++) {
-        roomCache.delete(sorted[i][0]);
-      }
     }
   }
 }

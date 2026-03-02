@@ -48,7 +48,6 @@ export async function handleCreateRoom(
           ctx.sttManager.removeClient(oldRoomCode);
           ctx.audioChunksReceived.delete(oldRoomCode);
           ctx.sessionService.removeSession(oldRoomCode);
-          ctx.sttIdCache.delete(oldRoomCode);
         }
       }
     } else {
@@ -59,7 +58,6 @@ export async function handleCreateRoom(
         ctx.sttManager.removeClient(oldRoomCode);
         ctx.audioChunksReceived.delete(oldRoomCode);
         ctx.sessionService.removeSession(oldRoomCode);
-        ctx.sttIdCache.delete(oldRoomCode);
       }
     }
 
@@ -241,7 +239,6 @@ export async function handleDisconnect(
       ctx.sttManager.removeClient(speakerRoom.roomCode);
       ctx.audioChunksReceived.delete(speakerRoom.roomCode);
       ctx.sessionService.removeSession(speakerRoom.roomCode);
-      ctx.sttIdCache.delete(speakerRoom.roomCode);
       await sessionManager.unregisterSpeakerSocket(speakerRoom.id, socket.id);
     } else {
       await ctx.roomService.removeListener(socket.id);

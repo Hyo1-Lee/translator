@@ -2,12 +2,11 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { AuthService } from '../auth/auth.service';
 import { Room, RoomStatus } from '../../models/Room';
 import { RoomSettings } from '../../models/RoomSettings';
-import { Transcript } from '../../models/Transcript';
 import { Listener } from '../../models/Listener';
 import { SavedTranscript } from '../../models/SavedTranscript';
 import { SttText } from '../../models/SttText';
 import { TranslationText } from '../../models/TranslationText';
-import { Op } from 'sequelize';
+import { Segment } from '../../models/Segment';
 
 export async function dashboardRoutes(fastify: FastifyInstance) {
   const authService = new AuthService();
@@ -48,29 +47,27 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
           {
             model: Listener,
             attributes: ['id'],
-            where: { leftAt: null },  // Only count active listeners
-            required: false  // Use LEFT JOIN to still get rooms even with no active listeners
+            where: { leftAt: null },
+            required: false
           },
           {
-            model: Transcript,
+            model: Segment,
             attributes: ['id']
           }
         ],
         order: [['createdAt', 'DESC']]
       });
 
-      // Transform the data to include counts
       const roomsData = rooms.map((room: any) => {
         const roomJson = room.toJSON();
         return {
           ...roomJson,
           _count: {
             listeners: roomJson.listeners?.length || 0,
-            transcripts: roomJson.transcripts?.length || 0
+            segments: roomJson.segments?.length || 0
           },
-          // Remove the full arrays to reduce payload size
           listeners: undefined,
-          transcripts: undefined
+          segments: undefined
         };
       });
 
@@ -107,8 +104,8 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         },
       });
 
-      // Total transcripts
-      const totalTranscripts = await Transcript.count({
+      // Total segments
+      const totalSegments = await Segment.count({
         include: [{
           model: Room,
           where: { userId },
@@ -131,7 +128,7 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         data: {
           totalRooms,
           activeRooms,
-          totalTranscripts,
+          totalSegments,
           totalListeners,
         },
       });
@@ -193,11 +190,10 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       }
 
       // Delete room and related data in correct order to avoid foreign key constraint errors
-      // Order: TranslationText -> SttText -> Listener -> Transcript -> RoomSettings -> Room
       await TranslationText.destroy({ where: { roomId } });
       await SttText.destroy({ where: { roomId } });
+      await Segment.destroy({ where: { roomId } });
       await Listener.destroy({ where: { roomId } });
-      await Transcript.destroy({ where: { roomId } });
       await RoomSettings.destroy({ where: { roomId } });
       await Room.destroy({ where: { id: roomId } });
 
@@ -237,55 +233,18 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Get STT texts for this room
-      const sttTexts = await SttText.findAll({
+      // Get segments for this room
+      const segments = await Segment.findAll({
         where: { roomId: room.id },
-        order: [['timestamp', 'ASC']]
+        order: [['sequence', 'ASC']]
       });
 
-      // Get translations for this room (only final translations, not partial)
-      const translations = await TranslationText.findAll({
-        where: {
-          roomId: room.id,
-          isPartial: false
-        },
-        order: [['timestamp', 'ASC']]
-      });
-
-      // Build transcript data: group translations by originalText (STT)
-      const transcriptsData: Array<{
-        korean: string;
-        english: string;
-        translations: Record<string, string>;
-        timestamp: Date;
-      }> = [];
-
-      // Group translations by originalText
-      const translationsByOriginal = new Map<string, { translations: Record<string, string>, timestamp: Date }>();
-
-      for (const t of translations) {
-        const key = t.originalText;
-        if (!translationsByOriginal.has(key)) {
-          translationsByOriginal.set(key, { translations: {}, timestamp: t.timestamp });
-        }
-        const entry = translationsByOriginal.get(key)!;
-        entry.translations[t.targetLanguage] = t.translatedText;
-      }
-
-      // Convert to array format
-      for (const [originalText, data] of translationsByOriginal) {
-        transcriptsData.push({
-          korean: originalText,
-          english: data.translations['en'] || '',
-          translations: data.translations,
-          timestamp: data.timestamp
-        });
-      }
-
-      // Sort by timestamp
-      transcriptsData.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-      console.log('[Dashboard] Saving session with', transcriptsData.length, 'transcripts from', sttTexts.length, 'STT texts and', translations.length, 'translations');
+      const transcriptsData = segments.map((seg: any) => ({
+        korean: seg.koreanCorrected || seg.koreanOriginal,
+        english: seg.translations?.en || '',
+        translations: seg.translations || {},
+        timestamp: seg.timestamp
+      }));
 
       const savedTranscript = await SavedTranscript.create({
         userId,

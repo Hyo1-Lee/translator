@@ -109,18 +109,11 @@ async function bootstrap() {
     return room;
   });
 
-  fastify.get('/api/v1/rooms/:roomCode/stats', async (request, reply) => {
+  fastify.get('/api/v1/rooms/:roomCode/segments', async (request, reply) => {
     const { roomCode } = request.params as { roomCode: string };
     const transcriptService = new TranscriptService();
-    const stats = await transcriptService.getStats(roomCode);
-    return stats;
-  });
-
-  fastify.get('/api/v1/rooms/:roomCode/export', async (request, reply) => {
-    const { roomCode } = request.params as { roomCode: string };
-    const transcriptService = new TranscriptService();
-    const transcripts = await transcriptService.getAllTranscripts(roomCode);
-    return transcripts;
+    const segments = await transcriptService.getAllSegments(roomCode);
+    return segments;
   });
 
   // Initialize Socket.IO
@@ -177,7 +170,7 @@ async function bootstrap() {
   setInterval(async () => {
     try {
       await roomService.cleanupOldRooms(24);
-      await transcriptService.cleanupOldTranscripts(7);
+      await transcriptService.cleanupOldData(7);
     } catch (error) {
       console.error('[Cleanup] Error:', error);
     }

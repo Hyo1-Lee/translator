@@ -1,16 +1,24 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=Pretendard:wght@300;400;500;600;700;900&display=swap");
 
 :root {
-  --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 30, 30, 46;
-  --background-end-rgb: 45, 45, 68;
-
-  /* Gradient Variables */
-  --gradient-primary: linear-gradient(180deg, #f5f7fa 0%, #c3cfe2 100%);
-  --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  --gradient-background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  --gradient-disabled: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f8fafc;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --border-primary: #e2e8f0;
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-light: rgba(59, 130, 246, 0.1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+  --header-bg: rgba(255, 255, 255, 0.85);
+  --header-border: #e2e8f0;
 }
 
 html,
@@ -21,21 +29,15 @@ body {
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-    135deg,
-    rgb(var(--background-start-rgb)) 0%,
-    rgb(var(--background-end-rgb)) 100%
-  );
+  color: var(--text-primary);
+  background: var(--bg-secondary);
   font-family: "Pretendard", "Noto Sans KR", -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
   font-size: 16px;
-  /* 모바일 터치 스크롤 최적화 */
   -webkit-overflow-scrolling: touch;
-  /* 모바일 탭 하이라이트 비활성화 */
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -85,20 +87,19 @@ h6 {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-tertiary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 119, 198, 0.3);
+  background: #cbd5e1;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 119, 198, 0.5);
+  background: #94a3b8;
 }
 
-/* 모바일 최적화 */
 @media (max-width: 768px) {
   body {
     font-size: 15px;
@@ -110,30 +111,19 @@ h6 {
     font-size: 14px;
   }
 
-  /* 모바일에서 스크롤바 숨기기 */
   ::-webkit-scrollbar {
     width: 4px;
     height: 4px;
   }
 }
 
-/* 터치 디바이스 최적화 */
+/* Touch device optimization */
 @media (hover: none) and (pointer: coarse) {
-  /* 터치 디바이스에서 버튼과 링크의 최소 터치 영역 보장 */
   button,
   a {
     min-height: 44px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-  }
-}
-
-/* 다크모드 지원을 위한 미디어 쿼리 (선택적) */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 30, 30, 46;
-    --background-end-rgb: 45, 45, 68;
   }
 }

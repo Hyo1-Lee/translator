@@ -2,9 +2,9 @@
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(15, 23, 42, 0.8);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: var(--header-bg);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--header-border);
 }
 
 .container {
@@ -38,7 +38,7 @@
 .brandName {
   font-size: 1.5rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -67,17 +67,17 @@
 }
 
 .navLink {
-  color: #94a3b8;
+  color: var(--text-tertiary);
 }
 
 .navLink:hover {
-  color: #cbd5e1;
-  background: rgba(148, 163, 184, 0.05);
+  color: var(--text-secondary);
+  background: var(--bg-surface-hover);
 }
 
 .navLinkActive {
-  color: white;
-  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent-primary);
+  background: var(--accent-light);
 }
 
 /* Language Switcher */
@@ -92,42 +92,26 @@
   gap: 0.5rem;
   padding: 0.625rem 1rem;
   position: relative;
-  background: rgba(148, 163, 184, 0.1);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
   border-radius: 0.75rem;
-  color: #cbd5e1;
+  color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(148, 163, 184, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
 }
 
 .langButton::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 50%;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.1) 0%,
-    transparent 100%
-  );
-  border-radius: 0.75rem 0.75rem 0 0;
-  pointer-events: none;
+  display: none;
 }
 
 .langButton:hover {
-  background: rgba(148, 163, 184, 0.15);
-  border-color: rgba(148, 163, 184, 0.3);
-  color: white;
-  box-shadow: 0 4px 12px rgba(148, 163, 184, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
 }
 
 /* User Section */
@@ -145,7 +129,7 @@
 
 .loginButton {
   padding: 0.625rem 1.25rem;
-  color: #cbd5e1;
+  color: var(--text-secondary);
   text-decoration: none;
   font-size: 0.9375rem;
   font-weight: 500;
@@ -154,48 +138,32 @@
 }
 
 .loginButton:hover {
-  color: white;
-  background: rgba(148, 163, 184, 0.05);
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
 }
 
 .signupButton {
   padding: 0.625rem 1.25rem;
   position: relative;
-  background: rgba(59, 130, 246, 0.2);
-  color: white;
+  background: var(--accent-primary);
+  color: #ffffff;
   text-decoration: none;
   font-size: 0.9375rem;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: none;
   border-radius: 0.75rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
 }
 
 .signupButton::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 50%;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.3) 0%,
-    transparent 100%
-  );
-  border-radius: 0.75rem 0.75rem 0 0;
-  pointer-events: none;
+  display: none;
 }
 
 .signupButton:hover {
   transform: translateY(-1px);
-  background: rgba(59, 130, 246, 0.25);
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3), 0 4px 12px rgba(0, 0, 0, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-md);
 }
 
 /* User Menu */
@@ -208,23 +176,23 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 1rem;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
   border-radius: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .userButton:hover {
-  background: rgba(30, 41, 59, 0.8);
-  border-color: rgba(148, 163, 184, 0.2);
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
 }
 
 .avatar {
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -234,7 +202,7 @@
 }
 
 .userName {
-  color: white;
+  color: var(--text-primary);
   font-size: 0.9375rem;
   font-weight: 500;
   max-width: 150px;
@@ -245,7 +213,7 @@
 
 .chevronDown,
 .chevronUp {
-  color: #94a3b8;
+  color: var(--text-tertiary);
   transition: transform 0.2s;
 }
 
@@ -265,11 +233,10 @@
   top: calc(100% + 0.5rem);
   right: 0;
   min-width: 240px;
-  background: rgba(30, 41, 59, 0.95);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
   border-radius: 0.75rem;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-lg);
   z-index: 100;
   overflow: hidden;
   animation: dropdownSlide 0.2s ease-out;
@@ -288,11 +255,11 @@
 
 .dropdownHeader {
   padding: 1rem;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-tertiary);
 }
 
 .userEmail {
-  color: #94a3b8;
+  color: var(--text-tertiary);
   font-size: 0.875rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -301,7 +268,7 @@
 
 .dropdownDivider {
   height: 1px;
-  background: rgba(148, 163, 184, 0.1);
+  background: var(--border-primary);
 }
 
 .dropdownItem {
@@ -312,7 +279,7 @@
   padding: 0.875rem 1rem;
   background: none;
   border: none;
-  color: #cbd5e1;
+  color: var(--text-secondary);
   font-size: 0.9375rem;
   font-weight: 500;
   text-align: left;
@@ -322,8 +289,8 @@
 }
 
 .dropdownItem:hover {
-  background: rgba(59, 130, 246, 0.1);
-  color: white;
+  background: var(--accent-light);
+  color: var(--accent-primary);
 }
 
 .dropdownItem svg {
@@ -368,7 +335,6 @@
     font-size: 0.8125rem;
   }
 
-  /* Hide signup button on mobile */
   .signupButton {
     display: none;
   }
@@ -397,7 +363,6 @@
     font-size: 1.125rem;
   }
 
-  /* Show only icon on very small screens */
   .langButton span {
     display: none;
   }

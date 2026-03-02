@@ -1301,21 +1301,20 @@ function SpeakerContent() {
                     if (item.type === "stt") return false;
                     if (item.type === "translation" && item.isPartial) return false;
                     if (selectedLanguage === null) return true;
-                    if (item.type === "translation" && item.targetLanguage) return item.targetLanguage === selectedLanguage;
+                    if (item.translations) return !!item.translations[selectedLanguage];
+                    if (item.targetLanguage) return item.targetLanguage === selectedLanguage;
                     return true;
                   }).map((item, index) => (
                     <div key={index} className={styles.translationCard}>
-                      {item.targetLanguage ? (
-                        <div className={styles.translationCardContent}>
-                          {item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
-                          <p className={styles.translatedText}>{getDisplayText(item.text || "")}</p>
-                        </div>
-                      ) : (
-                        <div className={styles.translationCardContent}>
-                          {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
-                          <p className={styles.translatedText}>{getDisplayText(item.english || "")}</p>
-                        </div>
-                      )}
+                      <div className={styles.translationCardContent}>
+                        {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
+                        {!item.korean && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
+                        <p className={styles.translatedText}>
+                          {getDisplayText(
+                            item.translations?.[selectedLanguage || "en"] || item.text || item.english || ""
+                          )}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1374,6 +1373,11 @@ function SpeakerContent() {
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
                         <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                      </svg>
+                    </button>
+                    <button onClick={() => copyToClipboard(`${FRONTEND_URL}/overlay/${roomId}?lang=en&fontSize=32`, "OBS URL")} className={styles.actionIconBtn} title="OBS URL 복사">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
                       </svg>
                     </button>
                     <button onClick={shareRoom} className={styles.actionIconBtn} title="공유">
@@ -1484,21 +1488,20 @@ function SpeakerContent() {
                     if (item.type === "stt") return false;
                     if (item.type === "translation" && item.isPartial) return false;
                     if (selectedLanguage === null) return true;
-                    if (item.type === "translation" && item.targetLanguage) return item.targetLanguage === selectedLanguage;
+                    if (item.translations) return !!item.translations[selectedLanguage];
+                    if (item.targetLanguage) return item.targetLanguage === selectedLanguage;
                     return true;
                   }).map((item, index) => (
                     <div key={index} className={styles.translationCard}>
-                      {item.targetLanguage ? (
-                        <div className={styles.translationCardContent}>
-                          {item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
-                          <p className={styles.translatedText}>{getDisplayText(item.text || "")}</p>
-                        </div>
-                      ) : (
-                        <div className={styles.translationCardContent}>
-                          {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
-                          <p className={styles.translatedText}>{getDisplayText(item.english || "")}</p>
-                        </div>
-                      )}
+                      <div className={styles.translationCardContent}>
+                        {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
+                        {!item.korean && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
+                        <p className={styles.translatedText}>
+                          {getDisplayText(
+                            item.translations?.[selectedLanguage || "en"] || item.text || item.english || ""
+                          )}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>

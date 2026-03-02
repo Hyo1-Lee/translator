@@ -15,9 +15,9 @@ import {
 } from 'sequelize-typescript';
 import { User } from './User';
 import { Listener } from './Listener';
-import { Transcript } from './Transcript';
 import { SttText } from './SttText';
 import { RoomSettings } from './RoomSettings';
+import { Segment } from './Segment';
 
 export enum RoomStatus {
   ACTIVE = 'ACTIVE',
@@ -90,12 +90,12 @@ export class Room extends Model {
   @HasMany(() => Listener)
   declare listeners: Listener[];
 
-  @HasMany(() => Transcript)
-  declare transcripts: Transcript[];
-
   @HasMany(() => SttText)
   declare sttTexts: SttText[];
 
   @HasOne(() => RoomSettings)
   declare roomSettings: RoomSettings;
+
+  @HasMany(() => Segment)
+  declare segments: Segment[];
 }

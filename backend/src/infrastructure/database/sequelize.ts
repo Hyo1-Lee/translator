@@ -10,8 +10,8 @@ import {
   Listener,
   SttText,
   TranslationText,
-  Transcript,
   SavedTranscript,
+  Segment,
 } from '../../models';
 
 // Sequelize instance
@@ -55,8 +55,8 @@ sequelize.addModels([
   Listener,
   SttText,
   TranslationText,
-  Transcript,
   SavedTranscript,
+  Segment,
 ]);
 
 export const connectDatabase = async (): Promise<void> => {
