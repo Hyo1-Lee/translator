@@ -39,7 +39,8 @@
       "Bash(npx next build)",
       "Bash(npx tsc:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(npx next lint:*)"
+      "Bash(npx next lint:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }

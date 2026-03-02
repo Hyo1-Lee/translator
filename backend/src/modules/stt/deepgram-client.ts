@@ -1,7 +1,5 @@
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 import { STTProvider } from './stt-provider.interface';
-import { getKeywords, toKeyterms, KeywordConfig } from './keywords-config';
-import { processTranscript, isCompleteSentence, formatForDisplay } from './text-processor';
 
 /**
  * Deepgram Configuration
@@ -15,31 +13,74 @@ interface DeepgramConfig {
   smartFormat?: boolean;
   punctuate?: boolean;
   interimResults?: boolean;
-  promptTemplate?: string;  // Template for keywords (church, medical, etc.)
+  promptTemplate?: string;
 }
 
 /**
- * Deepgram Client - 공식 SDK 문서대로 구현
+ * SegmentAggregator - Deepgram이 빠르게 연속 전송하는 is_final 세그먼트를
+ * 짧은 윈도우(300ms)로 합쳐서 하나의 세그먼트로 전달
+ */
+class SegmentAggregator {
+  private buffer: string[] = [];
+  private timer: NodeJS.Timeout | null = null;
+  private lastConfidence: number = 0;
+  private readonly WINDOW_MS = 300;
+  private onFlush: (text: string, confidence: number) => void;
+
+  constructor(onFlush: (text: string, confidence: number) => void) {
+    this.onFlush = onFlush;
+  }
+
+  add(text: string, confidence: number): void {
+    this.buffer.push(text);
+    this.lastConfidence = confidence;
+
+    if (this.timer) {
+      clearTimeout(this.timer);
+    }
+
+    this.timer = setTimeout(() => {
+      this.flush();
+    }, this.WINDOW_MS);
+  }
+
+  flush(): void {
+    if (this.buffer.length === 0) return;
+
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+
+    const combined = this.buffer.join(' ').trim();
+    this.buffer = [];
+
+    if (combined.length > 0) {
+      this.onFlush(combined, this.lastConfidence);
+    }
+  }
+
+  destroy(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.buffer = [];
+  }
+}
+
+/**
+ * Deepgram Client - Nova-3 고정, 커스텀 버퍼링 제거, SegmentAggregator 사용
  */
 export class DeepgramClient extends STTProvider {
   private config: DeepgramConfig;
   private client: any;
   private connection: any;
   private isReady: boolean = false;
-
-  // Sentence buffering (교회 프리셋용 최적화)
-  private sentenceBuffer: string[] = [];
-  private flushTimer: NodeJS.Timeout | null = null;
-  private FLUSH_TIMEOUT_MS = 800;  // 기본값, church 프리셋에서 상향
-  private readonly SENTENCE_ENDINGS = /[.!?。！？]/;
-  private readonly MIN_WORDS_TO_FLUSH = 5;  // 최소 5단어 이상일 때만 flush
+  private aggregator: SegmentAggregator;
 
   // 마지막 INTERIM 결과 저장 (disconnect 시 처리용)
   private lastInterimText: string = '';
-  private lastInterimConfidence: number = 0;
-
-  // Keywords for the current session
-  private keywords: KeywordConfig[] = [];
 
   constructor(roomId: string, config: DeepgramConfig) {
     super(roomId);
@@ -54,43 +95,37 @@ export class DeepgramClient extends STTProvider {
       ...config,
     };
 
-    // Load keywords based on prompt template
-    this.keywords = getKeywords(this.config.promptTemplate || 'general');
+    // 항상 Nova-3 사용 (keywords 포기, 인식률 우선)
+    this.config.model = 'nova-3';
 
-    // Church 프리셋: flush 타이밍 조정 및 Nova-2 모델 사용 (keywords 지원)
-    if (this.config.promptTemplate === 'church') {
-      this.FLUSH_TIMEOUT_MS = 3500;  // 교회용: 800ms → 3500ms (더 긴 문장 대기)
-      // Nova-3는 keywords를 지원하지 않음, church에서는 Nova-2 권장
-      if (this.config.model === 'nova-3' && this.keywords.length > 0) {
-        this.config.model = 'nova-2';
-      }
-    }
+    this.aggregator = new SegmentAggregator((text, confidence) => {
+      this.emit('transcript', {
+        text,
+        confidence,
+        final: true,
+      });
+    });
   }
 
   /**
-   * Connect - Nova 모델 live streaming 공식 문서대로
+   * Connect - Nova-3 최적화 설정
    */
   async connect(): Promise<void> {
     try {
-      // Validate API key
       if (!this.config.apiKey || this.config.apiKey.trim() === '') {
         throw new Error('Deepgram API key is missing');
       }
 
-      // Create Deepgram client
       this.client = createClient(this.config.apiKey);
 
-      // Connection options - 한국어 최적화 설정
-      // Church 프리셋: 더 긴 침묵 허용 (설교 중 pause가 많음)
-      const isChurch = this.config.promptTemplate === 'church';
       const options: any = {
-        model: this.config.model,
+        model: 'nova-3',
         language: this.config.language,
-        smart_format: true,           // 자동 구두점 및 포맷팅
-        punctuate: true,              // 마침표 자동 추가
+        smart_format: true,
+        punctuate: true,
         interim_results: this.config.interimResults,
-        endpointing: isChurch ? 1500 : 1000,      // church: 1.5초, 기본: 1초
-        utterance_end_ms: isChurch ? 3000 : 2000, // church: 3초, 기본: 2초
+        endpointing: 800,          // 800ms (기존 1000~1500ms → 800ms)
+        utterance_end_ms: 1500,    // 1500ms (기존 2000~3000ms → 1500ms)
         vad_events: true,
         filler_words: false,
         numerals: true,
@@ -99,14 +134,6 @@ export class DeepgramClient extends STTProvider {
         channels: 1,
       };
 
-      // Enhanced/Nova-2 모델에서만 keywords 사용 가능
-      if (this.config.model !== 'nova-3' && this.keywords.length > 0) {
-        const keyterms = toKeyterms(this.keywords);
-        if (keyterms.length > 0) {
-          options.keywords = keyterms;
-        }
-      }
-
       if (this.config.tier) {
         options.tier = this.config.tier;
       }
@@ -114,10 +141,8 @@ export class DeepgramClient extends STTProvider {
         options.version = this.config.version;
       }
 
-      // Create connection
       this.connection = this.client.listen.live(options);
 
-      // Setup event handlers
       this.connection.on(LiveTranscriptionEvents.Open, () => {
         this.isReady = true;
         this.isConnected = true;
@@ -127,39 +152,24 @@ export class DeepgramClient extends STTProvider {
       this.connection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
         try {
           const transcript = data.channel?.alternatives?.[0]?.transcript;
-          if (transcript && transcript.trim() !== '') {
-            const isFinal = data.is_final || false;
-            const confidence = data.channel?.alternatives?.[0]?.confidence || 0;
+          if (!transcript || transcript.trim() === '') return;
 
-            // Interim results: emit for real-time display
-            if (!isFinal) {
-              this.lastInterimText = transcript;
-              this.lastInterimConfidence = confidence;
+          const isFinal = data.is_final || false;
+          const confidence = data.channel?.alternatives?.[0]?.confidence || 0;
 
-              if (this.flushTimer) {
-                clearTimeout(this.flushTimer);
-                this.flushTimer = setTimeout(() => {
-                  const buffer = this.sentenceBuffer.join(' ').trim();
-                  if (buffer.length > 0) {
-                    this.flushSentenceBuffer(this.lastInterimConfidence);
-                  }
-                }, this.FLUSH_TIMEOUT_MS);
-              }
-
-              this.emit('transcript', {
-                text: transcript,
-                confidence,
-                final: false,
-              });
-              return;
-            }
-
-            // Final results
-            this.lastInterimText = '';
-            this.lastInterimConfidence = 0;
-
-            this.addToSentenceBuffer(transcript, confidence);
+          if (!isFinal) {
+            this.lastInterimText = transcript;
+            this.emit('transcript', {
+              text: transcript,
+              confidence,
+              final: false,
+            });
+            return;
           }
+
+          // Final → SegmentAggregator로 전달 (300ms 윈도우로 합침)
+          this.lastInterimText = '';
+          this.aggregator.add(transcript, confidence);
         } catch (err) {
           console.error(`[Deepgram] Error processing transcript:`, err);
         }
@@ -206,8 +216,6 @@ export class DeepgramClient extends STTProvider {
   /**
    * Send audio
    */
-  private audioChunksSent = 0;
-
   sendAudio(audioData: Buffer): void {
     if (!this.isReady || !this.connection) {
       return;
@@ -215,96 +223,21 @@ export class DeepgramClient extends STTProvider {
 
     try {
       this.connection.send(audioData);
-      this.audioChunksSent++;
     } catch (error) {
       console.error(`[Deepgram] Send error:`, error);
     }
   }
 
   /**
-   * Sentence Buffering - Add transcript to buffer with simple flushing
-   */
-  private addToSentenceBuffer(transcript: string, confidence: number): void {
-    this.sentenceBuffer.push(transcript);
-
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-    }
-
-    const currentBuffer = this.sentenceBuffer.join(' ').trim();
-    const isComplete = isCompleteSentence(currentBuffer);
-    const isTooLong = currentBuffer.length > 200;
-
-    const shouldFlushNow = isComplete || isTooLong;
-
-    if (shouldFlushNow) {
-      this.flushSentenceBuffer(confidence);
-    } else {
-      this.flushTimer = setTimeout(() => {
-        const buffer = this.sentenceBuffer.join(' ').trim();
-        if (buffer.length > 0) {
-          this.flushSentenceBuffer(confidence);
-        }
-      }, this.FLUSH_TIMEOUT_MS);
-    }
-  }
-
-  /**
-   * Flush sentence buffer - emit complete sentence with post-processing
-   * MIN_WORDS_TO_FLUSH: 너무 짧은 문장은 flush하지 않음
-   */
-  private flushSentenceBuffer(confidence: number, forceFlush: boolean = false): void {
-    if (this.sentenceBuffer.length === 0) {
-      return;
-    }
-
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-
-    const rawSentence = this.sentenceBuffer.join(' ').trim();
-    const processedSentence = processTranscript(rawSentence);
-
-    if (!processedSentence) {
-      this.sentenceBuffer = [];
-      return;
-    }
-
-    // 최소 단어 수 체크 (강제 flush가 아닌 경우)
-    const wordCount = processedSentence.split(/\s+/).length;
-    if (!forceFlush && wordCount < this.MIN_WORDS_TO_FLUSH) {
-      // 단어 수가 부족하면 다시 타이머 설정
-      this.flushTimer = setTimeout(() => {
-        this.flushSentenceBuffer(confidence, true);  // 타임아웃 후엔 강제 flush
-      }, this.FLUSH_TIMEOUT_MS);
-      return;
-    }
-
-    const displaySentence = formatForDisplay(processedSentence);
-
-    this.emit('transcript', {
-      text: displaySentence,
-      confidence,
-      final: true,
-    });
-
-    this.sentenceBuffer = [];
-  }
-
-  /**
-   * End stream (flush)
+   * End stream - flush aggregator and finish connection
    */
   endStream(): void {
     if (this.lastInterimText) {
-      this.sentenceBuffer.push(this.lastInterimText);
+      this.aggregator.add(this.lastInterimText, 0.5);
       this.lastInterimText = '';
-      this.lastInterimConfidence = 0;
     }
 
-    if (this.sentenceBuffer.length > 0) {
-      this.flushSentenceBuffer(1.0, true);  // 종료 시 강제 flush
-    }
+    this.aggregator.flush();
 
     if (this.connection) {
       try {
@@ -320,19 +253,12 @@ export class DeepgramClient extends STTProvider {
    */
   disconnect(): void {
     if (this.lastInterimText) {
-      this.sentenceBuffer.push(this.lastInterimText);
+      this.aggregator.add(this.lastInterimText, 0.5);
       this.lastInterimText = '';
-      this.lastInterimConfidence = 0;
     }
 
-    if (this.sentenceBuffer.length > 0) {
-      this.flushSentenceBuffer(1.0, true);  // 종료 시 강제 flush
-    }
-
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
+    this.aggregator.flush();
+    this.aggregator.destroy();
 
     if (this.connection) {
       try {
@@ -359,6 +285,6 @@ export class DeepgramClient extends STTProvider {
    * Get provider name
    */
   getProviderName(): string {
-    return `deepgram-${this.config.model}`;
+    return 'deepgram-nova-3';
   }
 }

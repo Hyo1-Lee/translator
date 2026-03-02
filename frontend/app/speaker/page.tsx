@@ -734,7 +734,21 @@ function SpeakerContent() {
       });
     });
 
-    // Keep old translation-batch for backwards compatibility
+    // New segment event (primary pipeline)
+    socketRef.current.on("segment", (data: any) => {
+      setTranscripts((prev) => {
+        const newTranscript: Transcript = {
+          type: "translation",
+          korean: data.korean,
+          translations: data.translations || {},
+          timestamp: String(data.timestamp),
+          batchId: data.id,
+        };
+        return [...prev.slice(-49), newTranscript];
+      });
+    });
+
+    // Keep old translation-batch for backwards compatibility (history)
     socketRef.current.on("translation-batch", (data: SocketData) => {
       setTranscripts((prev) => {
         // Don't split into sentences - keep as a single batch for better readability

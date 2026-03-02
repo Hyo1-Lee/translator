@@ -9,7 +9,6 @@ interface DeepgramConfig {
   language?: string;
   smartFormat?: boolean;
   punctuate?: boolean;
-  diarize?: boolean;
 }
 
 interface STTConfig {
@@ -26,7 +25,7 @@ interface TranscriptData {
 }
 
 /**
- * Simplified STT Manager - Deepgram Only
+ * STT Manager - Deepgram Only, Nova-3 Fixed
  */
 export class STTManager {
   private clients: Map<string, STTProvider> = new Map();
@@ -37,15 +36,13 @@ export class STTManager {
   }
 
   /**
-   * Create STT client for a room (Deepgram only)
+   * Create STT client for a room
    */
   async createClient(
     roomId: string,
     onTranscript: (data: TranscriptData) => void,
     _onTranslation?: (data: any) => void,
     promptTemplate?: string,
-    _customPrompt?: string,
-    _targetLanguages?: string[]
   ): Promise<void> {
     if (this.clients.has(roomId)) {
       return;
@@ -88,8 +85,6 @@ export class STTManager {
   /**
    * Send audio to STT
    */
-  private sendCount: Map<string, number> = new Map();
-
   sendAudio(roomId: string, audioData: Buffer): void {
     const client = this.clients.get(roomId);
 

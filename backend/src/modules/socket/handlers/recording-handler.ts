@@ -17,14 +17,12 @@ export async function handleStartRecording(
       return;
     }
 
-    // Verify room and speaker
     const room = await ctx.roomService.getRoom(roomId);
     if (!room) {
       console.warn(`[Recording][${roomId}] Room not found`);
       return;
     }
 
-    // Verify speaker using userId
     const userId = (socket as AuthenticatedSocket).userId;
     const isAuthorized = await sessionManager.validateSpeaker(room.id, userId || null);
     if (!isAuthorized) {
@@ -32,43 +30,13 @@ export async function handleStartRecording(
       return;
     }
 
-    // Check if STT client already exists and is active
     if (ctx.sttManager.hasActiveClient(roomId)) {
       return;
     }
 
-    // Create new STT client
     try {
-      await ctx.sttManager.createClient(
-        roomId,
-        async (transcriptData) => {
-          if (transcriptData.isFinal) {
-            const translationManager = ctx.translationManagers.get(transcriptData.roomId);
-            if (translationManager) {
-              translationManager.addTranscript(
-                transcriptData.text,
-                true,
-                transcriptData.confidence
-              );
-            }
-          }
+      await ctx.setupSttCallbacks(roomId, room.roomSettings?.promptTemplate || 'general');
 
-          ctx.io.to(transcriptData.roomId).emit('stt-text', {
-            text: transcriptData.text,
-            timestamp: transcriptData.timestamp.getTime(),
-            isFinal: transcriptData.isFinal
-          });
-        },
-        undefined,
-        room.roomSettings?.promptTemplate || 'general'
-      );
-
-      // Always create TranslationManager
-      if (!ctx.translationManagers.has(roomId)) {
-        await ctx.createTranslationManager(roomId, room.roomSettings || {});
-      }
-
-      // Update recording state
       await recordingStateService.startRecording(room.id);
       await sessionManager.updateHeartbeat(room.id);
 
@@ -94,14 +62,12 @@ export async function handleStopRecording(
       return;
     }
 
-    // Verify room and speaker
     const room = await ctx.roomService.getRoom(roomId);
     if (!room) {
       console.warn(`[Recording][${roomId}] Room not found`);
       return;
     }
 
-    // Verify speaker using userId
     const userId = (socket as AuthenticatedSocket).userId;
     const isAuthorized = await sessionManager.validateSpeaker(room.id, userId || null);
     if (!isAuthorized) {
@@ -109,11 +75,9 @@ export async function handleStopRecording(
       return;
     }
 
-    // Close STT client
     ctx.sttManager.removeClient(roomId);
     ctx.audioChunksReceived.delete(roomId);
 
-    // Update recording state
     await recordingStateService.stopRecording(room.id);
 
   } catch (error) {

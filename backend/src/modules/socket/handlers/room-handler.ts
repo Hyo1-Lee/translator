@@ -18,7 +18,7 @@ export async function handleCreateRoom(
       customPrompt,
       maxListeners = 100,
       existingRoomCode,
-      targetLanguagesArray,  // 스피커가 선택한 번역 언어들
+      targetLanguagesArray,
       sourceLanguage,
       environmentPreset,
       customEnvironmentDescription,
@@ -47,13 +47,7 @@ export async function handleCreateRoom(
           console.log(`[Room] Cleaning up old room client: ${oldRoomCode}`);
           ctx.sttManager.removeClient(oldRoomCode);
           ctx.audioChunksReceived.delete(oldRoomCode);
-
-          // TranslationManager cleanup
-          const translationManager = ctx.translationManagers.get(oldRoomCode);
-          if (translationManager) {
-            await translationManager.cleanup();
-            ctx.translationManagers.delete(oldRoomCode);
-          }
+          ctx.sessionService.removeSession(oldRoomCode);
           ctx.sttIdCache.delete(oldRoomCode);
         }
       }
@@ -64,13 +58,7 @@ export async function handleCreateRoom(
         console.log(`[Room] Cleaning up previous room client: ${oldRoomCode}`);
         ctx.sttManager.removeClient(oldRoomCode);
         ctx.audioChunksReceived.delete(oldRoomCode);
-
-        // TranslationManager cleanup
-        const translationManager = ctx.translationManagers.get(oldRoomCode);
-        if (translationManager) {
-          await translationManager.cleanup();
-          ctx.translationManagers.delete(oldRoomCode);
-        }
+        ctx.sessionService.removeSession(oldRoomCode);
         ctx.sttIdCache.delete(oldRoomCode);
       }
     }
@@ -89,7 +77,6 @@ export async function handleCreateRoom(
         targetLanguages: targetLanguagesArray || ['en']
       });
 
-      // Update additional settings if provided
       if (room && (sourceLanguage || environmentPreset || customEnvironmentDescription || customGlossary || enableStreaming !== undefined)) {
         await ctx.roomService.updateRoomSettings(room.roomCode, {
           sourceLanguage,
@@ -98,7 +85,6 @@ export async function handleCreateRoom(
           customGlossary,
           enableStreaming
         });
-        // Refresh room data
         room = await ctx.roomService.getRoom(room.roomCode);
       }
     }
@@ -108,39 +94,12 @@ export async function handleCreateRoom(
     // Create STT client for this room
     if (!ctx.sttManager.hasActiveClient(room.roomCode)) {
       try {
-        await ctx.sttManager.createClient(
-          room.roomCode,
-          async (transcriptData) => {
-            if (transcriptData.isFinal) {
-              const translationManager = ctx.translationManagers.get(transcriptData.roomId);
-              if (translationManager) {
-                translationManager.addTranscript(
-                  transcriptData.text,
-                  true,
-                  transcriptData.confidence
-                );
-              }
-            }
-
-            ctx.io.to(transcriptData.roomId).emit('stt-text', {
-              text: transcriptData.text,
-              timestamp: transcriptData.timestamp.getTime(),
-              isFinal: transcriptData.isFinal
-            });
-          },
-          undefined,
-          room.roomSettings?.promptTemplate || 'general'
-        );
+        await ctx.setupSttCallbacks(room.roomCode, room.roomSettings?.promptTemplate || 'general');
       } catch (error) {
         console.error(`[Room][${room.roomCode}] Failed to create STT client:`, error);
         socket.emit('error', { message: 'Failed to initialize STT service' });
         return;
       }
-    }
-
-    // Always create TranslationManager
-    if (!ctx.translationManagers.has(room.roomCode)) {
-      await ctx.createTranslationManager(room.roomCode, room.roomSettings || {});
     }
 
     // Send room info to speaker
@@ -193,34 +152,7 @@ export async function handleRejoinRoom(
     socket.join(roomCode);
 
     if (!ctx.sttManager.hasActiveClient(roomCode)) {
-      await ctx.sttManager.createClient(
-        roomCode,
-        async (transcriptData) => {
-          if (transcriptData.isFinal) {
-            const translationManager = ctx.translationManagers.get(transcriptData.roomId);
-            if (translationManager) {
-              translationManager.addTranscript(
-                transcriptData.text,
-                true,
-                transcriptData.confidence
-              );
-            }
-          }
-
-          ctx.io.to(transcriptData.roomId).emit('stt-text', {
-            text: transcriptData.text,
-            timestamp: transcriptData.timestamp.getTime(),
-            isFinal: transcriptData.isFinal
-          });
-        },
-        undefined,
-        room.roomSettings?.promptTemplate || 'general'
-      );
-    }
-
-    // Always create TranslationManager
-    if (!ctx.translationManagers.has(roomCode)) {
-      await ctx.createTranslationManager(roomCode, room.roomSettings || {});
+      await ctx.setupSttCallbacks(roomCode, room.roomSettings?.promptTemplate || 'general');
     }
 
     socket.emit('room-rejoined', {
@@ -308,17 +240,10 @@ export async function handleDisconnect(
     if (speakerRoom) {
       ctx.sttManager.removeClient(speakerRoom.roomCode);
       ctx.audioChunksReceived.delete(speakerRoom.roomCode);
-
-      const translationManager = ctx.translationManagers.get(speakerRoom.roomCode);
-      if (translationManager) {
-        await translationManager.cleanup();
-        ctx.translationManagers.delete(speakerRoom.roomCode);
-      }
-
+      ctx.sessionService.removeSession(speakerRoom.roomCode);
       ctx.sttIdCache.delete(speakerRoom.roomCode);
       await sessionManager.unregisterSpeakerSocket(speakerRoom.id, socket.id);
     } else {
-      // 리스너 cleanup
       await ctx.roomService.removeListener(socket.id);
     }
 

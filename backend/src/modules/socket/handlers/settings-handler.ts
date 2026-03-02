@@ -23,7 +23,6 @@ export async function handleUpdateSettings(
       customPrompt: settings.customPrompt,
       maxListeners: settings.maxListeners,
       enableAutoScroll: settings.enableAutoScroll,
-      // 번역 관련 설정
       sourceLanguage: settings.sourceLanguage,
       targetLanguagesArray: settings.targetLanguagesArray,
       environmentPreset: settings.environmentPreset,
@@ -41,33 +40,10 @@ export async function handleUpdateSettings(
     // If prompt template changed, restart STT client
     if (settings.promptTemplate) {
       ctx.sttManager.removeClient(roomId);
-
-      await ctx.sttManager.createClient(
-        roomId,
-        async (transcriptData) => {
-          if (transcriptData.isFinal) {
-            const translationManager = ctx.translationManagers.get(transcriptData.roomId);
-            if (translationManager) {
-              translationManager.addTranscript(
-                transcriptData.text,
-                true,
-                transcriptData.confidence
-              );
-            }
-          }
-
-          ctx.io.to(transcriptData.roomId).emit('stt-text', {
-            text: transcriptData.text,
-            timestamp: transcriptData.timestamp.getTime(),
-            isFinal: transcriptData.isFinal
-          });
-        },
-        undefined,
-        settings.promptTemplate || updatedSettings.promptTemplate
-      );
+      await ctx.setupSttCallbacks(roomId, settings.promptTemplate || updatedSettings.promptTemplate);
     }
 
-    // If translation settings changed, restart TranslationManager
+    // If translation settings changed, reset session context
     const translationSettingsChanged =
       settings.enableTranslation !== undefined ||
       settings.sourceLanguage !== undefined ||
@@ -78,18 +54,9 @@ export async function handleUpdateSettings(
       settings.enableStreaming !== undefined;
 
     if (translationSettingsChanged) {
-      // Clean up existing TranslationManager
-      const existingManager = ctx.translationManagers.get(roomId);
-      if (existingManager) {
-        await existingManager.cleanup();
-        ctx.translationManagers.delete(roomId);
-        console.log(`[Settings][${roomId}] Cleaned up old TranslationManager`);
-      }
-
-      // Recreate if translation is enabled
-      if (updatedSettings.enableTranslation) {
-        await ctx.createTranslationManager(roomId, updatedSettings);
-      }
+      // Reset session context for new settings
+      ctx.sessionService.removeSession(roomId);
+      console.log(`[Settings][${roomId}] Reset session context for new settings`);
     }
 
     // Broadcast to room

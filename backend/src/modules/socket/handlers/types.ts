@@ -3,8 +3,7 @@ import { RoomService } from '../../room/room-service';
 import { TranscriptService } from '../../room/transcript-service';
 import { STTManager } from '../../stt/stt-manager';
 import { TranslationService } from '../../translation/translation-service';
-import { AzureTranslateService } from '../../translation/azure-translate.service';
-import { TranslationManager } from '../../translation/translation-manager';
+import { SessionService } from '../../../services/session-service';
 
 export interface AudioStreamData {
   roomId: string;
@@ -27,11 +26,10 @@ export interface HandlerContext {
   transcriptService: TranscriptService;
   sttManager: STTManager;
   translationService: TranslationService;
-  azureTranslateService: AzureTranslateService;
-  translationManagers: Map<string, TranslationManager>;
+  sessionService: SessionService;
   sttIdCache: Map<string, Map<string, SttIdCacheEntry>>;
   audioChunksReceived: Map<string, number>;
-  createTranslationManager: (roomCode: string, roomSettings: any) => Promise<void>;
+  setupSttCallbacks: (roomCode: string, promptTemplate?: string) => Promise<void>;
   sendTranscriptHistory: (socket: Socket, roomId: string) => Promise<void>;
   sendTranslationHistory: (socket: Socket, roomId: string) => Promise<void>;
   translateHistoricalTexts: (roomCode: string) => Promise<void>;

@@ -14,9 +14,9 @@ dotenv.config();
 import { RoomService } from './modules/room/room-service';
 import { TranscriptService } from './modules/room/transcript-service';
 import { TranslationService } from './modules/translation/translation-service';
-import { AzureTranslateService } from './modules/translation/azure-translate.service';
 import { STTManager } from './modules/stt/stt-manager';
 import { SocketHandler } from './modules/socket/socket-handler';
+import { SessionService } from './services/session-service';
 
 // Configuration
 const PORT = process.env.PORT || 5000;
@@ -56,9 +56,9 @@ async function bootstrap() {
     contentSecurityPolicy: false
   });
 
-  // Global Rate Limiting - 일반 API용
+  // Global Rate Limiting
   await fastify.register(rateLimit, {
-    max: 100,           // 분당 100회
+    max: 100,
     timeWindow: '1 minute',
     errorResponseBuilder: (request, context) => ({
       statusCode: 429,
@@ -137,7 +137,7 @@ async function bootstrap() {
   const transcriptService = new TranscriptService();
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
-  // Translation services (Groq/GPT + Google Translate)
+  // Translation service (Groq/GPT)
   const translationProvider = process.env.TRANSLATION_PROVIDER as 'openai' | 'groq' || 'openai';
   const translationService = new TranslationService({
     apiKey: process.env.OPENAI_API_KEY || '',
@@ -145,42 +145,33 @@ async function bootstrap() {
     provider: translationProvider,
     groqApiKey: process.env.GROQ_API_KEY,
     groqModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-    enableSmartBatch: process.env.ENABLE_SMART_BATCH === 'true',
-    batchSize: parseInt(process.env.BATCH_SIZE || '3')
   });
 
-  const azureTranslateService = new AzureTranslateService({
-    subscriptionKey: process.env.AZURE_TRANSLATOR_KEY || '',
-    region: process.env.AZURE_TRANSLATOR_REGION || 'koreacentral',
-  });
+  // In-memory session service (translation context)
+  const sessionService = new SessionService();
 
-  console.log('[Bootstrap] 🌐 Translation services initialized');
+  console.log('[Bootstrap] Translation service initialized');
   console.log(`[Bootstrap] - Provider: ${translationProvider.toUpperCase()}`);
   if (translationProvider === 'groq') {
-    console.log(`[Bootstrap] - Groq Model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'} ⚡ (260 tokens/s)`);
-    console.log(`[Bootstrap] - Smart Batch: ${process.env.ENABLE_SMART_BATCH === 'true' ? `Enabled (${process.env.BATCH_SIZE || 3} items)` : 'Disabled'}`);
+    console.log(`[Bootstrap] - Groq Model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'}`);
   } else {
     console.log(`[Bootstrap] - OpenAI Model: ${process.env.OPENAI_MODEL || 'gpt-5-nano'}`);
   }
-  console.log(`[Bootstrap] - Azure Translate: ${process.env.AZURE_TRANSLATOR_KEY ? 'Enabled' : 'Disabled (no API key)'}`);
 
-  // Simplified STT Manager - Deepgram only
+  // STT Manager - Deepgram only, Nova-3 fixed
   const sttManager = new STTManager({
     deepgram: {
       apiKey: process.env.DEEPGRAM_API_KEY || '',
-      model: (process.env.DEEPGRAM_MODEL as 'nova-3' | 'nova-2' | 'enhanced' | 'general') || 'nova-3',
-      tier: process.env.DEEPGRAM_TIER as 'enhanced' | 'base' | undefined,
-      version: process.env.DEEPGRAM_VERSION,
+      model: 'nova-3',
       language: process.env.DEEPGRAM_LANGUAGE || 'ko',
       smartFormat: process.env.DEEPGRAM_SMART_FORMAT !== 'false',
       punctuate: process.env.DEEPGRAM_PUNCTUATE !== 'false',
-      diarize: process.env.DEEPGRAM_DIARIZE === 'true'
     },
     defaultPromptTemplate: promptTemplate
   });
 
   // Initialize Socket handler
-  new SocketHandler(io, roomService, transcriptService, sttManager, translationService, azureTranslateService);
+  new SocketHandler(io, roomService, transcriptService, sttManager, translationService, sessionService);
 
   // Cleanup job - run every hour
   setInterval(async () => {

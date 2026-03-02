@@ -138,9 +138,13 @@ export default function ListenerRoom() {
   // 필터링 최적화: useMemo로 매 렌더링마다 필터링 방지
   const filteredTranscripts = useMemo(() => {
     return transcripts.filter((item) => {
-      // Only show translations (not STT)
       if (item.type !== "translation") return false;
       if (item.isPartial) return false;
+      // segment/batch 모드: translations에 선택된 언어가 있으면 표시
+      if (item.translations) {
+        return !!item.translations[selectedLanguage];
+      }
+      // targetLanguage 모드 (레거시 호환)
       if (item.targetLanguage) {
         return item.targetLanguage === selectedLanguage;
       }
@@ -253,45 +257,20 @@ export default function ListenerRoom() {
       }
     });
 
-    // Translation text only (no STT)
-    socketRef.current.on("translation-text", (data: SocketData) => {
-      setTranscripts((prev) => {
-        const newTranscript = {
-          type: "translation",
-          targetLanguage: data.targetLanguage,
-          text: data.text,
-          originalText: data.originalText,
-          isPartial: data.isPartial || false,
-          timestamp: data.timestamp,
-          isHistory: data.isHistory || false,
-        };
-
-        if (newTranscript.isPartial) {
-          const lastIndex = prev.length - 1;
-          if (
-            lastIndex >= 0 &&
-            prev[lastIndex].type === "translation" &&
-            prev[lastIndex].targetLanguage === data.targetLanguage &&
-            prev[lastIndex].isPartial
-          ) {
-            return [...prev.slice(0, -1), newTranscript];
-          }
-          return [...prev, newTranscript];
-        } else {
-          const lastIndex = prev.length - 1;
-          if (
-            lastIndex >= 0 &&
-            prev[lastIndex].type === "translation" &&
-            prev[lastIndex].targetLanguage === data.targetLanguage &&
-            prev[lastIndex].isPartial
-          ) {
-            return [...prev.slice(0, -1), newTranscript];
-          }
-          return [...prev, newTranscript];
-        }
-      });
+    // New segment event (primary)
+    socketRef.current.on("segment", (data: any) => {
+      const newTranscript: Transcript = {
+        type: "translation",
+        korean: data.korean,
+        translations: data.translations || {},
+        timestamp: String(data.timestamp),
+        isHistory: false,
+        batchId: data.id,
+      };
+      setTranscripts((prev) => [...prev.slice(-99), newTranscript]);
     });
 
+    // Backward compat: translation-batch (also sent by server for history)
     socketRef.current.on("translation-batch", (data: SocketData) => {
       const newTranscript: Transcript = {
         type: "translation",

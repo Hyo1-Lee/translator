@@ -1,11 +1,10 @@
 import { Server, Socket } from 'socket.io';
+import { v4 as uuidv4 } from 'uuid';
 import { RoomService } from '../room/room-service';
 import { TranscriptService } from '../room/transcript-service';
 import { STTManager } from '../stt/stt-manager';
 import { TranslationService } from '../translation/translation-service';
-import { AzureTranslateService, SUPPORTED_LANGUAGES } from '../translation/azure-translate.service';
-import { TranslationManager, TranslationData } from '../translation/translation-manager';
-import { EnvironmentPreset } from '../translation/presets';
+import { SessionService } from '../../services/session-service';
 import { recordingStateService } from '../../services/recording-state-service';
 import { attachUserIdToSocket, AuthenticatedSocket } from '../../middleware/socket-auth';
 import {
@@ -29,12 +28,10 @@ export class SocketHandler {
   private transcriptService: TranscriptService;
   private sttManager: STTManager;
   private translationService: TranslationService;
-  private azureTranslateService: AzureTranslateService;
-  private translationManagers: Map<string, TranslationManager> = new Map();
+  private sessionService: SessionService;
   private sttIdCache: Map<string, Map<string, SttIdCacheEntry>> = new Map();
   private audioChunksReceived: Map<string, number> = new Map();
 
-  // 캐시 크기 제한 (메모리 누수 방지)
   private readonly MAX_CACHE_SIZE_PER_ROOM = 500;
 
   constructor(
@@ -43,14 +40,14 @@ export class SocketHandler {
     transcriptService: TranscriptService,
     sttManager: STTManager,
     translationService: TranslationService,
-    azureTranslateService: AzureTranslateService
+    sessionService: SessionService
   ) {
     this.io = io;
     this.roomService = roomService;
     this.transcriptService = transcriptService;
     this.sttManager = sttManager;
     this.translationService = translationService;
-    this.azureTranslateService = azureTranslateService;
+    this.sessionService = sessionService;
     this.initialize();
     recordingStateService.setSocketIO(io);
   }
@@ -62,11 +59,10 @@ export class SocketHandler {
       transcriptService: this.transcriptService,
       sttManager: this.sttManager,
       translationService: this.translationService,
-      azureTranslateService: this.azureTranslateService,
-      translationManagers: this.translationManagers,
+      sessionService: this.sessionService,
       sttIdCache: this.sttIdCache,
       audioChunksReceived: this.audioChunksReceived,
-      createTranslationManager: this.createTranslationManager.bind(this),
+      setupSttCallbacks: this.setupSttCallbacks.bind(this),
       sendTranscriptHistory: this.sendTranscriptHistory.bind(this),
       sendTranslationHistory: this.sendTranslationHistory.bind(this),
       translateHistoricalTexts: this.translateHistoricalTexts.bind(this)
@@ -83,7 +79,7 @@ export class SocketHandler {
       socket.on('rejoin-room', (data) => handleRejoinRoom(ctx, socket, data));
       socket.on('join-room', (data) => handleJoinRoom(ctx, socket, data));
 
-      // Audio handlers
+      // Audio handlers (audio-stream + audio-blob → both still accepted)
       socket.on('audio-stream', (data: AudioStreamData) => handleAudioStream(ctx, socket, data));
       socket.on('audio-blob', (data) => handleAudioBlob(ctx, socket, data));
 
@@ -102,6 +98,181 @@ export class SocketHandler {
       // Disconnect handler
       socket.on('disconnect', () => handleDisconnect(ctx, socket));
     });
+  }
+
+  /**
+   * STT 클라이언트 생성 + 콜백 설정
+   * Deepgram final → SessionService에 세그먼트 추가 → 즉시 번역 → segment 이벤트 전송
+   */
+  private async setupSttCallbacks(roomCode: string, promptTemplate?: string): Promise<void> {
+    await this.sttManager.createClient(
+      roomCode,
+      async (transcriptData) => {
+        if (!transcriptData.isFinal) {
+          // Interim → stt-text 이벤트 (기존 호환성 유지)
+          this.io.to(transcriptData.roomId).emit('stt-text', {
+            text: transcriptData.text,
+            timestamp: transcriptData.timestamp.getTime(),
+            isFinal: false
+          });
+          return;
+        }
+
+        // Final transcript → 즉시 번역 파이프라인
+        const roomId = transcriptData.roomId;
+        const text = transcriptData.text;
+
+        // 1. SessionService에 세그먼트 추가
+        const sequence = this.sessionService.addSegment(roomId, text);
+
+        // 2. stt-text 이벤트 전송 (기존 호환성 + 스피커 화면 표시)
+        this.io.to(roomId).emit('stt-text', {
+          text,
+          timestamp: transcriptData.timestamp.getTime(),
+          isFinal: true
+        });
+
+        // 3. 번역 (동시 번역 방지)
+        if (this.sessionService.isTranslationInFlight(roomId)) {
+          return;
+        }
+
+        const room = await this.roomService.getRoom(roomId);
+        if (!room) return;
+
+        const targetLanguages = room.roomSettings?.targetLanguagesArray
+          || (typeof room.roomSettings?.targetLanguages === 'string'
+              ? room.roomSettings.targetLanguages.split(',').filter((l: string) => l.trim())
+              : room.roomSettings?.targetLanguages)
+          || ['en'];
+
+        this.sessionService.setTranslationInFlight(roomId, true);
+
+        try {
+          const result = await this.translationService.translate(
+            text,
+            targetLanguages,
+            {
+              summary: this.sessionService.getSummary(roomId),
+              recentKorean: this.sessionService.getRecentContext(roomId),
+              previousTranslations: this.sessionService.getPreviousTranslations(roomId),
+              glossary: room.roomSettings?.customGlossary || undefined,
+            }
+          );
+
+          if (result && Object.keys(result.translations).length > 0) {
+            // 4. 이전 번역 업데이트
+            this.sessionService.updatePreviousTranslations(roomId, result.translations);
+
+            const segmentId = uuidv4();
+
+            // 5. segment 이벤트 전송 (새 포맷)
+            this.io.to(roomId).emit('segment', {
+              id: segmentId,
+              korean: result.korean,
+              translations: result.translations,
+              timestamp: Date.now(),
+              sequence,
+            });
+
+            // 하위 호환: translation-batch 이벤트도 전송
+            const batchPayload = {
+              korean: result.korean,
+              english: result.translations['en'] || '',
+              translations: result.translations,
+              timestamp: Date.now(),
+              batchId: `${roomId}-${Date.now()}`
+            };
+            this.io.to(roomId).emit('translation-batch', batchPayload);
+
+            // 6. 비동기 DB 저장
+            this.saveToDatabase(roomId, result.korean, result.translations, transcriptData.confidence).catch(err => {
+              console.error(`[SocketHandler][${roomId}] DB save error:`, err);
+            });
+
+            // 7. 비동기 요약 재생성
+            if (this.sessionService.shouldRegenerateSummary(roomId)) {
+              this.regenerateSummary(roomId).catch(err => {
+                console.error(`[SocketHandler][${roomId}] Summary error:`, err);
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`[SocketHandler][${roomId}] Translation error:`, error);
+        } finally {
+          this.sessionService.setTranslationInFlight(roomId, false);
+        }
+      },
+      undefined,
+      promptTemplate || 'general'
+    );
+  }
+
+  /**
+   * DB 저장 (비동기)
+   */
+  private async saveToDatabase(
+    roomCode: string,
+    koreanText: string,
+    translations: Record<string, string>,
+    confidence?: number
+  ): Promise<void> {
+    // Initialize cache for room
+    if (!this.sttIdCache.has(roomCode)) {
+      this.sttIdCache.set(roomCode, new Map());
+    }
+    const roomCache = this.sttIdCache.get(roomCode)!;
+
+    // Clean old entries
+    const now = Date.now();
+    for (const [text, entry] of roomCache.entries()) {
+      if (now - entry.timestamp > 30000) {
+        roomCache.delete(text);
+      }
+    }
+
+    // Save STT text
+    let sttTextId: string | undefined;
+    const cachedEntry = roomCache.get(koreanText);
+    if (cachedEntry) {
+      sttTextId = cachedEntry.id;
+    } else {
+      const savedStt = await this.transcriptService.saveSttText(roomCode, koreanText, confidence);
+      sttTextId = savedStt?.id;
+      if (sttTextId) {
+        roomCache.set(koreanText, { id: sttTextId, timestamp: now });
+      }
+    }
+
+    // Save translations (parallel)
+    const savePromises = Object.entries(translations).map(([lang, translatedText]) =>
+      this.transcriptService.saveTranslationText(
+        roomCode,
+        lang,
+        koreanText,
+        translatedText,
+        undefined,
+        false,
+        sttTextId
+      )
+    );
+    await Promise.all(savePromises);
+
+    // Cleanup cache size
+    this.cleanupSttIdCache(roomCode);
+  }
+
+  /**
+   * 요약 재생성 (비동기)
+   */
+  private async regenerateSummary(roomCode: string): Promise<void> {
+    const fullContext = this.sessionService.getFullContext(roomCode);
+    const previousSummary = this.sessionService.getSummary(roomCode);
+
+    const newSummary = await this.translationService.generateSummary(fullContext, previousSummary);
+    if (newSummary) {
+      this.sessionService.updateSummary(roomCode, newSummary);
+    }
   }
 
   // Send transcript history
@@ -128,21 +299,34 @@ export class SocketHandler {
     try {
       const translationsByLanguage = await this.transcriptService.getAllTranslationTexts(roomId);
 
-      for (const [language, translations] of Object.entries(translationsByLanguage)) {
-        (translations as any[]).forEach((translation: any) => {
-          socket.emit('translation-text', {
-            targetLanguage: translation.targetLanguage,
-            text: translation.translatedText,
-            originalText: translation.originalText,
-            isPartial: false,
-            contextSummary: translation.contextSummary,
-            timestamp: translation.timestamp ? new Date(translation.timestamp).getTime() : Date.now(),
-            isHistory: true
-          });
-        });
+      // Group translations by original text to emit as batches
+      const batchMap = new Map<string, { korean: string; translations: Record<string, string>; timestamp: number }>();
+
+      for (const [_language, translations] of Object.entries(translationsByLanguage)) {
+        for (const translation of translations as any[]) {
+          const key = translation.originalText;
+          if (!batchMap.has(key)) {
+            batchMap.set(key, {
+              korean: translation.originalText,
+              translations: {},
+              timestamp: translation.timestamp ? new Date(translation.timestamp).getTime() : Date.now(),
+            });
+          }
+          batchMap.get(key)!.translations[translation.targetLanguage] = translation.translatedText;
+        }
       }
 
-      console.log(`[History][${roomId}] Sent translation history for ${Object.keys(translationsByLanguage).length} languages`);
+      // Emit as translation-batch for backward compatibility
+      for (const [_key, batch] of batchMap) {
+        socket.emit('translation-batch', {
+          korean: batch.korean,
+          english: batch.translations['en'] || '',
+          translations: batch.translations,
+          timestamp: batch.timestamp,
+          batchId: `history-${batch.timestamp}`,
+          isHistory: true,
+        });
+      }
 
     } catch (error) {
       console.error('[History] Error loading translations:', error);
@@ -160,25 +344,16 @@ export class SocketHandler {
 
       console.log(`[HistoricalTranslation][${roomCode}] Found ${untranslatedTexts.length} untranslated texts`);
 
-      // Get or create TranslationManager
-      let translationManager = this.translationManagers.get(roomCode);
+      const room = await this.roomService.getRoom(roomCode);
+      if (!room) return;
 
-      if (!translationManager) {
-        const room = await this.roomService.getRoom(roomCode);
-        if (!room) {
-          console.error(`[HistoricalTranslation][${roomCode}] Room not found`);
-          return;
-        }
-        await this.createTranslationManager(roomCode, room.roomSettings || {});
-        translationManager = this.translationManagers.get(roomCode);
-      }
+      const targetLanguages = room.roomSettings?.targetLanguagesArray
+        || (typeof room.roomSettings?.targetLanguages === 'string'
+            ? room.roomSettings.targetLanguages.split(',').filter((l: string) => l.trim())
+            : room.roomSettings?.targetLanguages)
+        || ['en'];
 
-      if (!translationManager) {
-        console.error(`[HistoricalTranslation][${roomCode}] Failed to get TranslationManager`);
-        return;
-      }
-
-      // Pre-populate the sttIdCache with existing STT text IDs
+      // Pre-populate sttIdCache
       if (!this.sttIdCache.has(roomCode)) {
         this.sttIdCache.set(roomCode, new Map());
       }
@@ -187,7 +362,33 @@ export class SocketHandler {
 
       for (const sttText of untranslatedTexts) {
         roomCache.set(sttText.text, { id: sttText.id, timestamp: now });
-        translationManager.addTranscript(sttText.text, true, sttText.confidence);
+
+        // Translate each untranslated text
+        const result = await this.translationService.translate(
+          sttText.text,
+          targetLanguages,
+          {
+            summary: this.sessionService.getSummary(roomCode),
+            recentKorean: this.sessionService.getRecentContext(roomCode),
+            previousTranslations: this.sessionService.getPreviousTranslations(roomCode),
+          }
+        );
+
+        if (result && Object.keys(result.translations).length > 0) {
+          this.sessionService.addSegment(roomCode, result.korean);
+          this.sessionService.updatePreviousTranslations(roomCode, result.translations);
+
+          // Save and broadcast
+          await this.saveToDatabase(roomCode, result.korean, result.translations, sttText.confidence);
+
+          this.io.to(roomCode).emit('translation-batch', {
+            korean: result.korean,
+            english: result.translations['en'] || '',
+            translations: result.translations,
+            timestamp: now,
+            batchId: `${roomCode}-hist-${now}`,
+          });
+        }
       }
 
     } catch (error) {
@@ -195,162 +396,13 @@ export class SocketHandler {
     }
   }
 
-  // Create TranslationManager for a room
-  private async createTranslationManager(
-    roomCode: string,
-    roomSettings: any
-  ): Promise<void> {
-    try {
-      const sourceLanguage = roomSettings.sourceLanguage || 'ko';
-      // 스피커가 선택한 언어 사용 (없으면 기본값 ['en'])
-      const targetLanguages = roomSettings.targetLanguagesArray
-        || (typeof roomSettings.targetLanguages === 'string'
-            ? roomSettings.targetLanguages.split(',').filter((l: string) => l.trim())
-            : roomSettings.targetLanguages)
-        || ['en'];
-
-      const translationManager = new TranslationManager({
-        roomId: roomCode,
-        sourceLanguage: roomSettings.sourceLanguage || 'ko',
-        environmentPreset: (roomSettings.environmentPreset as EnvironmentPreset) || 'general',
-        customEnvironmentDescription: roomSettings.customEnvironmentDescription,
-        customGlossary: roomSettings.customGlossary,
-        targetLanguages,
-        enableStreaming: roomSettings.enableStreaming ?? true,
-        translationService: this.translationService,
-        azureTranslateService: this.azureTranslateService,
-        onTranslation: async (data: TranslationData) => {
-          await this.handleTranslationData(roomCode, data);
-        },
-        onError: (error: Error) => {
-          console.error(`[TranslationManager][${roomCode}] Error:`, error);
-        }
-      });
-
-      this.translationManagers.set(roomCode, translationManager);
-      console.log(`[TranslationManager][${roomCode}] Created (${targetLanguages.length} languages)`);
-
-    } catch (error) {
-      console.error(`[TranslationManager][${roomCode}] Failed to create:`, error);
-      throw error;
-    }
-  }
-
-  // Handle translation data
-  private async handleTranslationData(roomCode: string, data: TranslationData): Promise<void> {
-    try {
-      let sttTextId: string | undefined;
-
-      // Initialize cache for this room if not exists
-      if (!this.sttIdCache.has(roomCode)) {
-        this.sttIdCache.set(roomCode, new Map());
-      }
-      const roomCache = this.sttIdCache.get(roomCode)!;
-
-      // Clean up old cache entries (older than 30 seconds)
-      const now = Date.now();
-      for (const [text, entry] of roomCache.entries()) {
-        if (now - entry.timestamp > 30000) {
-          roomCache.delete(text);
-        }
-      }
-
-      // 캐시 크기 제한 적용 (메모리 누수 방지)
-      this.cleanupSttIdCache(roomCode);
-
-      // Skip saving partial translations (streaming)
-      if (data.isPartial) {
-        this.io.to(roomCode).emit('translation-text', {
-          targetLanguage: data.targetLanguage,
-          text: data.translatedText,
-          originalText: data.originalText,
-          isPartial: true,
-          contextSummary: data.contextSummary,
-          timestamp: data.timestamp.getTime()
-        });
-        return;
-      }
-
-      // Check if we already saved STT text for this originalText
-      const cachedEntry = roomCache.get(data.originalText);
-      if (cachedEntry) {
-        sttTextId = cachedEntry.id;
-      } else if (!data.sttTextId) {
-        // Save STT text on first translation only
-        const savedStt = await this.transcriptService.saveSttText(
-          roomCode,
-          data.originalText,
-          data.confidence
-        );
-        sttTextId = savedStt?.id;
-
-        if (sttTextId) {
-          roomCache.set(data.originalText, { id: sttTextId, timestamp: now });
-        }
-      }
-
-      // Batch mode: save all translations and emit as single batch event
-      if (data.isBatch && data.translations) {
-        // Save all translations to DB (병렬 저장)
-        const savePromises = Object.entries(data.translations).map(([lang, translatedText]) =>
-          this.transcriptService.saveTranslationText(
-            roomCode,
-            lang,
-            data.originalText,
-            translatedText,
-            data.contextSummary,
-            false,
-            sttTextId
-          )
-        );
-        await Promise.all(savePromises);
-
-        const batchPayload = {
-          korean: data.originalText,
-          english: data.translations['en'] || data.translatedText,
-          translations: data.translations,
-          timestamp: data.timestamp.getTime(),
-          batchId: `${roomCode}-${data.timestamp.getTime()}`
-        };
-
-        this.io.to(roomCode).emit('translation-batch', batchPayload);
-        return;
-      }
-
-      // Single language mode (fallback)
-      await this.transcriptService.saveTranslationText(
-        roomCode,
-        data.targetLanguage,
-        data.originalText,
-        data.translatedText,
-        data.contextSummary,
-        false,
-        sttTextId
-      );
-
-      this.io.to(roomCode).emit('translation-text', {
-        targetLanguage: data.targetLanguage,
-        text: data.translatedText,
-        originalText: data.originalText,
-        isPartial: false,
-        contextSummary: data.contextSummary,
-        timestamp: data.timestamp.getTime()
-      });
-
-    } catch (error) {
-      console.error(`[TranslationManager][${roomCode}] Failed to save/broadcast translation:`, error);
-    }
-  }
-
   /**
    * sttIdCache 크기 제한 정리
-   * 최대 크기 초과 시 오래된 항목 제거
    */
   private cleanupSttIdCache(roomCode: string): void {
     const roomCache = this.sttIdCache.get(roomCode);
     if (!roomCache) return;
 
-    // 크기 초과 시 오래된 항목 제거
     if (roomCache.size > this.MAX_CACHE_SIZE_PER_ROOM) {
       const sorted = Array.from(roomCache.entries())
         .sort((a, b) => a[1].timestamp - b[1].timestamp);
@@ -358,7 +410,6 @@ export class SocketHandler {
       for (let i = 0; i < toRemove; i++) {
         roomCache.delete(sorted[i][0]);
       }
-      console.log(`[SocketHandler][${roomCode}] Cleaned up ${toRemove} old sttIdCache entries`);
     }
   }
 }
