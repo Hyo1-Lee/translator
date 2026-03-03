@@ -132,6 +132,20 @@ export class TranscriptService {
     });
   }
 
+  async updateSegmentTranslations(
+    roomCode: string,
+    sequence: number,
+    translations: Record<string, string>
+  ): Promise<void> {
+    const room = await Room.findOne({ where: { roomCode } });
+    if (!room) return;
+
+    await Segment.update(
+      { translations },
+      { where: { roomId: room.id, sequence } }
+    );
+  }
+
   async getRecentSegments(roomCode: string, limit: number = 50): Promise<any[]> {
     const room = await Room.findOne({ where: { roomCode } });
     if (!room) return [];

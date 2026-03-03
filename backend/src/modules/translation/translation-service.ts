@@ -8,6 +8,14 @@ export interface TranslationResult {
   translations: Record<string, string>;  // {en: "...", ja: "...", ...}
 }
 
+/**
+ * 보정 + 완성 여부 판별 결과
+ */
+export interface CorrectionResult {
+  corrected: string;
+  isComplete: boolean;
+}
+
 interface TranslationConfig {
   apiKey: string;
   model?: string;
@@ -55,26 +63,35 @@ export class TranslationService {
   }
 
   /**
-   * Pass 1: 한국어 STT 보정 (gpt-4.1-nano)
+   * Pass 1: 한국어 STT 보정 + 문장 완성 여부 판별 (gpt-4.1-nano)
    */
-  private async correctKorean(
+  async correctAndCheck(
     text: string,
-    context: { summary?: string; recentKorean?: string }
-  ): Promise<string> {
+    context: { summary?: string; recentKorean?: string; environmentDescription?: string }
+  ): Promise<CorrectionResult> {
     try {
       const systemPrompt = `You are a Korean speech-to-text error correction specialist.
 
-INPUT: Raw Korean text from a speech recognition system with:
-- Missing spaces between words
-- Homophone errors
-- Garbled or truncated words
-- Missing punctuation
+INPUT: Raw Korean text from a speech recognition system, along with topic context.
+OUTPUT: JSON object with exactly two fields:
+- "corrected": The corrected Korean text
+- "isComplete": true if the text ends with a grammatically complete sentence (ends with 다/요/죠/까 etc.), false if it ends mid-sentence (connective like 며/고/면/는데, particle like 을/를/에, or modifier)
 
-OUTPUT: The corrected Korean text with proper spacing, punctuation, and fixed words.
-Do NOT add/remove/rephrase content. Only fix recognition errors.
-Output ONLY the corrected Korean text.`;
+CORRECTION RULES:
+1. Use [Context], [Topic summary], and [Recent Korean speech] to resolve homophones. The domain is your strongest clue.
+2. Common STT errors to watch for:
+   - 구조→구주, 진액→진흙, 성욕/상욕→성역, 이기적→이 기적, 구습→구속, 창조 축→창조주 (religious context)
+   - Wrong spacing: compound words split, or separate words merged
+   - Missing/wrong particles
+3. Do NOT add, remove, or rephrase content. Only fix errors.
+4. If the domain is religious/spiritual, prefer religious vocabulary (구주, 성역, 구속, 성전, etc.) over secular homophones.
+
+Output ONLY the JSON object, no explanation.`;
 
       const parts: string[] = [];
+      if (context.environmentDescription) {
+        parts.push(`[Context]\n${context.environmentDescription}`);
+      }
       if (context.summary) {
         parts.push(`[Topic summary]\n${context.summary}`);
       }
@@ -89,28 +106,55 @@ Output ONLY the corrected Korean text.`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: parts.join('\n\n') }
         ],
-        max_completion_tokens: 500,
+        max_completion_tokens: 600,
         temperature: 0.0,
       });
 
-      const corrected = response.choices[0]?.message?.content?.trim();
-      return corrected || text;
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return { corrected: text, isComplete: true };
+
+      return this.parseCorrectionResponse(content, text);
     } catch (error) {
       console.error('[TranslationService] Korean correction error:', error);
-      return text;
+      return { corrected: text, isComplete: true };
+    }
+  }
+
+  /**
+   * 보정 JSON 파싱 (fallback: plain text → isComplete=true)
+   */
+  private parseCorrectionResponse(content: string, originalText: string): CorrectionResult {
+    try {
+      // JSON 추출
+      let jsonStr = content;
+      const braceStart = jsonStr.indexOf('{');
+      const braceEnd = jsonStr.lastIndexOf('}');
+      if (braceStart !== -1 && braceEnd !== -1) {
+        jsonStr = jsonStr.substring(braceStart, braceEnd + 1);
+      }
+
+      const parsed = JSON.parse(jsonStr);
+      return {
+        corrected: (parsed.corrected || originalText).trim(),
+        isComplete: parsed.isComplete !== false, // default true
+      };
+    } catch {
+      // JSON 파싱 실패 → plain text로 취급, 완성으로 간주
+      return { corrected: content || originalText, isComplete: true };
     }
   }
 
   /**
    * Pass 2: 보정된 한국어 → 다국어 번역 (gpt-4.1-mini)
    */
-  private async translateCorrected(
+  async translateText(
     correctedKorean: string,
     targetLanguages: string[],
     context: {
       summary?: string;
       recentTranslationHistory?: Record<string, string>[];
       glossary?: Record<string, string>;
+      environmentDescription?: string;
     }
   ): Promise<Record<string, string>> {
     try {
@@ -120,7 +164,7 @@ Output ONLY the corrected Korean text.`;
 
       const langKeys = targetLanguages.map(code => `"${code}"`).join(', ');
 
-      const systemPrompt = this.buildTranslationSystemPrompt(langKeys, langList, context.glossary);
+      const systemPrompt = this.buildTranslationSystemPrompt(langKeys, langList, context.glossary, context.environmentDescription);
       const userPrompt = this.buildTranslationUserPrompt(correctedKorean, context);
 
       const response = await this.openai.chat.completions.create({
@@ -167,13 +211,13 @@ Output ONLY the corrected Korean text.`;
       }
 
       // Pass 1: 한국어 STT 보정
-      const corrected = await this.correctKorean(text, {
+      const { corrected } = await this.correctAndCheck(text, {
         summary: context.summary,
         recentKorean: context.recentKorean,
       });
 
       // Pass 2: 보정된 한국어 → 다국어 번역
-      const translations = await this.translateCorrected(corrected, targetLanguages, {
+      const translations = await this.translateText(corrected, targetLanguages, {
         summary: context.summary,
         recentTranslationHistory: context.recentTranslationHistory,
         glossary: context.glossary,
@@ -196,9 +240,17 @@ Output ONLY the corrected Korean text.`;
   private buildTranslationSystemPrompt(
     langKeys: string,
     langList: string,
-    glossary?: Record<string, string>
+    glossary?: Record<string, string>,
+    environmentDescription?: string,
   ): string {
-    let prompt = `You are a professional Korean-to-multilingual translator. You receive clean, corrected Korean text and must produce accurate translations.
+    let prompt = `You are a professional Korean-to-multilingual translator. You receive clean, corrected Korean text and must produce accurate translations.`;
+
+    if (environmentDescription) {
+      prompt += `\n\nCONTEXT: ${environmentDescription}
+Use domain-appropriate terminology and tone for this context.`;
+    }
+
+    prompt += `
 
 OUTPUT FORMAT: JSON object with keys: ${langKeys}
 - ${langList}: Accurate translation in each target language
@@ -206,14 +258,14 @@ OUTPUT FORMAT: JSON object with keys: ${langKeys}
 Example: {${langKeys.split(', ').map(k => `${k}: "translated text."`).join(', ')}}
 
 CRITICAL RULES:
-1. Every sentence MUST end with punctuation (. ? !)
-2. Break long passages into natural sentences for the target language
-3. Your translations continue a flowing paragraph — write as a natural continuation of previous translations
-4. Do NOT repeat content from previous translations
-5. Preserve the speaker's tone and register
-6. Each value must be purely in its target language script (Urdu in Perso-Arabic, Arabic in Arabic script, etc.)
-7. Output ONLY the JSON object — no explanations, no markdown
-8. Translate meaning, not word-for-word`;
+1. Translate ONLY the given Korean text — do NOT add, predict, or generate content beyond what is provided
+2. Your translations continue a flowing paragraph — write as a natural continuation of previous translations
+3. Do NOT repeat content from previous translations
+4. Preserve the speaker's tone and register
+5. Each value must be purely in its target language script (Urdu in Perso-Arabic, Arabic in Arabic script, etc.)
+6. Output ONLY the JSON object — no explanations, no markdown
+7. Translate meaning, not word-for-word
+8. Use natural sentence structure and punctuation for the target language`;
 
     if (glossary && Object.keys(glossary).length > 0) {
       const terms = Object.entries(glossary).slice(0, 30)
@@ -298,6 +350,59 @@ CRITICAL RULES:
     }
 
     return translations;
+  }
+
+  /**
+   * 비동기 번역 개선 — 앞뒤 문맥으로 이전 세그먼트 번역 보정
+   */
+  async refineTranslation(
+    prevKorean: string,
+    currentKorean: string,
+    nextKorean: string,
+    currentTranslation: Record<string, string>,
+    targetLanguages: string[],
+    environmentDescription?: string,
+  ): Promise<Record<string, string> | null> {
+    try {
+      const langKeys = targetLanguages.map(code => `"${code}"`).join(', ');
+      const translationStr = JSON.stringify(currentTranslation);
+
+      let systemContent = `You refine translations using surrounding Korean context. Output improved JSON ({${langKeys}}) or exactly "OK" if no improvement needed. No explanation.`;
+      if (environmentDescription) {
+        systemContent = `Context: ${environmentDescription}\n\n${systemContent}`;
+      }
+
+      const response = await this.openai.chat.completions.create({
+        model: this.correctionModel,
+        messages: [
+          {
+            role: 'system',
+            content: systemContent
+          },
+          {
+            role: 'user',
+            content: `${prevKorean ? `[Before] ${prevKorean}\n` : ''}[Current] ${currentKorean}\n[After] ${nextKorean}\n\nCurrent translation:\n${translationStr}`
+          }
+        ],
+        max_completion_tokens: 500,
+        temperature: 0.1,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content || content === 'OK' || content === '"OK"') return null;
+
+      const improved = this.parseTranslationResponse(content, targetLanguages);
+      if (Object.keys(improved).length === 0) return null;
+
+      // 실제로 변경된 경우만 반환
+      const hasChange = targetLanguages.some(
+        lang => improved[lang] && improved[lang] !== currentTranslation[lang]
+      );
+      return hasChange ? improved : null;
+    } catch (error) {
+      console.error('[TranslationService] Refinement error:', error);
+      return null;
+    }
   }
 
   /**

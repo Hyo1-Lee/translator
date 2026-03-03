@@ -34,6 +34,8 @@ export async function handleStartRecording(
     if (ctx.sttManager.hasActiveClient(roomId)) {
       ctx.sttManager.removeClient(roomId);
     }
+    // Clear stale translation state from previous session
+    ctx.cleanupTranslationState(roomId);
 
     try {
       await ctx.setupSttCallbacks(roomId, room.roomSettings?.promptTemplate || 'general');
@@ -82,6 +84,7 @@ export async function handleStopRecording(
 
     ctx.sttManager.removeClient(roomId);
     ctx.audioChunksReceived.delete(roomId);
+    ctx.cleanupTranslationState(roomId);
 
     await recordingStateService.stopRecording(room.id);
 

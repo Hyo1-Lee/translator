@@ -357,10 +357,10 @@ function SpeakerContent() {
       sourceLanguage: roomSettings.sourceLanguage,
       targetLanguagesArray: roomSettings.targetLanguages,
       enableStreaming: roomSettings.enableStreaming,
-      // Empty/null for removed fields
+      // Optional fields
       password: "",
       customPrompt: "",
-      customEnvironmentDescription: "",
+      customEnvironmentDescription: roomSettings.customEnvironmentDescription || "",
       customGlossary: null,
     };
 
@@ -383,6 +383,7 @@ function SpeakerContent() {
       maxListeners: roomSettings.maxListeners,
       enableTranslation: true,
       enableStreaming: roomSettings.enableStreaming,
+      customEnvironmentDescription: roomSettings.customEnvironmentDescription || "",
     };
 
     socketRef.current.emit("update-settings", {
@@ -446,6 +447,7 @@ function SpeakerContent() {
           maxListeners: defaultSettings?.maxListeners || 100,
           enableTranslation: true,
           enableStreaming: defaultSettings?.enableStreaming ?? true,
+          customEnvironmentDescription: defaultSettings?.customEnvironmentDescription || "",
         });
         // Clear URL parameter after processing
         router.replace("/speaker");
@@ -470,6 +472,7 @@ function SpeakerContent() {
           maxListeners: defaultSettings?.maxListeners || 100,
           enableTranslation: true,
           enableStreaming: defaultSettings?.enableStreaming ?? true,
+          customEnvironmentDescription: defaultSettings?.customEnvironmentDescription || "",
         });
         // Don't show settings modal when rejoining
         setShowSettingsModal(false);
@@ -492,6 +495,7 @@ function SpeakerContent() {
             maxListeners: defaultSettings.maxListeners,
             enableTranslation: true,
             enableStreaming: defaultSettings.enableStreaming,
+            customEnvironmentDescription: defaultSettings.customEnvironmentDescription || "",
           });
           // Don't show modal - direct start!
           setShowSettingsModal(false);

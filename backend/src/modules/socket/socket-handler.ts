@@ -30,9 +30,20 @@ export class SocketHandler {
   private sessionService: SessionService;
   private audioChunksReceived: Map<string, number> = new Map();
 
-  // 번역 큐: 세그먼트를 절대 드랍하지 않음
-  private translationQueues: Map<string, Array<{ text: string; sequence: number }>> = new Map();
+  // 번역 큐
+  private translationQueues: Map<string, Array<{ text: string; forceComplete: boolean }>> = new Map();
   private translationProcessing: Map<string, boolean> = new Map();
+
+  // carry-over: LLM이 미완성으로 판단한 텍스트 이월
+  private carryoverBuffer: Map<string, string> = new Map();
+
+  // 최근 세그먼트: 비동기 refinement용
+  private recentSegmentData: Map<string, Array<{
+    id: string;
+    korean: string;
+    translations: Record<string, string>;
+    sequence: number;
+  }>> = new Map();
 
   constructor(
     io: Server,
@@ -64,6 +75,7 @@ export class SocketHandler {
       setupSttCallbacks: this.setupSttCallbacks.bind(this),
       sendTranscriptHistory: this.sendTranscriptHistory.bind(this),
       sendTranslationHistory: this.sendTranslationHistory.bind(this),
+      cleanupTranslationState: this.cleanupRoom.bind(this),
     };
   }
 
@@ -100,7 +112,7 @@ export class SocketHandler {
 
   /**
    * STT 콜백 설정
-   * TextAccumulator가 축적한 텍스트를 전달 → 큐에 넣고 순차 번역
+   * TextAccumulator가 축적한 텍스트를 전달 → carry-over 파이프라인으로 순차 처리
    */
   private async setupSttCallbacks(roomCode: string, promptTemplate?: string): Promise<void> {
     await this.sttManager.createClient(
@@ -116,22 +128,19 @@ export class SocketHandler {
           return;
         }
 
-        // Final (TextAccumulator가 축적한 텍스트) → 번역 큐
         const roomId = transcriptData.roomId;
         const text = transcriptData.text;
+        const forceComplete = transcriptData.forceComplete || false;
 
-        // 1. SessionService에 세그먼트 추가
-        const sequence = this.sessionService.addSegment(roomId, text);
-
-        // 2. stt-text final 전송
+        // stt-text final 전송 (스피커 화면에 즉시 표시)
         this.io.to(roomId).emit('stt-text', {
           text,
           timestamp: transcriptData.timestamp.getTime(),
           isFinal: true
         });
 
-        // 3. 번역 큐에 추가 (절대 드랍하지 않음)
-        this.enqueueTranslation(roomId, text, sequence);
+        // 번역 큐에 추가
+        this.enqueueTranslation(roomId, text, forceComplete);
       },
       undefined,
       promptTemplate || 'general'
@@ -139,22 +148,21 @@ export class SocketHandler {
   }
 
   /**
-   * 번역 큐 — 세그먼트를 절대 드랍하지 않고 순차 처리
+   * 번역 큐 — 순차 처리 (carry-over 포함)
    */
-  private enqueueTranslation(roomId: string, text: string, sequence: number): void {
+  private enqueueTranslation(roomId: string, text: string, forceComplete: boolean): void {
     if (!this.translationQueues.has(roomId)) {
       this.translationQueues.set(roomId, []);
     }
-    this.translationQueues.get(roomId)!.push({ text, sequence });
+    this.translationQueues.get(roomId)!.push({ text, forceComplete });
 
-    // 이미 처리 중이면 큐에만 넣고 리턴 (처리 루프가 꺼내감)
     if (this.translationProcessing.get(roomId)) return;
 
     this.processTranslationQueue(roomId);
   }
 
   /**
-   * 큐 처리 루프 — 큐가 빌 때까지 순차 번역
+   * 큐 처리 루프 — carry-over + 3중 방어 파이프라인
    */
   private async processTranslationQueue(roomId: string): Promise<void> {
     this.translationProcessing.set(roomId, true);
@@ -165,7 +173,7 @@ export class SocketHandler {
         if (!queue || queue.length === 0) break;
 
         const item = queue.shift()!;
-        await this.translateAndEmit(roomId, item.text, item.sequence);
+        await this.processSegment(roomId, item.text, item.forceComplete);
       }
     } catch (error) {
       console.error(`[SocketHandler][${roomId}] Translation queue error:`, error);
@@ -175,49 +183,78 @@ export class SocketHandler {
   }
 
   /**
-   * 단일 세그먼트 번역 + emit
+   * 3중 방어 파이프라인: carry-over + correctAndCheck + translate + refinement
    */
-  private async translateAndEmit(roomId: string, text: string, sequence: number): Promise<void> {
+  private async processSegment(roomId: string, rawText: string, forceComplete: boolean): Promise<void> {
     const room = await this.roomService.getRoom(roomId);
     if (!room) return;
 
     const targetLanguages = room.roomSettings?.targetLanguagesArray || ['en'];
 
     try {
+      // 1. carry-over 합치기
+      const carryover = this.carryoverBuffer.get(roomId) || '';
+      const fullText = carryover ? carryover + ' ' + rawText : rawText;
+      this.carryoverBuffer.delete(roomId);
+
+      // 2. Pass 1: 보정 + 완성 여부 판별 (Layer 2: LLM 체크)
       const translateStart = Date.now();
-      const result = await this.translationService.translate(
-        text,
-        targetLanguages,
+      const preset = room.roomSettings?.environmentPreset || 'general';
+      const customDesc = room.roomSettings?.customEnvironmentDescription || '';
+      const envDesc = customDesc || (preset !== 'general' ? `Session type: ${preset}` : '');
+      const { corrected, isComplete } = await this.translationService.correctAndCheck(
+        fullText,
         {
           summary: this.sessionService.getSummary(roomId),
           recentKorean: this.sessionService.getRecentContext(roomId),
+          environmentDescription: envDesc,
+        }
+      );
+
+      // 3. 미완성 → carry-over 저장 (안전장치: 300자 초과 시 강제 번역)
+      if (!isComplete && !forceComplete && corrected.length <= 300) {
+        this.carryoverBuffer.set(roomId, corrected);
+        return;
+      }
+
+      // 4. SessionService에 세그먼트 추가
+      const sequence = this.sessionService.addSegment(roomId, corrected);
+
+      // 5. Pass 2: 번역
+      const translations = await this.translationService.translateText(
+        corrected,
+        targetLanguages,
+        {
+          summary: this.sessionService.getSummary(roomId),
           recentTranslationHistory: this.sessionService.getRecentTranslationHistory(roomId),
           glossary: room.roomSettings?.customGlossary || undefined,
+          environmentDescription: envDesc,
         }
       );
       const latencyMs = Date.now() - translateStart;
 
-      if (result && Object.keys(result.translations).length > 0) {
-        // 보정된 한국어로 컨텍스트 업데이트
-        this.sessionService.updateCorrectedSegment(roomId, result.korean);
-
-        // 번역 히스토리 업데이트 (문맥 연속성)
-        this.sessionService.addTranslationHistory(roomId, result.translations);
+      if (Object.keys(translations).length > 0) {
+        // 컨텍스트 업데이트
+        this.sessionService.updateCorrectedSegment(roomId, corrected);
+        this.sessionService.addTranslationHistory(roomId, translations);
 
         const segmentId = uuidv4();
 
-        // segment 이벤트 전송 (LLM이 보정한 korean 사용)
+        // segment 이벤트 전송
         this.io.to(roomId).emit('segment', {
           id: segmentId,
-          korean: result.korean,
-          translations: result.translations,
+          korean: corrected,
+          translations,
           timestamp: Date.now(),
           sequence,
         });
 
+        // refinement용 저장 + 이전 세그먼트 개선 트리거
+        this.storeAndRefine(roomId, { id: segmentId, korean: corrected, translations, sequence }, targetLanguages, envDesc);
+
         // 비동기 DB 저장
         this.transcriptService.saveSegment(
-          roomId, sequence, text, result.korean, result.translations, latencyMs
+          roomId, sequence, rawText, corrected, translations, latencyMs
         ).catch(err => {
           console.error(`[SocketHandler][${roomId}] Segment save error:`, err);
         });
@@ -231,6 +268,75 @@ export class SocketHandler {
       }
     } catch (error) {
       console.error(`[SocketHandler][${roomId}] Translation error:`, error);
+    }
+  }
+
+  /**
+   * 세그먼트 저장 + 이전 세그먼트 비동기 refinement 트리거
+   */
+  private storeAndRefine(
+    roomId: string,
+    segment: { id: string; korean: string; translations: Record<string, string>; sequence: number },
+    targetLanguages: string[],
+    environmentDescription?: string,
+  ): void {
+    if (!this.recentSegmentData.has(roomId)) {
+      this.recentSegmentData.set(roomId, []);
+    }
+    const segments = this.recentSegmentData.get(roomId)!;
+    segments.push(segment);
+
+    // 최대 5개 유지
+    if (segments.length > 5) segments.shift();
+
+    // 이전 세그먼트가 있으면 refinement 트리거
+    if (segments.length >= 2) {
+      const target = segments[segments.length - 2];
+      const before = segments.length >= 3 ? segments[segments.length - 3] : null;
+      const after = segments[segments.length - 1];
+
+      this.refineSegment(roomId, target, before, after, targetLanguages, environmentDescription).catch(err => {
+        console.error(`[SocketHandler][${roomId}] Refinement error:`, err);
+      });
+    }
+  }
+
+  /**
+   * 비동기 세그먼트 번역 개선
+   */
+  private async refineSegment(
+    roomId: string,
+    target: { id: string; korean: string; translations: Record<string, string>; sequence: number },
+    before: { korean: string } | null,
+    after: { korean: string },
+    targetLanguages: string[],
+    environmentDescription?: string,
+  ): Promise<void> {
+    const improved = await this.translationService.refineTranslation(
+      before?.korean || '',
+      target.korean,
+      after.korean,
+      target.translations,
+      targetLanguages,
+      environmentDescription,
+    );
+
+    if (improved) {
+      // 1. 사용자에게 업데이트 전송
+      this.io.to(roomId).emit('segment-update', {
+        id: target.id,
+        translations: improved,
+      });
+
+      // 2. 인메모리 데이터 업데이트
+      target.translations = improved;
+
+      // 3. DB 업데이트 (비동기)
+      this.transcriptService.updateSegmentTranslations(
+        roomId, target.sequence, improved
+      ).catch(err => {
+        console.error(`[SocketHandler][${roomId}] Refinement DB update error:`, err);
+      });
     }
   }
 
@@ -291,5 +397,7 @@ export class SocketHandler {
   cleanupRoom(roomId: string): void {
     this.translationQueues.delete(roomId);
     this.translationProcessing.delete(roomId);
+    this.carryoverBuffer.delete(roomId);
+    this.recentSegmentData.delete(roomId);
   }
 }

@@ -141,6 +141,37 @@ export default function SettingsModal({
             )}
           </div>
 
+          {/* Custom Environment Description */}
+          <div className={styles.settingGroup}>
+            <label>상황 설명 (선택)</label>
+            <textarea
+              value={roomSettings.customEnvironmentDescription || ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val.length <= 200) {
+                  updateSettings({ customEnvironmentDescription: val });
+                }
+              }}
+              className={styles.textarea}
+              placeholder={
+                roomSettings.sessionType === "church"
+                  ? "예: 주일 예배 설교. 성경 말씀 중심. 구주, 성역, 구속, 성전 등의 용어가 자주 나옴"
+                  : roomSettings.sessionType === "lecture"
+                  ? "예: 대학 운영체제 강의. 프로세스, 스레드, 커널 등 CS 용어가 자주 나옴"
+                  : roomSettings.sessionType === "meeting"
+                  ? "예: 분기 마케팅 전략 회의. ROI, KPI, 전환율 등의 용어가 자주 나옴"
+                  : "예: 어떤 상황인지, 어떤 내용이 나올지, 자주 쓰이는 용어 등"
+              }
+              rows={2}
+            />
+            <p className={styles.settingHint}>
+              구체적인 상황/맥락, 예상되는 내용, 자주 나올 용어 등을 적으면 번역 정확도가 높아집니다.
+              <span style={{ float: "right" }}>
+                {(roomSettings.customEnvironmentDescription || "").length}/200
+              </span>
+            </p>
+          </div>
+
           {/* Session Name (Optional) */}
           <div className={styles.settingGroup}>
             <label>세션 이름 (선택)</label>

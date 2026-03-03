@@ -42,7 +42,8 @@
       "Bash(npx next lint:*)",
       "Bash(ls:*)",
       "Bash(grep:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(python3:*)"
     ],
     "deny": []
   }

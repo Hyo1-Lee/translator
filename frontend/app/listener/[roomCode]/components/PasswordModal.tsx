@@ -27,7 +27,7 @@ export default function PasswordModal({
       e.stopPropagation();
     }
     if (!password.trim()) {
-      setPasswordError("비밀번호를 입력해주세요.");
+      setPasswordError(t("listener.passwordEmpty"));
       return;
     }
     setPasswordError("");

@@ -19,6 +19,7 @@ interface TranscriptData {
   timestamp: Date;
   confidence?: number;
   isFinal?: boolean;
+  forceComplete?: boolean;
 }
 
 /**
@@ -56,7 +57,8 @@ export class STTManager {
         text: result.text || '',
         timestamp: new Date(),
         confidence: result.confidence,
-        isFinal: result.final
+        isFinal: result.final,
+        forceComplete: result.forceComplete || false,
       };
 
       onTranscript(transcriptData);

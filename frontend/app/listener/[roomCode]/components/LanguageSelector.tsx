@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useI18n } from "@/contexts/I18nContext";
 import styles from "./LanguageSelector.module.css";
 
 interface LanguageSelectorProps {
@@ -11,7 +12,7 @@ interface LanguageSelectorProps {
   onLanguageChange: (lang: string) => void;
 }
 
-// 언어별 국기 이모지 매핑
+// Flag emoji per language
 const FLAG_MAP: Record<string, string> = {
   en: "🇺🇸",
   ja: "🇯🇵",
@@ -36,15 +37,16 @@ export default function LanguageSelector({
   languageMap,
   onLanguageChange,
 }: LanguageSelectorProps) {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // 클라이언트 마운트 확인 (Portal용)
+  // Client mount check for Portal
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // 열릴 때 body 스크롤 막기
+  // Lock body scroll when open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -71,7 +73,7 @@ export default function LanguageSelector({
       <div className={styles.dropdown} onClick={(e) => e.stopPropagation()}>
         <div className={styles.dropdownHeader}>
           <div className={styles.handle} />
-          <span className={styles.dropdownTitle}>번역 언어 선택</span>
+          <span className={styles.dropdownTitle}>{t("listener.selectLanguage")}</span>
         </div>
         <div className={styles.languageList}>
           {availableLanguages.map((lang) => (
@@ -112,7 +114,7 @@ export default function LanguageSelector({
           setIsOpen(!isOpen);
         }}
         className={`${styles.trigger} ${isOpen ? styles.active : ""}`}
-        aria-label="언어 선택"
+        aria-label={t("listener.selectLanguage")}
         aria-expanded={isOpen}
       >
         <span className={styles.flag}>{currentFlag}</span>

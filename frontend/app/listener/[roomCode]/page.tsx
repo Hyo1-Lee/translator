@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, Fragment } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
@@ -93,6 +93,7 @@ export default function ListenerRoom() {
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [showOriginal, setShowOriginal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [availableLanguages, setAvailableLanguages] = useState<string[]>(["en"]);
 
   // Password state
@@ -131,6 +132,7 @@ export default function ListenerRoom() {
     const { scrollTop, scrollHeight, clientHeight } = transcriptContainerRef.current;
     const nearBottom = scrollHeight - scrollTop - clientHeight < 100;
     isNearBottomRef.current = nearBottom;
+    setShowScrollBtn(!nearBottom);
   }, []);
 
   // 필터링 최적화: useMemo로 매 렌더링마다 필터링 방지
@@ -223,7 +225,7 @@ export default function ListenerRoom() {
     });
 
     socketRef.current.on("reconnect_failed", () => {
-      toast.error("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
+      toast.error(t("listener.reconnectFailed"));
     });
 
     socketRef.current.on("password-required", () => {
@@ -281,15 +283,27 @@ export default function ListenerRoom() {
       }
     });
 
+    // Segment refinement update (async quality improvement)
+    socketRef.current.on("segment-update", (data: any) => {
+      if (!data.id || !data.translations) return;
+      setTranscripts((prev) =>
+        prev.map((t) =>
+          t.segmentId === data.id
+            ? { ...t, translations: { ...t.translations, ...data.translations } }
+            : t
+        )
+      );
+    });
+
     socketRef.current.on("error", (data: SocketData) => {
       if (data.message === "Incorrect password") {
-        setPasswordError("비밀번호가 올바르지 않습니다.");
+        setPasswordError(t("listener.incorrectPassword"));
         setNeedsPassword(true);
       } else if (data.message === "Room not found") {
-        toast.error("방을 찾을 수 없습니다.");
+        toast.error(t("listener.roomNotFound"));
         router.push("/");
       } else {
-        toast.error(data.message || "오류가 발생했습니다.");
+        toast.error(data.message || t("listener.genericError"));
       }
     });
 
@@ -329,15 +343,15 @@ export default function ListenerRoom() {
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      toast.error("로그인이 필요합니다");
+      toast.error(t("listener.loginRequired"));
       router.push("/login");
       return;
     }
     if (!roomCode || transcripts.length === 0) {
-      toast.error("저장할 내용이 없습니다");
+      toast.error(t("listener.noContentToSave"));
       return;
     }
-    const roomName = prompt("세션 이름을 입력하세요", sessionTitle || `Session ${roomCode}`);
+    const roomName = prompt(t("listener.enterSessionName"), sessionTitle || `Session ${roomCode}`);
     if (!roomName) return;
 
     try {
@@ -351,12 +365,12 @@ export default function ListenerRoom() {
       });
       const data = await response.json();
       if (data.success) {
-        toast.success("세션이 저장되었습니다");
+        toast.success(t("listener.saved"));
       } else {
-        toast.error(data.message || "저장에 실패했습니다");
+        toast.error(data.message || t("listener.saveFailed"));
       }
     } catch {
-      toast.error("저장 중 오류가 발생했습니다");
+      toast.error(t("listener.saveError"));
     }
   };
 
@@ -439,8 +453,8 @@ export default function ListenerRoom() {
             <button
               onClick={() => setShowOriginal(!showOriginal)}
               className={`${styles.iconBtn} ${showOriginal ? styles.active : ''}`}
-              aria-label={showOriginal ? "원문 숨기기" : "원문 보기"}
-              title={showOriginal ? "원문 숨기기" : "원문 보기"}
+              aria-label={showOriginal ? t("listener.hideOriginal") : t("listener.showOriginal")}
+              title={showOriginal ? t("listener.hideOriginal") : t("listener.showOriginal")}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {showOriginal ? (
@@ -462,7 +476,7 @@ export default function ListenerRoom() {
               <button
                 onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
                 className={`${styles.iconBtn} ${showMenu ? styles.active : ''}`}
-                aria-label="메뉴"
+                aria-label={t("listener.menu")}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="1" />
@@ -498,57 +512,68 @@ export default function ListenerRoom() {
               <p className={styles.emptyTitle}>{t("listener.noTranscripts")}</p>
               <p className={styles.emptyText}>{t("listener.noTranscriptsDesc")}</p>
               <div className={styles.currentLangBadge}>
-                <span className={styles.badgeLabel}>번역 언어</span>
+                <span className={styles.badgeLabel}>{t("listener.translationLanguage")}</span>
                 <span className={styles.badgeLang}>{LANGUAGE_MAP[selectedLanguage] || selectedLanguage}</span>
               </div>
             </div>
           ) : (
-            <div className={styles.proseContainer}>
-              {showOriginal && (
-                <div className={styles.originalProse}>
-                  {filteredTranscripts.map((item, index) => {
-                    const total = filteredTranscripts.length;
-                    const isLatest = index === total - 1;
-                    const koreanText = item.korean || item.originalText || "";
-                    if (!koreanText) return null;
-                    return (
-                      <span
-                        key={`ko-${item.segmentId || index}`}
-                        className={isLatest ? styles.proseSegmentNew : styles.proseSegment}
-                      >
-                        {getDisplayText(koreanText)}{" "}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              <div className={styles.translatedProse}>
-                {filteredTranscripts.map((item, index) => {
-                  const total = filteredTranscripts.length;
-                  const isLatest = index === total - 1;
-                  const isRecent = index >= total - 3;
-                  const translationText = item.targetLanguage
-                    ? (item.text || "")
-                    : (item.translations?.[selectedLanguage] || item.translations?.en || "");
-                  if (!translationText) return null;
-                  return (
-                    <span
-                      key={`tr-${item.segmentId || index}`}
-                      className={
-                        isLatest ? styles.proseSegmentNew
-                        : isRecent ? styles.proseSegmentRecent
-                        : styles.proseSegment
-                      }
-                    >
-                      {getDisplayText(translationText)}{" "}
-                    </span>
-                  );
-                })}
-              </div>
+            <div className={styles.segmentList}>
+              {filteredTranscripts.map((item, index) => {
+                const isLatest = index === filteredTranscripts.length - 1;
+                const translationText = item.targetLanguage
+                  ? (item.text || "")
+                  : (item.translations?.[selectedLanguage] || item.translations?.en || "");
+                if (!translationText) return null;
+
+                const koreanText = showOriginal ? (item.korean || item.originalText || "") : "";
+                const timestamp = item.timestamp ? parseInt(item.timestamp) : 0;
+
+                // Show timestamp on first segment, 60s+ gap, or every 10 segments
+                let showTime = index === 0;
+                if (!showTime && index > 0 && timestamp > 0) {
+                  const prev = filteredTranscripts[index - 1];
+                  const prevTs = prev?.timestamp ? parseInt(prev.timestamp) : 0;
+                  if (prevTs > 0 && timestamp - prevTs > 60000) showTime = true;
+                  else if (index % 10 === 0) showTime = true;
+                }
+
+                return (
+                  <Fragment key={`seg-${item.segmentId || index}`}>
+                    {showTime && timestamp > 0 && (
+                      <div className={styles.timestampDivider}>
+                        <span>{formatTime(timestamp)}</span>
+                      </div>
+                    )}
+                    <div className={`${styles.segment} ${isLatest ? styles.segmentLatest : ''}`}>
+                      <p className={styles.segmentText}>
+                        {getDisplayText(translationText)}
+                      </p>
+                      {koreanText && (
+                        <p className={styles.segmentOriginal}>
+                          {getDisplayText(koreanText)}
+                        </p>
+                      )}
+                    </div>
+                  </Fragment>
+                );
+              })}
               <div ref={transcriptEndRef} />
             </div>
           )}
         </div>
+
+        {/* Scroll to bottom */}
+        {showScrollBtn && filteredTranscripts.length > 0 && (
+          <button
+            className={styles.scrollBtn}
+            onClick={() => transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 5v14M19 12l-7 7-7-7" />
+            </svg>
+            {t("listener.scrollToLatest")}
+          </button>
+        )}
       </div>
     </main>
   );

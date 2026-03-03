@@ -15,6 +15,7 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 /* ===== Mobile App Header ===== */
@@ -303,9 +304,6 @@
   padding: 1rem;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
 }
 
 /* ===== Empty State ===== */
@@ -387,90 +385,139 @@
   font-weight: 600;
 }
 
-/* ===== Subtitle Line (Flowing Subtitles) ===== */
-/* ===== Prose Display ===== */
-.proseContainer {
+/* ===== Segment Display ===== */
+.segmentList {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 0.5rem;
+  gap: 0.125rem;
+  padding: 0.5rem 0;
 }
 
-.originalProse {
+.timestampDivider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0 0.375rem;
   color: var(--text-tertiary);
-  font-size: 0.875rem;
-  font-weight: 400;
-  line-height: 1.8;
-  word-break: keep-all;
-  word-wrap: break-word;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
-.translatedProse {
-  color: var(--text-primary);
-  font-size: 1.0625rem;
-  font-weight: 400;
-  line-height: 1.9;
-  word-break: keep-all;
-  word-wrap: break-word;
+.timestampDivider::before,
+.timestampDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
 }
 
-/* Individual segment within prose */
-.proseSegment {
-  transition: all 0.6s ease;
+.segment {
+  padding: 0.5rem 0.875rem;
+  border-left: 2px solid transparent;
+  border-radius: 0 6px 6px 0;
+  transition: background 0.8s ease, border-color 0.8s ease;
 }
 
-.proseSegmentRecent {
-  transition: all 0.6s ease;
+.segmentLatest {
+  border-left-color: var(--accent-primary);
+  background: rgba(13, 148, 136, 0.05);
+  animation: segmentHighlight 3s ease forwards;
 }
 
-.proseSegmentNew {
-  font-weight: 600;
-  color: var(--text-primary);
-  background: rgba(13, 148, 136, 0.06);
-  border-radius: 2px;
-  padding: 1px 0;
-  animation: proseHighlight 2s ease forwards;
-}
-
-@keyframes proseHighlight {
+@keyframes segmentHighlight {
   0% {
-    font-weight: 600;
-    background: rgba(13, 148, 136, 0.12);
+    background: rgba(13, 148, 136, 0.08);
+    border-left-color: var(--accent-primary);
   }
   100% {
-    font-weight: 400;
     background: transparent;
+    border-left-color: transparent;
+  }
+}
+
+.segmentText {
+  color: var(--text-primary);
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  word-break: keep-all;
+  word-wrap: break-word;
+  margin: 0;
+}
+
+.segmentOriginal {
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  margin: 0.25rem 0 0;
+  word-break: keep-all;
+  word-wrap: break-word;
+}
+
+/* Scroll to bottom button */
+.scrollBtn {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-surface);
+  color: var(--accent-primary);
+  border: 1px solid rgba(13, 148, 136, 0.3);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  transition: all 0.2s ease;
+  animation: fadeInUp 0.3s ease;
+}
+
+.scrollBtn:hover {
+  background: var(--accent-light);
+  transform: translateX(-50%) translateY(-1px);
+  box-shadow: var(--shadow-lg);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 }
 
 /* ===== Font Sizes ===== */
-.small .originalProse {
-  font-size: 0.8125rem;
+.small .segmentText {
+  font-size: 0.9375rem;
   line-height: 1.7;
 }
 
-.small .translatedProse {
-  font-size: 0.9375rem;
-  line-height: 1.8;
+.small .segmentOriginal {
+  font-size: 0.75rem;
 }
 
-.medium .originalProse {
-  font-size: 0.875rem;
-}
-
-.medium .translatedProse {
+.medium .segmentText {
   font-size: 1.0625rem;
 }
 
-.large .originalProse {
-  font-size: 0.9375rem;
+.medium .segmentOriginal {
+  font-size: 0.8125rem;
 }
 
-.large .translatedProse {
+.large .segmentText {
   font-size: 1.1875rem;
-  line-height: 2;
+  line-height: 1.85;
+}
+
+.large .segmentOriginal {
+  font-size: 0.875rem;
 }
 
 /* ===== Password Modal ===== */
@@ -616,7 +663,7 @@
     box-shadow: var(--shadow-sm);
   }
 
-  .proseContainer {
+  .segmentList {
     padding: 0 0.5rem;
   }
 
@@ -678,29 +725,27 @@
     border-radius: 0;
   }
 
-  .proseContainer {
+  .segmentList {
     max-width: 800px;
     margin-left: auto;
     margin-right: auto;
     padding: 0 1.5rem;
   }
 
-  .translatedProse {
+  .segmentText {
     font-size: 1.125rem;
-    line-height: 1.9;
   }
 
-  .originalProse {
-    font-size: 1rem;
-    line-height: 1.7;
+  .segmentOriginal {
+    font-size: 0.875rem;
   }
 
-  .large .translatedProse {
+  .large .segmentText {
     font-size: 1.375rem;
   }
 
-  .large .originalProse {
-    font-size: 1.125rem;
+  .large .segmentOriginal {
+    font-size: 1rem;
   }
 
   .dropdownMenu {
@@ -790,16 +835,16 @@
     padding: 2rem 3rem;
   }
 
-  .proseContainer {
+  .segmentList {
     max-width: 900px;
     padding: 0 2rem;
   }
 
-  .translatedProse {
+  .segmentText {
     font-size: 1.1875rem;
   }
 
-  .large .translatedProse {
+  .large .segmentText {
     font-size: 1.5rem;
   }
 }

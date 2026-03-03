@@ -14,26 +14,32 @@ interface DeepgramConfig {
 }
 
 /**
- * TextAccumulator - is_final 텍스트를 글자 수 + 시간 기반으로 축적하여 번역 단위로 전달.
+ * TextAccumulator - 문장 완성 인식 + 글자 수/시간 기반 축적
+ *
+ * 핵심: 한국어 문장은 거의 항상 다/요/죠/까/오/니로 끝남.
+ * 이 패턴이 버퍼 끝에 없으면 미완성 → flush 보류.
  *
  * 플러시 트리거 (우선순위):
- *   1. utterance_end (화자 침묵) → 즉시 flush (길이 무관)
- *   2. MAX_BUFFER_CHARS 초과 (200자) → 즉시 flush
- *   3. MIN_FLUSH_CHARS 이상 (40자) + debounce 1초 경과 → flush
- *   4. HARD_TIMEOUT (8초) → 안전망 flush
+ *   1. utterance_end (화자 침묵) → 즉시 flush, forceComplete=true
+ *   2. MAX_BUFFER_CHARS (200자) → 마지막 문장 경계에서 분할 flush
+ *   3. 문장 종결 패턴 + MIN_FLUSH_CHARS (40자) + debounce 1초 → flush
+ *   4. HARD_TIMEOUT (8초) → 안전망 flush, forceComplete=true
  */
 class TextAccumulator {
   private buffer: string = '';
   private debounceTimer: NodeJS.Timeout | null = null;
   private hardTimer: NodeJS.Timeout | null = null;
-  private onFlush: (text: string) => void;
+  private onFlush: (text: string, forceComplete: boolean) => void;
 
   private readonly MIN_FLUSH_CHARS = 40;
   private readonly MAX_BUFFER_CHARS = 200;
   private readonly DEBOUNCE_MS = 1000;
   private readonly HARD_TIMEOUT_MS = 8000;
 
-  constructor(onFlush: (text: string) => void) {
+  // 한국어 문장 종결 패턴 (마지막 글자 기준)
+  private readonly ENDS_WITH_SENTENCE = /[다요죠까오니]\s*[.?!。]?\s*$/;
+
+  constructor(onFlush: (text: string, forceComplete: boolean) => void) {
     this.onFlush = onFlush;
   }
 
@@ -42,46 +48,92 @@ class TextAccumulator {
     this.resetHardTimer();
 
     if (this.buffer.length >= this.MAX_BUFFER_CHARS) {
-      this.flush();
+      this.flushWithSplit();
       return;
     }
 
-    if (this.buffer.length >= this.MIN_FLUSH_CHARS) {
+    // 문장 종결 + 최소 글자 → debounce 시작
+    if (this.buffer.length >= this.MIN_FLUSH_CHARS && this.ENDS_WITH_SENTENCE.test(this.buffer)) {
       this.startDebounce();
+    } else if (this.debounceTimer) {
+      // 추가 텍스트로 종결 패턴이 깨짐 → debounce 취소
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
   }
 
   onUtteranceEnd(): void {
     if (this.buffer.trim()) {
-      this.flush();
+      this.flush(true);
     }
+  }
+
+  /**
+   * MAX_BUFFER_CHARS 도달 시: 마지막 문장 경계에서 분할
+   */
+  private flushWithSplit(): void {
+    const text = this.buffer;
+    const lastEnd = this.findLastSentenceEnd(text);
+
+    if (lastEnd > 0 && lastEnd < text.length) {
+      const complete = text.substring(0, lastEnd).trim();
+      const remaining = text.substring(lastEnd).trim();
+
+      this.clearTimers();
+      this.buffer = remaining;
+
+      if (complete.length > 0) {
+        this.onFlush(complete, false);
+      }
+
+      this.resetHardTimer();
+    } else {
+      // 분할 불가 → 강제 flush
+      this.flush(true);
+    }
+  }
+
+  /**
+   * 텍스트 내에서 마지막 문장 종결 위치 찾기
+   */
+  private findLastSentenceEnd(text: string): number {
+    const re = /[다요죠까오니]\s*[.?!。]?\s+/g;
+    let lastEnd = -1;
+    let match;
+    while ((match = re.exec(text)) !== null) {
+      lastEnd = match.index + match[0].length;
+    }
+    return lastEnd;
   }
 
   private startDebounce(): void {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => this.flush(), this.DEBOUNCE_MS);
+    this.debounceTimer = setTimeout(() => this.flush(false), this.DEBOUNCE_MS);
   }
 
   private resetHardTimer(): void {
     if (this.hardTimer) clearTimeout(this.hardTimer);
-    this.hardTimer = setTimeout(() => this.flush(), this.HARD_TIMEOUT_MS);
+    this.hardTimer = setTimeout(() => this.flush(true), this.HARD_TIMEOUT_MS);
   }
 
-  flush(): void {
+  private clearTimers(): void {
     if (this.debounceTimer) { clearTimeout(this.debounceTimer); this.debounceTimer = null; }
     if (this.hardTimer) { clearTimeout(this.hardTimer); this.hardTimer = null; }
+  }
+
+  flush(forceComplete: boolean = false): void {
+    this.clearTimers();
 
     const text = this.buffer.trim();
     this.buffer = '';
 
     if (text.length > 0) {
-      this.onFlush(text);
+      this.onFlush(text, forceComplete);
     }
   }
 
   destroy(): void {
-    if (this.debounceTimer) { clearTimeout(this.debounceTimer); this.debounceTimer = null; }
-    if (this.hardTimer) { clearTimeout(this.hardTimer); this.hardTimer = null; }
+    this.clearTimers();
     this.buffer = '';
   }
 }
@@ -108,11 +160,12 @@ export class DeepgramClient extends STTProvider {
       ...config,
     };
 
-    this.textAccumulator = new TextAccumulator((text) => {
+    this.textAccumulator = new TextAccumulator((text, forceComplete) => {
       this.emit('transcript', {
         text,
         confidence: 0,
         final: true,
+        forceComplete,
       });
     });
   }
@@ -238,7 +291,7 @@ export class DeepgramClient extends STTProvider {
    * End stream - flush buffer and finish connection
    */
   endStream(): void {
-    this.textAccumulator.flush();
+    this.textAccumulator.flush(true);
 
     if (this.connection) {
       try {
@@ -253,7 +306,7 @@ export class DeepgramClient extends STTProvider {
    * Disconnect
    */
   disconnect(): void {
-    this.textAccumulator.flush();
+    this.textAccumulator.flush(true);
     this.textAccumulator.destroy();
 
     if (this.connection) {
