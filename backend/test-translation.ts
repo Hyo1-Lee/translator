@@ -29,20 +29,18 @@ const ROOM_CODE = 'test-room';
 
 async function main() {
   const apiKey = process.env.OPENAI_API_KEY;
-  const groqApiKey = process.env.GROQ_API_KEY;
 
-  if (!apiKey && !groqApiKey) {
-    console.error('OPENAI_API_KEY 또는 GROQ_API_KEY 필요');
+  if (!apiKey) {
+    console.error('OPENAI_API_KEY 필요');
     process.exit(1);
   }
 
-  const provider = groqApiKey ? 'groq' : 'openai';
-  console.log(`Provider: ${provider}, 문장: ${TEST_SENTENCES.length}개, 언어: ${TARGET_LANGUAGES.join(', ')}\n`);
+  console.log(`문장: ${TEST_SENTENCES.length}개, 언어: ${TARGET_LANGUAGES.join(', ')}\n`);
 
   const translationService = new TranslationService({
-    apiKey: apiKey || '',
-    provider: provider as 'openai' | 'groq',
-    groqApiKey,
+    apiKey,
+    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    correctionModel: process.env.OPENAI_CORRECTION_MODEL || 'gpt-4.1-nano',
   });
 
   const sessionService = new SessionService();
@@ -57,7 +55,7 @@ async function main() {
     const context = {
       summary: sessionService.getSummary(ROOM_CODE),
       recentKorean: sessionService.getRecentContext(ROOM_CODE),
-      previousTranslations: sessionService.getPreviousTranslations(ROOM_CODE),
+      recentTranslationHistory: sessionService.getRecentTranslationHistory(ROOM_CODE),
     };
 
     const start = Date.now();
@@ -74,7 +72,8 @@ async function main() {
       }
       console.log(`    (${latency}ms)\n`);
 
-      sessionService.updatePreviousTranslations(ROOM_CODE, result.translations);
+      sessionService.updateCorrectedSegment(ROOM_CODE, result.korean);
+      sessionService.addTranslationHistory(ROOM_CODE, result.translations);
 
       if (sessionService.shouldRegenerateSummary(ROOM_CODE)) {
         const fullContext = sessionService.getFullContext(ROOM_CODE);

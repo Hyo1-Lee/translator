@@ -7,7 +7,6 @@ export interface RoomSettings {
   targetLanguages: string[];
   maxListeners: number;
   enableStreaming: boolean;
-  // Legacy fields for backend compatibility
   promptTemplate?: string;
   customPrompt?: string;
   enableTranslation?: boolean;
@@ -28,11 +27,9 @@ export interface Transcript {
   targetLanguage?: string;
   originalText?: string;
   isPartial?: boolean;
-  contextSummary?: string;
   isHistory?: boolean;
   korean?: string;
-  english?: string;
-  batchId?: string;
+  segmentId?: string;
 }
 
 export interface SocketData {
@@ -64,11 +61,8 @@ export interface SocketData {
   targetLanguage?: string;
   originalText?: string;
   isPartial?: boolean;
-  contextSummary?: string;
   isHistory?: boolean;
   korean?: string;
-  english?: string;
-  batchId?: string;
 }
 
 export type RecordingState = "idle" | "recording" | "paused";

@@ -15,8 +15,6 @@ import { SttText } from './SttText';
  * TranslationText 모델
  *
  * 번역된 텍스트를 저장합니다.
- * - 한국어 → 영어 (GPT)
- * - 영어 → 다국어 (Google Translate)
  */
 @Table({
   tableName: 'translation_texts',

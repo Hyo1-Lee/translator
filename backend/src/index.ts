@@ -130,32 +130,24 @@ async function bootstrap() {
   const transcriptService = new TranscriptService();
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
-  // Translation service (Groq/GPT)
-  const translationProvider = process.env.TRANSLATION_PROVIDER as 'openai' | 'groq' || 'openai';
+  // Translation service (OpenAI 2-pass: correction + translation)
   const translationService = new TranslationService({
     apiKey: process.env.OPENAI_API_KEY || '',
-    model: process.env.OPENAI_MODEL || 'gpt-5-nano',
-    provider: translationProvider,
-    groqApiKey: process.env.GROQ_API_KEY,
-    groqModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+    correctionModel: process.env.OPENAI_CORRECTION_MODEL || 'gpt-4.1-nano',
   });
 
   // In-memory session service (translation context)
   const sessionService = new SessionService();
 
   console.log('[Bootstrap] Translation service initialized');
-  console.log(`[Bootstrap] - Provider: ${translationProvider.toUpperCase()}`);
-  if (translationProvider === 'groq') {
-    console.log(`[Bootstrap] - Groq Model: ${process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'}`);
-  } else {
-    console.log(`[Bootstrap] - OpenAI Model: ${process.env.OPENAI_MODEL || 'gpt-5-nano'}`);
-  }
+  console.log(`[Bootstrap] - Translation Model: ${process.env.OPENAI_MODEL || 'gpt-4.1-mini'}`);
+  console.log(`[Bootstrap] - Correction Model: ${process.env.OPENAI_CORRECTION_MODEL || 'gpt-4.1-nano'}`);
 
   // STT Manager - Deepgram only, Nova-3 fixed
   const sttManager = new STTManager({
     deepgram: {
       apiKey: process.env.DEEPGRAM_API_KEY || '',
-      model: 'nova-3',
       language: process.env.DEEPGRAM_LANGUAGE || 'ko',
       smartFormat: process.env.DEEPGRAM_SMART_FORMAT !== 'false',
       punctuate: process.env.DEEPGRAM_PUNCTUATE !== 'false',

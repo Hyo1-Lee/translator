@@ -101,9 +101,6 @@ export async function handleCreateRoom(
     await ctx.sendTranscriptHistory(socket, room.roomCode);
     await ctx.sendTranslationHistory(socket, room.roomCode);
 
-    // Translate any untranslated historical texts
-    await ctx.translateHistoricalTexts(room.roomCode);
-
     await sessionManager.registerSpeakerSocket(room.id, socket.id);
     await recordingStateService.syncRecordingState(room.id, socket.id);
 
@@ -149,9 +146,6 @@ export async function handleRejoinRoom(
 
     await ctx.sendTranscriptHistory(socket, roomCode);
     await ctx.sendTranslationHistory(socket, roomCode);
-
-    // Translate any untranslated historical texts
-    await ctx.translateHistoricalTexts(roomCode);
 
   } catch (error) {
     console.error('[Room] Rejoin error:', error);
@@ -199,9 +193,6 @@ export async function handleJoinRoom(
 
     await ctx.sendTranscriptHistory(socket, roomId);
     await ctx.sendTranslationHistory(socket, roomId);
-
-    // Translate any untranslated historical texts
-    await ctx.translateHistoricalTexts(roomId);
 
     const listenerCount = await ctx.roomService.getListenerCount(roomId);
     ctx.io.to(roomId).emit('listener-count', { count: listenerCount });

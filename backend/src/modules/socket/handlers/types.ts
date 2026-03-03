@@ -26,5 +26,4 @@ export interface HandlerContext {
   setupSttCallbacks: (roomCode: string, promptTemplate?: string) => Promise<void>;
   sendTranscriptHistory: (socket: Socket, roomId: string) => Promise<void>;
   sendTranslationHistory: (socket: Socket, roomId: string) => Promise<void>;
-  translateHistoricalTexts: (roomCode: string) => Promise<void>;
 }

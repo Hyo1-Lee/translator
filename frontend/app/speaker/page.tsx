@@ -92,7 +92,8 @@ function SpeakerContent() {
   const audioRecorderRef = useRef<AudioRecorder | null>(null);
   const translationListRef = useRef<HTMLDivElement>(null);
   const backgroundSessionRef = useRef<BackgroundSessionManager | null>(null);
-  const roomIdRef = useRef<string>(""); // Always holds the latest roomId for callbacks
+  const roomIdRef = useRef<string>("");
+  const seenSegmentIds = useRef<Set<string>>(new Set());
 
   // Debug audio recording refs
   const debugMediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -700,7 +701,6 @@ function SpeakerContent() {
           text: data.text,
           originalText: data.originalText,
           isPartial: data.isPartial || false,
-          contextSummary: data.contextSummary,
           timestamp: data.timestamp,
           isHistory: data.isHistory || false,
         };
@@ -736,13 +736,18 @@ function SpeakerContent() {
 
     // New segment event (primary pipeline)
     socketRef.current.on("segment", (data: any) => {
+      // Dedup by segment ID
+      const segmentId = data.id;
+      if (segmentId && seenSegmentIds.current.has(segmentId)) return;
+      if (segmentId) seenSegmentIds.current.add(segmentId);
+
       setTranscripts((prev) => {
         const newTranscript: Transcript = {
           type: "translation",
           korean: data.korean,
           translations: data.translations || {},
           timestamp: String(data.timestamp),
-          batchId: data.id,
+          segmentId,
           isHistory: data.isHistory || false,
         };
         if (data.isHistory) return [...prev, newTranscript];
@@ -1296,7 +1301,7 @@ function SpeakerContent() {
                         {!item.korean && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
                         <p className={styles.translatedText}>
                           {getDisplayText(
-                            item.translations?.[selectedLanguage || "en"] || item.text || item.english || ""
+                            item.translations?.[selectedLanguage || "en"] || item.text || ""
                           )}
                         </p>
                       </div>
@@ -1483,7 +1488,7 @@ function SpeakerContent() {
                         {!item.korean && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
                         <p className={styles.translatedText}>
                           {getDisplayText(
-                            item.translations?.[selectedLanguage || "en"] || item.text || item.english || ""
+                            item.translations?.[selectedLanguage || "en"] || item.text || ""
                           )}
                         </p>
                       </div>

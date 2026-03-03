@@ -138,9 +138,7 @@ export default function RecordingDetailPage() {
         const timestamp = formatTimestamp(t.timestamp - recording.transcripts[0].timestamp);
         content += `[${timestamp}]\n`;
         content += `Korean: ${t.korean}\n`;
-        if (selectedLanguage === 'en') {
-          content += `English: ${t.english}\n`;
-        } else if (t.translations && t.translations[selectedLanguage]) {
+        if (t.translations && t.translations[selectedLanguage]) {
           const langName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage;
           content += `${langName}: ${t.translations[selectedLanguage]}\n`;
         }
@@ -329,9 +327,7 @@ export default function RecordingDetailPage() {
                   const relativeTime = index === 0 ? 0 : transcript.timestamp - recording.transcripts[0].timestamp;
                   const translation = selectedLanguage === 'ko'
                     ? transcript.korean
-                    : selectedLanguage === 'en'
-                    ? transcript.english
-                    : transcript.translations?.[selectedLanguage] || transcript.english;
+                    : transcript.translations?.[selectedLanguage] || "";
 
                   return (
                     <div key={index} className={styles.transcriptCard}>

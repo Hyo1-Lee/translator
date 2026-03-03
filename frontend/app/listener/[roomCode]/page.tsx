@@ -46,8 +46,7 @@ interface Transcript {
   isPartial?: boolean;
   isHistory?: boolean;
   korean?: string;
-  english?: string;
-  batchId?: string;
+  segmentId?: string;
 }
 
 interface SocketData {
@@ -63,12 +62,10 @@ interface SocketData {
   targetLanguage?: string;
   originalText?: string;
   isPartial?: boolean;
-  contextSummary?: string;
   isHistory?: boolean;
   korean?: string;
-  english?: string;
   translations?: Record<string, string>;
-  batchId?: string;
+  segmentId?: string;
   roomSettings?: {
     roomTitle?: string;
     targetLanguagesArray?: string[];
@@ -108,7 +105,8 @@ export default function ListenerRoom() {
   const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const isJoinedRef = useRef(false);
   const roomPasswordRef = useRef<string>("");
-  const isNearBottomRef = useRef(true); // Track if user is near bottom
+  const isNearBottomRef = useRef(true);
+  const seenSegmentIds = useRef<Set<string>>(new Set());
 
   // Format timestamp
   const formatTime = useCallback((timestamp: number) => {
@@ -243,6 +241,10 @@ export default function ListenerRoom() {
       setPasswordError("");
       setPassword("");
 
+      // Clear existing transcripts before receiving history (prevent duplication on rejoin)
+      setTranscripts([]);
+      seenSegmentIds.current.clear();
+
       // Set available languages from room settings (speaker's selection)
       const roomLangs = data.roomSettings?.targetLanguagesArray
         || (typeof data.roomSettings?.targetLanguages === 'string'
@@ -259,13 +261,18 @@ export default function ListenerRoom() {
 
     // New segment event (primary)
     socketRef.current.on("segment", (data: any) => {
+      // Dedup by segment ID
+      const segmentId = data.id;
+      if (segmentId && seenSegmentIds.current.has(segmentId)) return;
+      if (segmentId) seenSegmentIds.current.add(segmentId);
+
       const newTranscript: Transcript = {
         type: "translation",
         korean: data.korean,
         translations: data.translations || {},
         timestamp: String(data.timestamp),
         isHistory: data.isHistory || false,
-        batchId: data.id,
+        segmentId,
       };
       if (data.isHistory) {
         setTranscripts((prev) => [...prev, newTranscript]);
@@ -376,7 +383,7 @@ export default function ListenerRoom() {
           if (showOriginal) {
             data += `한국어: ${item.korean}\n`;
           }
-          const translation = item.translations?.[selectedLanguage] || item.translations?.en || item.english || "";
+          const translation = item.translations?.[selectedLanguage] || item.translations?.en || "";
           data += `${langName}: ${translation}\n\n`;
         }
       }
@@ -506,7 +513,7 @@ export default function ListenerRoom() {
                     if (!koreanText) return null;
                     return (
                       <span
-                        key={`ko-${item.batchId || index}`}
+                        key={`ko-${item.segmentId || index}`}
                         className={isLatest ? styles.proseSegmentNew : styles.proseSegment}
                       >
                         {getDisplayText(koreanText)}{" "}
@@ -522,11 +529,11 @@ export default function ListenerRoom() {
                   const isRecent = index >= total - 3;
                   const translationText = item.targetLanguage
                     ? (item.text || "")
-                    : (item.translations?.[selectedLanguage] || item.translations?.en || item.english || "");
+                    : (item.translations?.[selectedLanguage] || item.translations?.en || "");
                   if (!translationText) return null;
                   return (
                     <span
-                      key={`tr-${item.batchId || index}`}
+                      key={`tr-${item.segmentId || index}`}
                       className={
                         isLatest ? styles.proseSegmentNew
                         : isRecent ? styles.proseSegmentRecent

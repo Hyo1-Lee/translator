@@ -30,6 +30,10 @@ export class SocketHandler {
   private sessionService: SessionService;
   private audioChunksReceived: Map<string, number> = new Map();
 
+  // 번역 큐: 세그먼트를 절대 드랍하지 않음
+  private translationQueues: Map<string, Array<{ text: string; sequence: number }>> = new Map();
+  private translationProcessing: Map<string, boolean> = new Map();
+
   constructor(
     io: Server,
     roomService: RoomService,
@@ -60,7 +64,6 @@ export class SocketHandler {
       setupSttCallbacks: this.setupSttCallbacks.bind(this),
       sendTranscriptHistory: this.sendTranscriptHistory.bind(this),
       sendTranslationHistory: this.sendTranslationHistory.bind(this),
-      translateHistoricalTexts: this.translateHistoricalTexts.bind(this)
     };
   }
 
@@ -74,7 +77,7 @@ export class SocketHandler {
       socket.on('rejoin-room', (data) => handleRejoinRoom(ctx, socket, data));
       socket.on('join-room', (data) => handleJoinRoom(ctx, socket, data));
 
-      // Audio handlers (audio-stream + audio-blob → both still accepted)
+      // Audio handlers
       socket.on('audio-stream', (data: AudioStreamData) => handleAudioStream(ctx, socket, data));
       socket.on('audio-blob', (data) => handleAudioBlob(ctx, socket, data));
 
@@ -96,15 +99,15 @@ export class SocketHandler {
   }
 
   /**
-   * STT 클라이언트 생성 + 콜백 설정
-   * Deepgram final → SessionService에 세그먼트 추가 → 즉시 번역 → segment 이벤트 전송
+   * STT 콜백 설정
+   * TextAccumulator가 축적한 텍스트를 전달 → 큐에 넣고 순차 번역
    */
   private async setupSttCallbacks(roomCode: string, promptTemplate?: string): Promise<void> {
     await this.sttManager.createClient(
       roomCode,
       async (transcriptData) => {
         if (!transcriptData.isFinal) {
-          // Interim → stt-text 이벤트 (기존 호환성 유지)
+          // Interim → stt-text (스피커 화면 실시간 표시)
           this.io.to(transcriptData.roomId).emit('stt-text', {
             text: transcriptData.text,
             timestamp: transcriptData.timestamp.getTime(),
@@ -113,81 +116,22 @@ export class SocketHandler {
           return;
         }
 
-        // Final transcript → 즉시 번역 파이프라인
+        // Final (TextAccumulator가 축적한 텍스트) → 번역 큐
         const roomId = transcriptData.roomId;
         const text = transcriptData.text;
 
         // 1. SessionService에 세그먼트 추가
         const sequence = this.sessionService.addSegment(roomId, text);
 
-        // 2. stt-text 이벤트 전송 (기존 호환성 + 스피커 화면 표시)
+        // 2. stt-text final 전송
         this.io.to(roomId).emit('stt-text', {
           text,
           timestamp: transcriptData.timestamp.getTime(),
           isFinal: true
         });
 
-        // 3. 번역 (동시 번역 방지)
-        if (this.sessionService.isTranslationInFlight(roomId)) {
-          return;
-        }
-
-        const room = await this.roomService.getRoom(roomId);
-        if (!room) return;
-
-        const targetLanguages = room.roomSettings?.targetLanguagesArray || ['en'];
-
-        this.sessionService.setTranslationInFlight(roomId, true);
-
-        try {
-          const translateStart = Date.now();
-          const result = await this.translationService.translate(
-            text,
-            targetLanguages,
-            {
-              summary: this.sessionService.getSummary(roomId),
-              recentKorean: this.sessionService.getRecentContext(roomId),
-              previousTranslations: this.sessionService.getPreviousTranslations(roomId),
-              recentTranslationHistory: this.sessionService.getRecentTranslationHistory(roomId),
-              glossary: room.roomSettings?.customGlossary || undefined,
-            }
-          );
-          const latencyMs = Date.now() - translateStart;
-
-          if (result && Object.keys(result.translations).length > 0) {
-            // 4. 이전 번역 업데이트
-            this.sessionService.updatePreviousTranslations(roomId, result.translations);
-
-            const segmentId = uuidv4();
-
-            // 5. segment 이벤트 전송 (새 포맷)
-            this.io.to(roomId).emit('segment', {
-              id: segmentId,
-              korean: result.korean,
-              translations: result.translations,
-              timestamp: Date.now(),
-              sequence,
-            });
-
-            // 6. 비동기 DB 저장 (Segment)
-            this.transcriptService.saveSegment(
-              roomId, sequence, text, result.korean, result.translations, latencyMs
-            ).catch(err => {
-              console.error(`[SocketHandler][${roomId}] Segment save error:`, err);
-            });
-
-            // 7. 비동기 요약 재생성
-            if (this.sessionService.shouldRegenerateSummary(roomId)) {
-              this.regenerateSummary(roomId).catch(err => {
-                console.error(`[SocketHandler][${roomId}] Summary error:`, err);
-              });
-            }
-          }
-        } catch (error) {
-          console.error(`[SocketHandler][${roomId}] Translation error:`, error);
-        } finally {
-          this.sessionService.setTranslationInFlight(roomId, false);
-        }
+        // 3. 번역 큐에 추가 (절대 드랍하지 않음)
+        this.enqueueTranslation(roomId, text, sequence);
       },
       undefined,
       promptTemplate || 'general'
@@ -195,19 +139,115 @@ export class SocketHandler {
   }
 
   /**
+   * 번역 큐 — 세그먼트를 절대 드랍하지 않고 순차 처리
+   */
+  private enqueueTranslation(roomId: string, text: string, sequence: number): void {
+    if (!this.translationQueues.has(roomId)) {
+      this.translationQueues.set(roomId, []);
+    }
+    this.translationQueues.get(roomId)!.push({ text, sequence });
+
+    // 이미 처리 중이면 큐에만 넣고 리턴 (처리 루프가 꺼내감)
+    if (this.translationProcessing.get(roomId)) return;
+
+    this.processTranslationQueue(roomId);
+  }
+
+  /**
+   * 큐 처리 루프 — 큐가 빌 때까지 순차 번역
+   */
+  private async processTranslationQueue(roomId: string): Promise<void> {
+    this.translationProcessing.set(roomId, true);
+
+    try {
+      while (true) {
+        const queue = this.translationQueues.get(roomId);
+        if (!queue || queue.length === 0) break;
+
+        const item = queue.shift()!;
+        await this.translateAndEmit(roomId, item.text, item.sequence);
+      }
+    } catch (error) {
+      console.error(`[SocketHandler][${roomId}] Translation queue error:`, error);
+    } finally {
+      this.translationProcessing.set(roomId, false);
+    }
+  }
+
+  /**
+   * 단일 세그먼트 번역 + emit
+   */
+  private async translateAndEmit(roomId: string, text: string, sequence: number): Promise<void> {
+    const room = await this.roomService.getRoom(roomId);
+    if (!room) return;
+
+    const targetLanguages = room.roomSettings?.targetLanguagesArray || ['en'];
+
+    try {
+      const translateStart = Date.now();
+      const result = await this.translationService.translate(
+        text,
+        targetLanguages,
+        {
+          summary: this.sessionService.getSummary(roomId),
+          recentKorean: this.sessionService.getRecentContext(roomId),
+          recentTranslationHistory: this.sessionService.getRecentTranslationHistory(roomId),
+          glossary: room.roomSettings?.customGlossary || undefined,
+        }
+      );
+      const latencyMs = Date.now() - translateStart;
+
+      if (result && Object.keys(result.translations).length > 0) {
+        // 보정된 한국어로 컨텍스트 업데이트
+        this.sessionService.updateCorrectedSegment(roomId, result.korean);
+
+        // 번역 히스토리 업데이트 (문맥 연속성)
+        this.sessionService.addTranslationHistory(roomId, result.translations);
+
+        const segmentId = uuidv4();
+
+        // segment 이벤트 전송 (LLM이 보정한 korean 사용)
+        this.io.to(roomId).emit('segment', {
+          id: segmentId,
+          korean: result.korean,
+          translations: result.translations,
+          timestamp: Date.now(),
+          sequence,
+        });
+
+        // 비동기 DB 저장
+        this.transcriptService.saveSegment(
+          roomId, sequence, text, result.korean, result.translations, latencyMs
+        ).catch(err => {
+          console.error(`[SocketHandler][${roomId}] Segment save error:`, err);
+        });
+
+        // 비동기 요약 재생성
+        if (this.sessionService.shouldRegenerateSummary(roomId)) {
+          this.regenerateSummary(roomId).catch(err => {
+            console.error(`[SocketHandler][${roomId}] Summary error:`, err);
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`[SocketHandler][${roomId}] Translation error:`, error);
+    }
+  }
+
+  /**
    * 요약 재생성 (비동기)
    */
   private async regenerateSummary(roomCode: string): Promise<void> {
-    const fullContext = this.sessionService.getFullContext(roomCode);
+    const recentContext = this.sessionService.getRecentContext(roomCode);
     const previousSummary = this.sessionService.getSummary(roomCode);
 
-    const newSummary = await this.translationService.generateSummary(fullContext, previousSummary);
+    const newSummary = await this.translationService.generateSummary(recentContext, previousSummary);
     if (newSummary) {
       this.sessionService.updateSummary(roomCode, newSummary);
     }
   }
 
-  // Send transcript history
+  // Send transcript history (STT texts)
   private async sendTranscriptHistory(socket: Socket, roomId: string): Promise<void> {
     try {
       const transcripts = await this.transcriptService.getRecentSttTexts(roomId, 50);
@@ -220,7 +260,6 @@ export class SocketHandler {
           isHistory: true
         });
       });
-
     } catch (error) {
       console.error('[History] Error loading transcripts:', error);
     }
@@ -240,70 +279,17 @@ export class SocketHandler {
           sequence: seg.sequence,
           isHistory: true,
         });
-
       }
-
     } catch (error) {
       console.error('[History] Error loading segments:', error);
     }
   }
 
-  // Translate historical (untranslated) STT texts
-  private async translateHistoricalTexts(roomCode: string): Promise<void> {
-    try {
-      const untranslatedTexts = await this.transcriptService.getUntranslatedSttTexts(roomCode);
-
-      if (untranslatedTexts.length === 0) {
-        return;
-      }
-
-      console.log(`[HistoricalTranslation][${roomCode}] Found ${untranslatedTexts.length} untranslated texts`);
-
-      const room = await this.roomService.getRoom(roomCode);
-      if (!room) return;
-
-      const targetLanguages = room.roomSettings?.targetLanguagesArray
-        || (typeof room.roomSettings?.targetLanguages === 'string'
-            ? room.roomSettings.targetLanguages.split(',').filter((l: string) => l.trim())
-            : room.roomSettings?.targetLanguages)
-        || ['en'];
-
-      for (const sttText of untranslatedTexts) {
-        const translateStart = Date.now();
-        const result = await this.translationService.translate(
-          sttText.text,
-          targetLanguages,
-          {
-            summary: this.sessionService.getSummary(roomCode),
-            recentKorean: this.sessionService.getRecentContext(roomCode),
-            previousTranslations: this.sessionService.getPreviousTranslations(roomCode),
-          }
-        );
-        const latencyMs = Date.now() - translateStart;
-
-        if (result && Object.keys(result.translations).length > 0) {
-          const sequence = this.sessionService.addSegment(roomCode, result.korean);
-          this.sessionService.updatePreviousTranslations(roomCode, result.translations);
-
-          // Save as Segment
-          await this.transcriptService.saveSegment(
-            roomCode, sequence, sttText.text, result.korean, result.translations, latencyMs
-          );
-
-          const segmentId = uuidv4();
-          this.io.to(roomCode).emit('segment', {
-            id: segmentId,
-            korean: result.korean,
-            translations: result.translations,
-            timestamp: Date.now(),
-            sequence,
-          });
-
-        }
-      }
-
-    } catch (error) {
-      console.error(`[HistoricalTranslation][${roomCode}] Error:`, error);
-    }
+  /**
+   * 룸 번역 큐 정리 (disconnect 시 호출 가능)
+   */
+  cleanupRoom(roomId: string): void {
+    this.translationQueues.delete(roomId);
+    this.translationProcessing.delete(roomId);
   }
 }

@@ -218,12 +218,10 @@ export default function Dashboard() {
           const timestamp = new Date(item.timestamp).toLocaleString("ko-KR");
           content += `[${index + 1}] ${timestamp}\n`;
           content += `KR: ${item.korean}\n`;
-          content += `EN: ${item.english}\n`;
 
-          // Add other translations if available
           if (item.translations && typeof item.translations === "object") {
             Object.entries(item.translations).forEach(([lang, text]) => {
-              if (lang !== "en" && text) {
+              if (text) {
                 content += `${lang.toUpperCase()}: ${text}\n`;
               }
             });

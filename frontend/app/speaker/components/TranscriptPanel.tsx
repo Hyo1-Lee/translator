@@ -34,7 +34,6 @@ export default function TranscriptPanel({
     if (item.type === "translation" && item.targetLanguage) {
       return item.targetLanguage === selectedLanguage;
     }
-    // Old translation-batch format
     return true;
   });
 
@@ -123,16 +122,10 @@ export default function TranscriptPanel({
                     </div>
                   </div>
                 ) : (
-                  // Old translation-batch format
                   <div className={styles.translationCardContent}>
-                    <div className={styles.translationBadge}>번역</div>
                     <div className={styles.translationTexts}>
                       <p className={styles.koreanTextLarge}>
                         {getDisplayText(item.korean || "")}
-                      </p>
-                      <div className={styles.divider}></div>
-                      <p className={styles.englishTextLarge}>
-                        {getDisplayText(item.english || "")}
                       </p>
                     </div>
                   </div>
