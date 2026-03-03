@@ -262,7 +262,7 @@ export default function ListenerRoom() {
     });
 
     // New segment event (primary)
-    socketRef.current.on("segment", (data: any) => {
+    socketRef.current.on("segment", (data: SocketData & { id?: string }) => {
       // Dedup by segment ID
       const segmentId = data.id;
       if (segmentId && seenSegmentIds.current.has(segmentId)) return;
@@ -284,7 +284,7 @@ export default function ListenerRoom() {
     });
 
     // Segment refinement update (async quality improvement)
-    socketRef.current.on("segment-update", (data: any) => {
+    socketRef.current.on("segment-update", (data: { id?: string; translations?: Record<string, string> }) => {
       if (!data.id || !data.translations) return;
       setTranscripts((prev) =>
         prev.map((t) =>

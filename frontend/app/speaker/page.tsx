@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
+import { useI18n } from "@/contexts/I18nContext";
 import io from "socket.io-client";
 import QRCode from "qrcode";
 import { AudioRecorder } from "@/lib/audio-recorder";
@@ -34,6 +35,7 @@ function SpeakerContent() {
   const { user, accessToken } = useAuth();
   const router = useRouter();
   const toast = useToast();
+  const { t } = useI18n();
   const searchParams = useSearchParams();
 
   // State management
@@ -60,7 +62,7 @@ function SpeakerContent() {
   const [micDevices, setMicDevices] = useState<MicrophoneDevice[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [useExternalMicMode, setUseExternalMicMode] = useState(false);
-  const [currentMicLabel, setCurrentMicLabel] = useState<string>("기본 마이크");
+  const [currentMicLabel, setCurrentMicLabel] = useState<string>("Default Microphone");
   const [activeMicLabel, setActiveMicLabel] = useState<string | null>(null);  // 실제 사용 중인 마이크
   const [micMismatch, setMicMismatch] = useState(false);  // 요청한 마이크와 다른 경우
 
@@ -171,7 +173,7 @@ function SpeakerContent() {
             deviceLabel: externalMic.label,
             useExternalMicMode: true,
           });
-          toast.info(`외부 마이크 감지: ${externalMic.label}`);
+          toast.info(`${t("speaker.externalMicDetected")}: ${externalMic.label}`);
         }
       }
     } catch {
@@ -226,7 +228,7 @@ function SpeakerContent() {
       const savedSettings = loadMicrophoneSettings();
       if (!savedSettings || !savedSettings.deviceId) {
         // 저장된 설정이 없으면 기본 마이크 사용
-        setCurrentMicLabel("기본 마이크");
+        setCurrentMicLabel(t("speaker.defaultMic"));
         return;
       }
 
@@ -260,7 +262,7 @@ function SpeakerContent() {
         } else {
           // 재연결 실패 - 기본 마이크 사용
           setSelectedMicId(null);
-          setCurrentMicLabel("기본 마이크");
+          setCurrentMicLabel(t("speaker.defaultMic"));
           toast.error(`⚠️ ${reconnectResult.message}`, { duration: 5000 });
         }
       }
@@ -392,7 +394,7 @@ function SpeakerContent() {
     });
 
     setShowSettingsModal(false);
-    toast.success("설정이 업데이트되었습니다");
+    toast.success(t("speaker.settingsUpdated"));
   }, [roomId, roomSettings, toast]);
 
   // Initialize socket connection
@@ -524,7 +526,7 @@ function SpeakerContent() {
 
     socketRef.current.on(
       "recording-state-synced",
-      (_data: { roomId: string; isRecording: boolean; timestamp: string }) => {
+      () => {
         // 재연결/새 디바이스 연결 시 현재 상태 동기화
         // TODO: 필요시 UI 상태만 업데이트
       }
@@ -581,7 +583,7 @@ function SpeakerContent() {
 
     socketRef.current.on("reconnect_failed", () => {
       setStatus("재연결 실패");
-      toast.error("서버 연결에 실패했습니다. 페이지를 새로고침 해주세요.");
+      toast.error(t("speaker.reconnectFailed"));
     });
 
     socketRef.current.on("room-created", (data: SocketData) => {
@@ -739,7 +741,7 @@ function SpeakerContent() {
     });
 
     // New segment event (primary pipeline)
-    socketRef.current.on("segment", (data: any) => {
+    socketRef.current.on("segment", (data: SocketData & { id?: string }) => {
       // Dedup by segment ID
       const segmentId = data.id;
       if (segmentId && seenSegmentIds.current.has(segmentId)) return;
@@ -784,7 +786,7 @@ function SpeakerContent() {
     }
 
     if (!roomIdRef.current) {
-      toast.error("방이 아직 생성되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      toast.error(t("speaker.roomNotReady"));
       return;
     }
 
@@ -846,7 +848,7 @@ function SpeakerContent() {
         },
         onError: () => {
           setStatus("마이크 오류");
-          toast.error("마이크 접근 권한이 필요합니다.");
+          toast.error(t("speaker.micRequired"));
         },
         onDeviceSelected: (deviceInfo) => {
           setActiveMicLabel(deviceInfo.label);
@@ -854,7 +856,7 @@ function SpeakerContent() {
           // Check if different from requested
           if (selectedMicId && deviceInfo.deviceId !== selectedMicId) {
             setMicMismatch(true);
-            toast.error(`⚠️ 요청한 마이크와 다른 마이크가 선택됨: ${deviceInfo.label}`, { duration: 8000 });
+            toast.error(`${t("speaker.micMismatch")}: ${deviceInfo.label}`, { duration: 8000 });
           } else {
             setMicMismatch(false);
           }
@@ -874,7 +876,7 @@ function SpeakerContent() {
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error("STT 준비 시간 초과")), 10000);
           socketRef.current!.once("recording-ready", () => { clearTimeout(timeout); resolve(); });
-          socketRef.current!.once("recording-error", (d: any) => { clearTimeout(timeout); reject(new Error(d?.message || "STT 오류")); });
+          socketRef.current!.once("recording-error", (d: { message?: string }) => { clearTimeout(timeout); reject(new Error(d?.message || "STT error")); });
         });
       }
 
@@ -892,7 +894,7 @@ function SpeakerContent() {
             }
           },
           onWakeLockError: () => {
-            toast.info("화면이 꺼지면 녹음이 중단될 수 있습니다. 화면을 켜둔 상태로 유지해주세요.");
+            toast.info(t("speaker.screenOffWarning"));
           },
         });
       }
@@ -907,7 +909,7 @@ function SpeakerContent() {
       startDebugRecording();
     } catch {
       setStatus("마이크 오류");
-      toast.error("녹음을 시작할 수 없습니다.");
+      toast.error(t("speaker.cannotStart"));
     }
   };
 
@@ -962,7 +964,7 @@ function SpeakerContent() {
 
   // Create new room
   const createNewRoom = () => {
-    if (confirm("현재 방을 나가고 새 방을 만드시겠습니까?")) {
+    if (confirm(t("speaker.createNewConfirm"))) {
       clearRoomInfo();
       stopRecording();
       setRoomId("");
@@ -982,23 +984,23 @@ function SpeakerContent() {
   // Save recording
   const saveRecording = async () => {
     if (!user || !accessToken) {
-      toast.error("로그인이 필요합니다");
+      toast.error(t("speaker.loginRequired"));
       router.push("/login");
       return;
     }
 
     if (!roomId) {
-      toast.error("저장할 세션이 없습니다");
+      toast.error(t("speaker.noSession"));
       return;
     }
 
     if (transcripts.length === 0) {
-      toast.error("저장할 번역 내용이 없습니다");
+      toast.error(t("speaker.noTranslations"));
       return;
     }
 
     const roomName = prompt(
-      "세션 이름을 입력하세요",
+      t("speaker.enterSessionName"),
       roomSettings.roomTitle || `Session ${roomId}`
     );
     if (!roomName) return;
@@ -1018,13 +1020,13 @@ function SpeakerContent() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success("세션이 저장되었습니다");
+        toast.success(t("speaker.saved"));
       } else {
-        toast.error(data.message || "저장에 실패했습니다");
+        toast.error(data.message || t("speaker.saveFailed"));
       }
     } catch (error) {
       console.error("Save recording error:", error);
-      toast.error("저장 중 오류가 발생했습니다");
+      toast.error(t("speaker.saveError"));
     }
   };
 
@@ -1036,7 +1038,7 @@ function SpeakerContent() {
       const stream = (audioRecorderRef.current as unknown as { stream?: MediaStream })?.stream;
 
       if (!stream) {
-        toast.error('녹음 스트림을 찾을 수 없습니다');
+        toast.error('Recording stream not found');
         return;
       }
 
@@ -1070,10 +1072,10 @@ function SpeakerContent() {
       debugMediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start(1000); // 1초마다 데이터 수집
       setIsDebugRecording(true);
-      toast.success('디버그 녹음 시작 (선택된 마이크 사용)');
+      toast.success('Debug recording started');
     } catch (error) {
       console.error('[Debug Recording] Error:', error);
-      toast.error('디버그 녹음 실패');
+      toast.error('Debug recording failed');
     }
   };
 
@@ -1083,7 +1085,7 @@ function SpeakerContent() {
     }
     // ★ 스트림을 공유하므로 여기서 종료하면 안 됨! (AudioRecorder가 종료할 것)
     setIsDebugRecording(false);
-    toast.success('디버그 녹음 완료');
+    toast.success('Debug recording done');
   };
 
   const downloadDebugAudio = () => {
@@ -1095,13 +1097,13 @@ function SpeakerContent() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast.success('오디오 다운로드 완료');
+    toast.success(t("speaker.audioDownloaded"));
   };
 
   // Copy to clipboard
-  const copyToClipboard = (text: string, label: string) => {
+  const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast.success(`${label}이(가) 복사되었습니다.`);
+    toast.success(t("speaker.copied"));
   };
 
   // Share room URL
@@ -1110,13 +1112,13 @@ function SpeakerContent() {
     if (navigator.share) {
       navigator
         .share({
-          title: "번역 세션 초대",
-          text: `방 코드: ${roomId}`,
+          title: t("speaker.inviteTitle"),
+          text: `${t("speaker.roomCode")}: ${roomId}`,
           url: url,
         })
         .catch(console.error);
     } else {
-      copyToClipboard(url, "방 URL");
+      copyToClipboard(url);
     }
   };
 
@@ -1154,7 +1156,7 @@ function SpeakerContent() {
                 </span>
               </>
             ) : (
-              <span className={styles.roomCodeTitle}>새 세션</span>
+              <span className={styles.roomCodeTitle}>{t("speaker.newSession")}</span>
             )}
             <span className={`${styles.statusDot} ${isConnected ? styles.online : styles.offline}`} />
           </div>
@@ -1174,20 +1176,27 @@ function SpeakerContent() {
                         <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
                         <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                       </svg>
-                      QR 코드
+                      {t("speaker.qrCode")}
                     </button>
                     <button onClick={() => { shareRoom(); setShowMenu(false); }} className={styles.menuAction}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
                         <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                       </svg>
-                      공유
+                      {t("speaker.share")}
                     </button>
-                    <button onClick={() => { copyToClipboard(roomId, "방 코드"); setShowMenu(false); }} className={styles.menuAction}>
+                    <button onClick={() => { copyToClipboard(roomId); setShowMenu(false); }} className={styles.menuAction}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
-                      복사
+                      {t("speaker.copyCode")}
+                    </button>
+                    <button onClick={() => { copyToClipboard(`${FRONTEND_URL}/listener/${roomId}`); setShowMenu(false); }} className={styles.menuAction}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                      {t("speaker.copyURL")}
                     </button>
                     <div className={styles.menuDivider} />
                   </>
@@ -1196,7 +1205,7 @@ function SpeakerContent() {
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                   </svg>
-                  설정
+                  {t("speaker.settings")}
                 </button>
                 {user && (
                   <button onClick={() => { saveRecording(); setShowMenu(false); }} className={styles.menuAction} disabled={transcripts.length === 0}>
@@ -1204,14 +1213,14 @@ function SpeakerContent() {
                       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                       <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
                     </svg>
-                    저장
+                    {t("common.save")}
                   </button>
                 )}
                 <button onClick={() => { createNewRoom(); setShowMenu(false); }} className={styles.menuAction}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
-                  새 방
+                  {t("speaker.newRoom")}
                 </button>
                 {debugAudioUrl && (
                   <>
@@ -1221,7 +1230,7 @@ function SpeakerContent() {
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
-                      오디오
+                      {t("speaker.audio")}
                     </button>
                   </>
                 )}
@@ -1258,13 +1267,13 @@ function SpeakerContent() {
           </div>
           <div className={styles.mobileTranslation}>
             <div className={styles.translationHeader}>
-              <h3>실시간 번역</h3>
+              <h3>{t("speaker.liveTranslation")}</h3>
               <div className={styles.translationHeaderRight}>
                 <span className={styles.translationCount}>{transcripts.length}</span>
                 <button
                   onClick={() => setAutoScroll(!autoScroll)}
                   className={`${styles.autoScrollBtn} ${autoScroll ? styles.active : ''}`}
-                  title={autoScroll ? "자동 스크롤 끄기" : "자동 스크롤 켜기"}
+                  title={autoScroll ? t("speaker.autoScrollOff") : t("speaker.autoScrollOn")}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="7 13 12 18 17 13" /><polyline points="7 6 12 11 17 6" />
@@ -1274,7 +1283,7 @@ function SpeakerContent() {
             </div>
             {roomSettings.enableTranslation && roomSettings.targetLanguages.length > 0 && (
               <div className={styles.languageTabs}>
-                <button className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`} onClick={() => setSelectedLanguage(null)}>전체</button>
+                <button className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`} onClick={() => setSelectedLanguage(null)}>{t("speaker.all")}</button>
                 {roomSettings.targetLanguages.map((langCode) => {
                   const lang = TARGET_LANGUAGES.find((l) => l.code === langCode);
                   return <button key={langCode} className={`${styles.languageTab} ${selectedLanguage === langCode ? styles.active : ""}`} onClick={() => setSelectedLanguage(langCode)}>{lang?.name || langCode}</button>;
@@ -1287,7 +1296,7 @@ function SpeakerContent() {
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
-                  <p>녹음을 시작하면<br/>실시간 번역이 표시됩니다</p>
+                  <p>{t("speaker.startToSee")}</p>
                 </div>
               ) : (
                 <div className={styles.translationList}>
@@ -1326,11 +1335,11 @@ function SpeakerContent() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            {user ? "대시보드" : "홈"}
+            {user ? t("common.dashboard") : t("common.home")}
           </button>
           <div className={styles.connectionStatus}>
             <span className={`${styles.statusDot} ${isConnected ? styles.online : styles.offline}`} />
-            {isConnected ? "연결됨" : "연결 끊김"}
+            {isConnected ? t("common.connected") : t("common.disconnected")}
           </div>
         </header>
 
@@ -1354,27 +1363,33 @@ function SpeakerContent() {
               {roomId && (
                 <>
                   <div className={styles.roomCode}>
-                    <span className={styles.roomCodeLabel}>방 코드</span>
+                    <span className={styles.roomCodeLabel}>{t("speaker.roomCode")}</span>
                     <span className={styles.roomCodeValue}>{roomId}</span>
                   </div>
                   <div className={styles.roomActions}>
-                    <button onClick={() => copyToClipboard(roomId, "방 코드")} className={styles.actionIconBtn} title="복사">
+                    <button onClick={() => copyToClipboard(roomId)} className={styles.actionIconBtn} title={t("speaker.copyCode")}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                       </svg>
                     </button>
-                    <button onClick={() => setShowQRModal(true)} className={styles.actionIconBtn} title="QR 코드">
+                    <button onClick={() => copyToClipboard(`${FRONTEND_URL}/listener/${roomId}`)} className={styles.actionIconBtn} title={t("speaker.copyURL")}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                      </svg>
+                    </button>
+                    <button onClick={() => setShowQRModal(true)} className={styles.actionIconBtn} title={t("speaker.qrCode")}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
                         <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
                       </svg>
                     </button>
-                    <button onClick={() => copyToClipboard(`${FRONTEND_URL}/overlay/${roomId}?lang=en&fontSize=32`, "OBS URL")} className={styles.actionIconBtn} title="OBS URL 복사">
+                    <button onClick={() => copyToClipboard(`${FRONTEND_URL}/overlay/${roomId}?lang=en&fontSize=32`)} className={styles.actionIconBtn} title={t("speaker.copyOBS")}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
                       </svg>
                     </button>
-                    <button onClick={shareRoom} className={styles.actionIconBtn} title="공유">
+                    <button onClick={shareRoom} className={styles.actionIconBtn} title={t("speaker.share")}>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
                         <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
@@ -1415,20 +1430,20 @@ function SpeakerContent() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
-                설정
+                {t("speaker.settings")}
               </button>
               <button onClick={saveRecording} className={styles.actionButton} disabled={!user || transcripts.length === 0}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
                   <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
                 </svg>
-                저장
+                {t("common.save")}
               </button>
               <button onClick={createNewRoom} className={styles.actionButton}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                새 방
+                {t("speaker.newRoom")}
               </button>
               {debugAudioUrl && (
                 <button onClick={downloadDebugAudio} className={`${styles.actionButton} ${styles.hasAudio}`}>
@@ -1436,7 +1451,7 @@ function SpeakerContent() {
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
-                  오디오
+                  {t("speaker.audio")}
                 </button>
               )}
             </div>
@@ -1445,13 +1460,13 @@ function SpeakerContent() {
           {/* Right Panel - Translation */}
           <div className={styles.rightPanel}>
             <div className={styles.translationHeader}>
-              <h3>실시간 번역</h3>
+              <h3>{t("speaker.liveTranslation")}</h3>
               <div className={styles.translationHeaderRight}>
                 <span className={styles.translationCount}>{transcripts.length}</span>
                 <button
                   onClick={() => setAutoScroll(!autoScroll)}
                   className={`${styles.autoScrollBtn} ${autoScroll ? styles.active : ''}`}
-                  title={autoScroll ? "자동 스크롤 끄기" : "자동 스크롤 켜기"}
+                  title={autoScroll ? t("speaker.autoScrollOff") : t("speaker.autoScrollOn")}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="7 13 12 18 17 13" /><polyline points="7 6 12 11 17 6" />
@@ -1461,7 +1476,7 @@ function SpeakerContent() {
             </div>
             {roomSettings.enableTranslation && roomSettings.targetLanguages.length > 0 && (
               <div className={styles.languageTabs}>
-                <button className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`} onClick={() => setSelectedLanguage(null)}>전체</button>
+                <button className={`${styles.languageTab} ${selectedLanguage === null ? styles.active : ""}`} onClick={() => setSelectedLanguage(null)}>{t("speaker.all")}</button>
                 {roomSettings.targetLanguages.map((langCode) => {
                   const lang = TARGET_LANGUAGES.find((l) => l.code === langCode);
                   return <button key={langCode} className={`${styles.languageTab} ${selectedLanguage === langCode ? styles.active : ""}`} onClick={() => setSelectedLanguage(langCode)}>{lang?.name || langCode}</button>;
@@ -1474,7 +1489,7 @@ function SpeakerContent() {
                   <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
-                  <p>녹음을 시작하면<br/>실시간 번역이 여기에 표시됩니다</p>
+                  <p>{t("speaker.startToSee")}</p>
                 </div>
               ) : (
                 <div className={styles.translationList}>

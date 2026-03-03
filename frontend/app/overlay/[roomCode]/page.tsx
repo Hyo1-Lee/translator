@@ -44,7 +44,7 @@ export default function OverlayPage() {
       });
     });
 
-    socket.on("segment", (data: any) => {
+    socket.on("segment", (data: { translations?: Record<string, string>; korean?: string; timestamp?: number }) => {
       const translation = data.translations?.[lang] || "";
       if (!translation) return;
 

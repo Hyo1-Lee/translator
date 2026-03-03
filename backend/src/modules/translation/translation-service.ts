@@ -335,7 +335,17 @@ CRITICAL RULES:
 
       for (const lang of targetLanguages) {
         if (parsed[lang] && typeof parsed[lang] === 'string') {
-          translations[lang] = parsed[lang].trim();
+          const value = parsed[lang].trim();
+          // 한국어가 아닌 언어에 한국어 문자가 섞여있으면 제거
+          if (lang !== 'ko' && /[\uAC00-\uD7AF\u3131-\u3163]/.test(value)) {
+            const cleaned = value.replace(/[\uAC00-\uD7AF\u3131-\u3163]+/g, '').replace(/\s{2,}/g, ' ').trim();
+            if (cleaned.length > 0) {
+              translations[lang] = cleaned;
+              console.warn(`[TranslationService] Korean chars removed from ${lang} translation`);
+            }
+          } else {
+            translations[lang] = value;
+          }
         }
       }
     } catch (e) {
