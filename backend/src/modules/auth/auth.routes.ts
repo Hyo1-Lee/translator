@@ -128,85 +128,28 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // Send verification code (더 엄격한 제한)
-  fastify.post('/send-code', sendCodeRateLimitConfig, async (request: FastifyRequest<{ Body: SendCodeBody }>, reply: FastifyReply) => {
-    try {
-      const parseResult = sendCodeBodySchema.safeParse(request.body);
-      if (!parseResult.success) {
-        return reply.code(400).send({
-          success: false,
-          message: parseResult.error.errors[0].message,
-        });
-      }
-
-      const { email } = parseResult.data;
-      await authService.sendVerificationCode(email);
-
-      return reply.send({
-        success: true,
-        message: 'Verification code sent successfully',
-      });
-    } catch (error: any) {
-      console.error('[Auth] Send code error:', error);
-      return reply.code(500).send({
-        success: false,
-        message: error.message || 'Failed to send verification code',
-      });
-    }
+  // Send verification code (disabled — registration is closed)
+  fastify.post('/send-code', sendCodeRateLimitConfig, async (_request: FastifyRequest<{ Body: SendCodeBody }>, reply: FastifyReply) => {
+    return reply.code(403).send({
+      success: false,
+      message: 'Registration is currently closed.',
+    });
   });
 
-  // Verify code
-  fastify.post('/verify-code', authRateLimitConfig, async (request: FastifyRequest<{ Body: VerifyCodeBody }>, reply: FastifyReply) => {
-    try {
-      const parseResult = verifyCodeBodySchema.safeParse(request.body);
-      if (!parseResult.success) {
-        return reply.code(400).send({
-          success: false,
-          message: parseResult.error.errors[0].message,
-        });
-      }
-
-      const { code } = parseResult.data;
-      const email = await authService.verifyCode(code);
-
-      return reply.send({
-        success: true,
-        data: { email },
-      });
-    } catch (error: any) {
-      console.error('[Auth] Verify code error:', error);
-      return reply.code(400).send({
-        success: false,
-        message: error.message || 'Invalid or expired verification code',
-      });
-    }
+  // Verify code (disabled — registration is closed)
+  fastify.post('/verify-code', authRateLimitConfig, async (_request: FastifyRequest<{ Body: VerifyCodeBody }>, reply: FastifyReply) => {
+    return reply.code(403).send({
+      success: false,
+      message: 'Registration is currently closed.',
+    });
   });
 
-  // Signup
-  fastify.post('/signup', authRateLimitConfig, async (request: FastifyRequest<{ Body: SignupBody }>, reply: FastifyReply) => {
-    try {
-      const parseResult = signupBodySchema.safeParse(request.body);
-      if (!parseResult.success) {
-        return reply.code(400).send({
-          success: false,
-          message: parseResult.error.errors[0].message,
-        });
-      }
-
-      const { email, password, name } = parseResult.data;
-      const result = await authService.register(email, password, name);
-
-      return reply.send({
-        success: true,
-        data: result,
-      });
-    } catch (error: any) {
-      console.error('[Auth] Signup error:', error);
-      return reply.code(400).send({
-        success: false,
-        message: error.message || 'Signup failed',
-      });
-    }
+  // Signup (disabled — registration is closed)
+  fastify.post('/signup', authRateLimitConfig, async (_request: FastifyRequest<{ Body: SignupBody }>, reply: FastifyReply) => {
+    return reply.code(403).send({
+      success: false,
+      message: 'Registration is currently closed.',
+    });
   });
 
   // Login

@@ -42,7 +42,8 @@ export default function LoginPage() {
         if (data.data.exists && data.data.hasPassword) {
           setStep('password');
         } else {
-          await sendVerificationCode();
+          setError('Registration is currently closed. Only existing accounts can log in.');
+          return;
         }
       } else {
         setError(data.message || 'Failed to check email');
