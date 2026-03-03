@@ -264,24 +264,14 @@ export default function ListenerRoom() {
         korean: data.korean,
         translations: data.translations || {},
         timestamp: String(data.timestamp),
-        isHistory: false,
+        isHistory: data.isHistory || false,
         batchId: data.id,
       };
-      setTranscripts((prev) => [...prev.slice(-99), newTranscript]);
-    });
-
-    // Backward compat: translation-batch (also sent by server for history)
-    socketRef.current.on("translation-batch", (data: SocketData) => {
-      const newTranscript: Transcript = {
-        type: "translation",
-        korean: data.korean,
-        english: data.english,
-        translations: data.translations || (data.english ? { en: data.english } : {}),
-        timestamp: data.timestamp,
-        isHistory: data.isHistory || false,
-        batchId: data.batchId,
-      };
-      setTranscripts((prev) => [...prev.slice(-99), newTranscript]);
+      if (data.isHistory) {
+        setTranscripts((prev) => [...prev, newTranscript]);
+      } else {
+        setTranscripts((prev) => [...prev.slice(-99), newTranscript]);
+      }
     });
 
     socketRef.current.on("error", (data: SocketData) => {
@@ -490,7 +480,7 @@ export default function ListenerRoom() {
           </div>
         </header>
 
-        {/* Transcripts */}
+        {/* Transcripts - Prose style */}
         <div ref={transcriptContainerRef} className={`${styles.transcriptContainer} ${styles[fontSize]}`}>
           {filteredTranscripts.length === 0 ? (
             <div className={styles.emptyState}>
@@ -506,48 +496,50 @@ export default function ListenerRoom() {
               </div>
             </div>
           ) : (
-            <>
-              {filteredTranscripts.map((item, index) => {
-                const total = filteredTranscripts.length;
-                const fromEnd = total - 1 - index;
-                const opacityClass = fromEnd === 0
-                  ? styles.opLatest
-                  : fromEnd <= 2
-                    ? styles.opRecent
-                    : styles.opOlder;
-                return (
-                  <div key={index} className={`${styles.subtitleLine} ${opacityClass}`}>
-                    <div className={styles.timestamp}>
-                      {formatTime(
-                        item.timestamp
-                          ? typeof item.timestamp === "string" ? parseInt(item.timestamp) : item.timestamp
-                          : Date.now()
-                      )}
-                    </div>
-                    {item.targetLanguage ? (
-                      <>
-                        {showOriginal && item.originalText && (
-                          <div className={styles.originalText}>{getDisplayText(item.originalText)}</div>
-                        )}
-                        <div className={styles.translatedText}>{getDisplayText(item.text || "")}</div>
-                      </>
-                    ) : (
-                      <>
-                        {showOriginal && item.korean && (
-                          <div className={styles.originalText}>{getDisplayText(item.korean)}</div>
-                        )}
-                        <div className={styles.translatedText}>
-                          {getDisplayText(
-                            item.translations?.[selectedLanguage] || item.translations?.en || item.english || ""
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
+            <div className={styles.proseContainer}>
+              {showOriginal && (
+                <div className={styles.originalProse}>
+                  {filteredTranscripts.map((item, index) => {
+                    const total = filteredTranscripts.length;
+                    const isLatest = index === total - 1;
+                    const koreanText = item.korean || item.originalText || "";
+                    if (!koreanText) return null;
+                    return (
+                      <span
+                        key={`ko-${item.batchId || index}`}
+                        className={isLatest ? styles.proseSegmentNew : styles.proseSegment}
+                      >
+                        {getDisplayText(koreanText)}{" "}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <div className={styles.translatedProse}>
+                {filteredTranscripts.map((item, index) => {
+                  const total = filteredTranscripts.length;
+                  const isLatest = index === total - 1;
+                  const isRecent = index >= total - 3;
+                  const translationText = item.targetLanguage
+                    ? (item.text || "")
+                    : (item.translations?.[selectedLanguage] || item.translations?.en || item.english || "");
+                  if (!translationText) return null;
+                  return (
+                    <span
+                      key={`tr-${item.batchId || index}`}
+                      className={
+                        isLatest ? styles.proseSegmentNew
+                        : isRecent ? styles.proseSegmentRecent
+                        : styles.proseSegment
+                      }
+                    >
+                      {getDisplayText(translationText)}{" "}
+                    </span>
+                  );
+                })}
+              </div>
               <div ref={transcriptEndRef} />
-            </>
+            </div>
           )}
         </div>
       </div>

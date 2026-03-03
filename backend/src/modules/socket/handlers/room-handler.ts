@@ -89,17 +89,6 @@ export async function handleCreateRoom(
 
     socket.join(room.roomCode);
 
-    // Create STT client for this room
-    if (!ctx.sttManager.hasActiveClient(room.roomCode)) {
-      try {
-        await ctx.setupSttCallbacks(room.roomCode, room.roomSettings?.promptTemplate || 'general');
-      } catch (error) {
-        console.error(`[Room][${room.roomCode}] Failed to create STT client:`, error);
-        socket.emit('error', { message: 'Failed to initialize STT service' });
-        return;
-      }
-    }
-
     // Send room info to speaker
     socket.emit('room-created', {
       roomId: room.roomCode,
@@ -148,10 +137,6 @@ export async function handleRejoinRoom(
 
     await ctx.roomService.reconnectSpeaker(speakerId, socket.id);
     socket.join(roomCode);
-
-    if (!ctx.sttManager.hasActiveClient(roomCode)) {
-      await ctx.setupSttCallbacks(roomCode, room.roomSettings?.promptTemplate || 'general');
-    }
 
     socket.emit('room-rejoined', {
       roomId: room.roomCode,

@@ -148,6 +148,7 @@ export class SocketHandler {
               summary: this.sessionService.getSummary(roomId),
               recentKorean: this.sessionService.getRecentContext(roomId),
               previousTranslations: this.sessionService.getPreviousTranslations(roomId),
+              recentTranslationHistory: this.sessionService.getRecentTranslationHistory(roomId),
               glossary: room.roomSettings?.customGlossary || undefined,
             }
           );
@@ -167,16 +168,6 @@ export class SocketHandler {
               timestamp: Date.now(),
               sequence,
             });
-
-            // 하위 호환: translation-batch 이벤트도 전송
-            const batchPayload = {
-              korean: result.korean,
-              english: result.translations['en'] || '',
-              translations: result.translations,
-              timestamp: Date.now(),
-              batchId: `${roomId}-${Date.now()}`
-            };
-            this.io.to(roomId).emit('translation-batch', batchPayload);
 
             // 6. 비동기 DB 저장 (Segment)
             this.transcriptService.saveSegment(
@@ -250,15 +241,6 @@ export class SocketHandler {
           isHistory: true,
         });
 
-        // Backward compat
-        socket.emit('translation-batch', {
-          korean: seg.koreanCorrected,
-          english: seg.translations?.en || '',
-          translations: seg.translations || {},
-          timestamp: seg.timestamp ? new Date(seg.timestamp).getTime() : Date.now(),
-          batchId: `history-${seg.id}`,
-          isHistory: true,
-        });
       }
 
     } catch (error) {
@@ -317,13 +299,6 @@ export class SocketHandler {
             sequence,
           });
 
-          this.io.to(roomCode).emit('translation-batch', {
-            korean: result.korean,
-            english: result.translations['en'] || '',
-            translations: result.translations,
-            timestamp: Date.now(),
-            batchId: `${roomCode}-hist-${Date.now()}`,
-          });
         }
       }
 

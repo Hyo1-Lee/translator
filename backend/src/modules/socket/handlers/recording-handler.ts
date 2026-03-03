@@ -30,8 +30,9 @@ export async function handleStartRecording(
       return;
     }
 
+    // Remove existing STT client if any (prevent timeout issues)
     if (ctx.sttManager.hasActiveClient(roomId)) {
-      return;
+      ctx.sttManager.removeClient(roomId);
     }
 
     try {
@@ -40,8 +41,12 @@ export async function handleStartRecording(
       await recordingStateService.startRecording(room.id);
       await sessionManager.updateHeartbeat(room.id);
 
+      // Notify client that STT is ready to receive audio
+      socket.emit('recording-ready', { roomId });
+
     } catch (error) {
       console.error(`[Recording][${roomId}] Failed to create STT client:`, error);
+      socket.emit('recording-error', { message: 'STT 서비스 초기화 실패' });
     }
 
   } catch (error) {

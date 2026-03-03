@@ -6,12 +6,13 @@
  */
 
 export interface RoomSession {
-  contextWindow: string[];                      // 최근 5 한국어 세그먼트
-  summary: string;                              // 현재 요약
-  segmentSequence: number;                      // 순서 카운터
-  previousTranslations: Record<string, string>; // 언어별 마지막 번역
-  translationInFlight: boolean;                 // 동시 번역 방지
-  transcriptCount: number;                      // 요약 재생성 주기 계산용
+  contextWindow: string[];                                // 최근 5 한국어 세그먼트
+  summary: string;                                        // 현재 요약
+  segmentSequence: number;                                // 순서 카운터
+  previousTranslations: Record<string, string>;           // 언어별 마지막 번역 (호환)
+  recentTranslationHistory: Record<string, string>[];     // 최근 3개 번역 (언어별)
+  translationInFlight: boolean;                           // 동시 번역 방지
+  transcriptCount: number;                                // 요약 재생성 주기 계산용
 }
 
 export class SessionService {
@@ -28,6 +29,7 @@ export class SessionService {
         summary: '',
         segmentSequence: 0,
         previousTranslations: {},
+        recentTranslationHistory: [],
         translationInFlight: false,
         transcriptCount: 0,
       };
@@ -87,19 +89,33 @@ export class SessionService {
   }
 
   /**
-   * 이전 번역 저장
+   * 이전 번역 저장 (최근 3개 히스토리 유지)
    */
   updatePreviousTranslations(roomCode: string, translations: Record<string, string>): void {
     const session = this.getSession(roomCode);
     session.previousTranslations = { ...session.previousTranslations, ...translations };
+
+    // 최근 3개 번역 히스토리 유지
+    session.recentTranslationHistory.push(translations);
+    if (session.recentTranslationHistory.length > 3) {
+      session.recentTranslationHistory.shift();
+    }
   }
 
   /**
-   * 이전 번역 조회
+   * 이전 번역 조회 (호환: 마지막 1개)
    */
   getPreviousTranslations(roomCode: string): Record<string, string> {
     const session = this.getSession(roomCode);
     return session.previousTranslations;
+  }
+
+  /**
+   * 최근 번역 히스토리 조회 (최근 3개)
+   */
+  getRecentTranslationHistory(roomCode: string): Record<string, string>[] {
+    const session = this.getSession(roomCode);
+    return session.recentTranslationHistory;
   }
 
   /**

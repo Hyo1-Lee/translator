@@ -64,7 +64,7 @@
   gap: 0.25rem;
   padding: 0.125rem 0.5rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
   border-radius: 9999px;
   color: var(--accent-primary);
   font-size: 0.75rem;
@@ -216,19 +216,24 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-primary);
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Translation Panel */
 .translationPanel {
   flex: 1;
-  background: var(--bg-surface);
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: 1rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-height: 300px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 @media (min-width: 768px) {
@@ -341,7 +346,7 @@
   width: 2.5rem;
   height: 2.5rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(13, 148, 136, 0.2);
   border-radius: 0.5rem;
   color: var(--accent-primary);
   transition: all 0.2s;
@@ -349,8 +354,8 @@
 }
 
 .iconButton:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(13, 148, 136, 0.15);
+  border-color: rgba(13, 148, 136, 0.4);
   transform: translateY(-2px);
   color: var(--accent-primary-hover);
 }
@@ -725,6 +730,13 @@
 
 .settingGroup {
   margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.settingGroup:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .settingGroup label {
@@ -791,7 +803,7 @@
 
 .checkbox:hover {
   background: var(--bg-surface-hover);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(13, 148, 136, 0.3);
 }
 
 .checkbox input[type="checkbox"] {
@@ -808,12 +820,12 @@
 }
 
 .checkbox input[type="checkbox"]:hover {
-  border-color: rgba(59, 130, 246, 0.5);
+  border-color: rgba(13, 148, 136, 0.5);
 }
 
 .checkbox input[type="checkbox"]:checked {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-  border-color: #60a5fa;
+  background: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);
+  border-color: #14B8A6;
 }
 
 .checkbox input[type="checkbox"]:checked::after {
@@ -830,7 +842,7 @@
 
 .checkbox:has(input:checked) {
   background: var(--accent-light);
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: rgba(13, 148, 136, 0.4);
 }
 
 .checkbox span {
@@ -904,7 +916,7 @@
   background: var(--accent-primary);
   color: #ffffff;
   border: 1px solid var(--accent-primary);
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2), var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.2), var(--shadow-sm);
 }
 
 .createButton::before {
@@ -914,12 +926,38 @@
 .createButton:hover {
   transform: translateY(-2px);
   background: var(--accent-primary-hover);
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25), var(--shadow-md);
+  box-shadow: 0 8px 24px rgba(13, 148, 136, 0.25), var(--shadow-md);
 }
 
 .createButton:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15), var(--shadow-sm);
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.15), var(--shadow-sm);
+}
+
+/* CTA Button (Amber - for primary actions like "시작하기") */
+.ctaButton {
+  flex: 1;
+  padding: 1rem 2rem;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--cta-primary);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.25), var(--shadow-sm);
+}
+
+.ctaButton:hover {
+  transform: translateY(-2px);
+  background: var(--cta-primary-hover);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.3), var(--shadow-md);
+}
+
+.ctaButton:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2), var(--shadow-sm);
 }
 
 /* Responsive */
@@ -1055,14 +1093,14 @@
 .settingsButtonNew {
   background: var(--accent-light);
   color: var(--accent-primary);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
 }
 
 .settingsButtonNew:hover {
-  background: rgba(59, 130, 246, 0.12);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(13, 148, 136, 0.12);
+  border-color: rgba(13, 148, 136, 0.5);
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 10px 20px -10px rgba(13, 148, 136, 0.2);
 }
 
 /* QR Button Group */
@@ -1077,7 +1115,7 @@
   padding: 0.75rem 1rem;
   background: var(--accent-light);
   color: var(--accent-primary);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
   border-radius: 0.75rem;
   font-size: 0.875rem;
   font-weight: 500;
@@ -1086,8 +1124,8 @@
 }
 
 .fullscreenButton:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(13, 148, 136, 0.15);
+  border-color: rgba(13, 148, 136, 0.5);
   transform: translateY(-2px);
 }
 
@@ -1153,7 +1191,7 @@
 .roomCodeLarge {
   font-size: 4rem;
   font-weight: 800;
-  color: #3b82f6;
+  color: #0D9488;
   letter-spacing: 0.5rem;
   font-family: "Courier New", monospace;
   margin: 0;
@@ -1245,7 +1283,7 @@
   gap: 0.375rem;
   padding: 0.375rem 0.75rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
   border-radius: 9999px;
   color: var(--accent-primary);
   font-size: 0.875rem;
@@ -1298,7 +1336,7 @@
   width: 2rem;
   height: 2rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(13, 148, 136, 0.2);
   border-radius: 0.5rem;
   color: var(--accent-primary);
   transition: all 0.2s;
@@ -1306,8 +1344,8 @@
 }
 
 .compactIconButton:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(13, 148, 136, 0.15);
+  border-color: rgba(13, 148, 136, 0.4);
   transform: translateY(-2px);
 }
 
@@ -1700,13 +1738,13 @@
 
 .autoScrollButton.autoScrollOn {
   background: var(--accent-light);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(13, 148, 136, 0.3);
   color: var(--accent-primary);
 }
 
 .autoScrollButton.autoScrollOn:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(13, 148, 136, 0.15);
+  border-color: rgba(13, 148, 136, 0.5);
 }
 
 .translationContent {
@@ -1814,7 +1852,7 @@
 .sttBadge {
   background: var(--accent-light);
   color: var(--accent-primary);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
 }
 
 .translationBadge {
@@ -1925,12 +1963,12 @@
 
 .languageTab.active {
   background: var(--accent-light);
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: rgba(13, 148, 136, 0.4);
   color: var(--accent-primary);
 }
 
 .languageTab.active:hover {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(13, 148, 136, 0.15);
 }
 
 /* Microphone Selection Modal - Mobile Bottom Sheet Style */
@@ -2076,7 +2114,7 @@
   gap: 0.75rem;
   padding: 1rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
   border-radius: 0.875rem;
   margin-bottom: 1.25rem;
 }
@@ -2087,7 +2125,7 @@
   justify-content: center;
   width: 2.5rem;
   height: 2.5rem;
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(13, 148, 136, 0.12);
   border-radius: 0.625rem;
   color: var(--accent-primary);
   flex-shrink: 0;
@@ -2155,11 +2193,11 @@
 
 .micItem.selected {
   background: var(--accent-light);
-  border-color: rgba(59, 130, 246, 0.4);
+  border-color: rgba(13, 148, 136, 0.4);
 }
 
 .micItem.selected:hover {
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(13, 148, 136, 0.12);
 }
 
 .micItemIcon {
@@ -2176,7 +2214,7 @@
 }
 
 .micItem.selected .micItemIcon {
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(13, 148, 136, 0.12);
   color: var(--accent-primary);
 }
 
@@ -2221,7 +2259,7 @@
 .micBadge.default {
   background: var(--accent-light);
   color: var(--accent-primary);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
 }
 
 .micBadge.external {
@@ -2435,15 +2473,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.375rem;
-  padding: 1rem 0.75rem;
+  gap: 0.5rem;
+  padding: 1.25rem 1rem;
   background: var(--bg-tertiary);
   border: 2px solid var(--border-primary);
   border-radius: 0.875rem;
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: center;
-  min-height: 85px;
+  min-height: 95px;
 }
 
 .presetCard:hover {
@@ -2455,17 +2493,17 @@
 
 .presetCardActive {
   background: var(--accent-light);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
 }
 
 .presetCardActive:hover {
-  background: rgba(59, 130, 246, 0.12);
-  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(13, 148, 136, 0.12);
+  border-color: var(--accent-primary);
 }
 
 .presetIcon {
-  font-size: 1.5rem;
+  font-size: 2rem;
   line-height: 1;
 }
 
@@ -2522,74 +2560,41 @@
   white-space: nowrap;
 }
 
-/* Language Checkbox Grid */
-.languageCheckboxGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  padding: 0.75rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: 0.625rem;
-}
-
-.languageCheckbox {
+/* Language Chip Grid */
+.languageChipGrid {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.languageChip {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: 6px 8px;
-  border-radius: 6px;
-  transition: background 0.15s ease;
-}
-
-.languageCheckbox:hover {
-  background: var(--bg-surface-hover);
-}
-
-.languageCheckbox input[type="checkbox"] {
-  position: relative;
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  border: 2px solid var(--border-primary);
-  border-radius: 4px;
-  background: var(--bg-surface);
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1.5px solid var(--border-primary);
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
-  flex-shrink: 0;
-  margin: 0;
-}
-
-.languageCheckbox input[type="checkbox"]:hover {
-  border-color: rgba(59, 130, 246, 0.6);
-}
-
-.languageCheckbox input[type="checkbox"]:checked {
-  background: #3b82f6;
-  border-color: #60a5fa;
-}
-
-.languageCheckbox input[type="checkbox"]:checked::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 0px;
-  width: 4px;
-  height: 8px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-
-.languageCheckbox span {
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.languageChip:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.languageChipActive {
+  background: var(--accent-light);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.06);
 }
 
 /* Setting Hint Text */
@@ -2639,12 +2644,12 @@
 }
 
 .checkboxLabel input[type="checkbox"]:hover {
-  border-color: rgba(59, 130, 246, 0.6);
+  border-color: rgba(13, 148, 136, 0.6);
 }
 
 .checkboxLabel input[type="checkbox"]:checked {
-  background: #3b82f6;
-  border-color: #60a5fa;
+  background: #0D9488;
+  border-color: #14B8A6;
 }
 
 .checkboxLabel input[type="checkbox"]:checked::after {
@@ -3215,7 +3220,7 @@
   gap: 0.375rem;
   padding: 0.375rem 0.75rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(13, 148, 136, 0.3);
   border-radius: 9999px;
   color: var(--accent-primary);
   font-size: 0.875rem;
@@ -3263,7 +3268,7 @@
   width: 2.5rem;
   height: 2.5rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(13, 148, 136, 0.2);
   border-radius: 0.5rem;
   color: var(--accent-primary);
   transition: all 0.2s;
@@ -3271,8 +3276,8 @@
 }
 
 .actionIconBtn:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(13, 148, 136, 0.15);
+  border-color: rgba(13, 148, 136, 0.4);
   transform: translateY(-2px);
 }
 
@@ -3534,13 +3539,13 @@
 
 .autoScrollBtn.active {
   background: var(--accent-light);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(13, 148, 136, 0.3);
   color: var(--accent-primary);
 }
 
 .autoScrollBtn.active:hover {
-  background: rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(13, 148, 136, 0.15);
+  border-color: rgba(13, 148, 136, 0.5);
 }
 
 /* ===== TRANSLATION TEXT STYLES ===== */

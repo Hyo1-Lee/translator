@@ -743,32 +743,10 @@ function SpeakerContent() {
           translations: data.translations || {},
           timestamp: String(data.timestamp),
           batchId: data.id,
-        };
-        return [...prev.slice(-49), newTranscript];
-      });
-    });
-
-    // Keep old translation-batch for backwards compatibility (history)
-    socketRef.current.on("translation-batch", (data: SocketData) => {
-      setTranscripts((prev) => {
-        // Don't split into sentences - keep as a single batch for better readability
-        const newTranscript: Transcript = {
-          type: "translation",
-          korean: data.korean,
-          english: data.english,
-          translations:
-            data.translations || (data.english ? { en: data.english } : {}),
-          timestamp: data.timestamp,
           isHistory: data.isHistory || false,
-          batchId: data.batchId,
         };
-
-        // If it's history, add at the end; otherwise add at the end (keep last 50)
-        if (data.isHistory) {
-          return [...prev, newTranscript];
-        } else {
-          return [...prev.slice(-49), newTranscript];
-        }
+        if (data.isHistory) return [...prev, newTranscript];
+        return [...prev.slice(-49), newTranscript];
       });
     });
 
@@ -878,7 +856,20 @@ function SpeakerContent() {
         },
       });
 
-      // Start recording BEFORE background session (AudioContext priority)
+      // 1. Request STT creation FIRST
+      const currentRoomId = roomIdRef.current;
+      if (socketRef.current && currentRoomId) {
+        socketRef.current.emit("start-recording", { roomId: currentRoomId });
+
+        // 2. Wait for STT ready confirmation
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("STT 준비 시간 초과")), 10000);
+          socketRef.current!.once("recording-ready", () => { clearTimeout(timeout); resolve(); });
+          socketRef.current!.once("recording-error", (d: any) => { clearTimeout(timeout); reject(new Error(d?.message || "STT 오류")); });
+        });
+      }
+
+      // 3. Start audio recording AFTER STT is ready
       await audioRecorderRef.current.start();
       setRecordingState("recording");
 
@@ -905,12 +896,6 @@ function SpeakerContent() {
 
       // 디버그 녹음도 자동으로 시작 (원본 오디오 확인용)
       startDebugRecording();
-
-      // Notify server to create STT client
-      const currentRoomId = roomIdRef.current;
-      if (socketRef.current && currentRoomId) {
-        socketRef.current.emit("start-recording", { roomId: currentRoomId });
-      }
     } catch {
       setStatus("마이크 오류");
       toast.error("녹음을 시작할 수 없습니다.");

@@ -172,7 +172,7 @@
 .menuSelect:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
 }
 
 .fontSizeButtons {
@@ -201,7 +201,7 @@
 .fontSizeBtn.active {
   background: var(--accent-light);
   color: var(--accent-primary);
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(13, 148, 136, 0.3);
 }
 
 .menuDivider {
@@ -328,7 +328,7 @@
 .emptyIconPulse {
   position: absolute;
   inset: -12px;
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(13, 148, 136, 0.1);
   border-radius: 50%;
   animation: emptyPulse 2s ease-in-out infinite;
 }
@@ -371,7 +371,7 @@
   gap: 0.5rem;
   padding: 0.625rem 1rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(13, 148, 136, 0.2);
   border-radius: 12px;
 }
 
@@ -388,97 +388,89 @@
 }
 
 /* ===== Subtitle Line (Flowing Subtitles) ===== */
-.subtitleLine {
-  padding: 0.625rem 0.5rem;
-  margin-bottom: 0.25rem;
-  animation: fadeSlideIn 0.3s ease;
-  transition: opacity 0.3s ease;
+/* ===== Prose Display ===== */
+.proseContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.5rem;
 }
 
-.opLatest {
-  opacity: 1;
-}
-
-.opRecent {
-  opacity: 0.7;
-}
-
-.opOlder {
-  opacity: 0.4;
-}
-
-@keyframes fadeSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.timestamp {
-  display: none;
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-  font-weight: 500;
-  margin-bottom: 0.375rem;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-}
-
-.subtitleLine:hover .timestamp {
-  display: inline-block;
-}
-
-.originalText {
+.originalProse {
   color: var(--text-tertiary);
   font-size: 0.875rem;
   font-weight: 400;
-  line-height: 1.6;
-  margin-bottom: 0.5rem;
+  line-height: 1.8;
   word-break: keep-all;
   word-wrap: break-word;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.divider {
-  height: 1px;
-  background: linear-gradient(90deg, var(--border-primary), transparent);
-  margin: 0.5rem 0;
-}
-
-.translatedText {
+.translatedProse {
   color: var(--text-primary);
-  font-size: 1rem;
-  font-weight: 500;
-  line-height: 1.7;
+  font-size: 1.0625rem;
+  font-weight: 400;
+  line-height: 1.9;
   word-break: keep-all;
   word-wrap: break-word;
+}
+
+/* Individual segment within prose */
+.proseSegment {
+  transition: all 0.6s ease;
+}
+
+.proseSegmentRecent {
+  transition: all 0.6s ease;
+}
+
+.proseSegmentNew {
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(13, 148, 136, 0.06);
+  border-radius: 2px;
+  padding: 1px 0;
+  animation: proseHighlight 2s ease forwards;
+}
+
+@keyframes proseHighlight {
+  0% {
+    font-weight: 600;
+    background: rgba(13, 148, 136, 0.12);
+  }
+  100% {
+    font-weight: 400;
+    background: transparent;
+  }
 }
 
 /* ===== Font Sizes ===== */
-.small .originalText {
+.small .originalProse {
   font-size: 0.8125rem;
+  line-height: 1.7;
 }
 
-.small .translatedText {
+.small .translatedProse {
   font-size: 0.9375rem;
+  line-height: 1.8;
 }
 
-.medium .originalText {
+.medium .originalProse {
   font-size: 0.875rem;
 }
 
-.medium .translatedText {
-  font-size: 1rem;
+.medium .translatedProse {
+  font-size: 1.0625rem;
 }
 
-.large .originalText {
+.large .originalProse {
   font-size: 0.9375rem;
 }
 
-.large .translatedText {
-  font-size: 1.125rem;
+.large .translatedProse {
+  font-size: 1.1875rem;
+  line-height: 2;
 }
 
 /* ===== Password Modal ===== */
@@ -523,7 +515,7 @@
   display: inline-block;
   padding: 0.625rem 1.25rem;
   background: var(--accent-light);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(13, 148, 136, 0.2);
   border-radius: 10px;
   color: var(--text-tertiary);
   font-size: 0.875rem;
@@ -552,7 +544,7 @@
 .input:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
 }
 
 .input::placeholder {
@@ -624,8 +616,8 @@
     box-shadow: var(--shadow-sm);
   }
 
-  .subtitleLine {
-    padding: 0.75rem 1rem;
+  .proseContainer {
+    padding: 0 0.5rem;
   }
 
   .dropdownMenu {
@@ -686,35 +678,29 @@
     border-radius: 0;
   }
 
-  .subtitleLine {
-    padding: 0.875rem 1.5rem;
-    margin-bottom: 0.25rem;
+  .proseContainer {
     max-width: 800px;
     margin-left: auto;
     margin-right: auto;
+    padding: 0 1.5rem;
   }
 
-  .timestamp {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.625rem;
+  .translatedProse {
+    font-size: 1.125rem;
+    line-height: 1.9;
   }
 
-  .originalText {
+  .originalProse {
     font-size: 1rem;
     line-height: 1.7;
   }
 
-  .translatedText {
-    font-size: 1.125rem;
-    line-height: 1.8;
-  }
-
-  .large .originalText {
-    font-size: 1.125rem;
-  }
-
-  .large .translatedText {
+  .large .translatedProse {
     font-size: 1.375rem;
+  }
+
+  .large .originalProse {
+    font-size: 1.125rem;
   }
 
   .dropdownMenu {
@@ -804,16 +790,16 @@
     padding: 2rem 3rem;
   }
 
-  .subtitleLine {
-    padding: 1rem 2rem;
+  .proseContainer {
     max-width: 900px;
+    padding: 0 2rem;
   }
 
-  .translatedText {
+  .translatedProse {
     font-size: 1.1875rem;
   }
 
-  .large .translatedText {
+  .large .translatedProse {
     font-size: 1.5rem;
   }
 }

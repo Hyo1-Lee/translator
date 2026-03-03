@@ -38,7 +38,7 @@
 .brandName {
   font-size: 1.5rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -192,7 +192,7 @@
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);
   display: flex;
   align-items: center;
   justify-content: center;

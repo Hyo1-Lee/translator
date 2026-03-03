@@ -109,29 +109,30 @@ export default function SettingsModal({
             </select>
           </div>
 
-          {/* Target Languages - Multi-select Checkboxes */}
+          {/* Target Languages - Chip/Pill Selection */}
           <div className={styles.settingGroup}>
             <label>번역 언어 (다중 선택 가능)</label>
-            <div className={styles.languageCheckboxGrid}>
+            <div className={styles.languageChipGrid}>
               {TARGET_LANGUAGES.filter(
                 (lang) => lang.code !== roomSettings.sourceLanguage
-              ).map((lang) => (
-                <label key={lang.code} className={styles.languageCheckbox}>
-                  <input
-                    type="checkbox"
-                    checked={roomSettings.targetLanguages.includes(lang.code)}
-                    onChange={(e) => {
-                      const newLangs = e.target.checked
-                        ? [...roomSettings.targetLanguages, lang.code]
-                        : roomSettings.targetLanguages.filter(
-                            (l) => l !== lang.code
-                          );
+              ).map((lang) => {
+                const isSelected = roomSettings.targetLanguages.includes(lang.code);
+                return (
+                  <button
+                    key={lang.code}
+                    type="button"
+                    className={`${styles.languageChip} ${isSelected ? styles.languageChipActive : ""}`}
+                    onClick={() => {
+                      const newLangs = isSelected
+                        ? roomSettings.targetLanguages.filter((l) => l !== lang.code)
+                        : [...roomSettings.targetLanguages, lang.code];
                       updateSettings({ targetLanguages: newLangs });
                     }}
-                  />
-                  <span>{lang.name}</span>
-                </label>
-              ))}
+                  >
+                    {lang.name}
+                  </button>
+                );
+              })}
             </div>
             {roomSettings.targetLanguages.length === 0 && (
               <p className={styles.settingHint}>
@@ -218,7 +219,7 @@ export default function SettingsModal({
             </button>
             <button
               onClick={roomId ? onSave : onCreate}
-              className={styles.createButton}
+              className={roomId ? styles.createButton : styles.ctaButton}
             >
               {roomId ? "설정 저장" : "시작하기"}
             </button>

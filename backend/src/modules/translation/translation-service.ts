@@ -125,6 +125,7 @@ export class TranslationService {
       summary?: string;
       recentKorean?: string;
       previousTranslations?: Record<string, string>;
+      recentTranslationHistory?: Record<string, string>[];
       glossary?: Record<string, string>;
     } = {}
   ): Promise<TranslationResult | null> {
@@ -207,7 +208,8 @@ RULES:
 - Output ONLY the JSON object, no explanations
 - Each value must be PURELY in the target language (no mixing)
 - Preserve meaning, not word-for-word translation
-- Use proper religious terminology for each language`;
+- Use proper religious terminology for each language
+- IMPORTANT: Your translation will be appended directly after the previous translations as continuous prose. Write so it reads naturally as a continuation — do NOT repeat context, do NOT start with conjunctions unless grammatically appropriate. The listener sees a flowing paragraph, not isolated sentences.`;
 
     // 용어집
     if (glossary && Object.keys(glossary).length > 0) {
@@ -248,6 +250,7 @@ RULES:
       summary?: string;
       recentKorean?: string;
       previousTranslations?: Record<string, string>;
+      recentTranslationHistory?: Record<string, string>[];
     }
   ): string {
     const parts: string[] = [];
@@ -260,7 +263,16 @@ RULES:
       parts.push(`Recent Korean: ${context.recentKorean}`);
     }
 
-    if (context.previousTranslations && Object.keys(context.previousTranslations).length > 0) {
+    // Use recent translation history (last 3) if available, otherwise fall back to single previous
+    if (context.recentTranslationHistory && context.recentTranslationHistory.length > 0) {
+      const historyLines = context.recentTranslationHistory.map((translations, i) => {
+        const entries = Object.entries(translations)
+          .map(([lang, text]) => `  ${lang}: ${text}`)
+          .join('\n');
+        return `[${i + 1}]\n${entries}`;
+      }).join('\n');
+      parts.push(`Recent translations (your output will be appended after these):\n${historyLines}`);
+    } else if (context.previousTranslations && Object.keys(context.previousTranslations).length > 0) {
       const prevParts = Object.entries(context.previousTranslations)
         .map(([lang, text]) => `${lang}: ${text}`)
         .join('\n');

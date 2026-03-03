@@ -99,7 +99,7 @@
 .titleInput {
   flex: 1;
   padding: 0.75rem 1rem;
-  border: 2px solid #3b82f6;
+  border: 2px solid #0D9488;
   border-radius: 8px;
   font-size: 1.5rem;
   font-weight: 600;
@@ -109,7 +109,7 @@
 }
 
 .titleInput:focus {
-  border-color: #2563eb;
+  border-color: #0F766E;
 }
 
 .saveBtn,
@@ -181,7 +181,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);
   color: white;
   border: none;
   padding: 0.75rem 1.5rem;
@@ -194,7 +194,7 @@
 
 .exportButton:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.4);
 }
 
 /* Language Selector */
@@ -239,7 +239,7 @@
 }
 
 .langButtonActive {
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #0D9488 0%, #0F766E 100%);
   border: 2px solid transparent;
   color: white;
   padding: 0.75rem 1rem;
@@ -247,7 +247,7 @@
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
   white-space: nowrap;
 }
 
@@ -349,7 +349,7 @@
   padding: 1rem;
   background: #f0f9ff;
   border-radius: 8px;
-  border-left: 4px solid #3b82f6;
+  border-left: 4px solid #0D9488;
 }
 
 /* Responsive Design */

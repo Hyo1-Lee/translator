@@ -58,21 +58,6 @@ export default function OverlayPage() {
       ]);
     });
 
-    socket.on("translation-batch", (data: any) => {
-      if (data.isHistory) return;
-      const translation = data.translations?.[lang] || data.english || "";
-      if (!translation) return;
-
-      setLines((prev) => [
-        ...prev.slice(-2),
-        {
-          korean: data.korean || "",
-          translation,
-          timestamp: data.timestamp || Date.now(),
-        },
-      ]);
-    });
-
     return () => {
       socket.disconnect();
     };

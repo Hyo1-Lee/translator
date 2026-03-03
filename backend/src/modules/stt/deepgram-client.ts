@@ -17,67 +17,113 @@ interface DeepgramConfig {
 }
 
 /**
- * SegmentAggregator - Deepgram이 빠르게 연속 전송하는 is_final 세그먼트를
- * 짧은 윈도우(300ms)로 합쳐서 하나의 세그먼트로 전달
+ * SentenceBuffer - STT is_final 세그먼트를 축적하여 완성된 문장 단위로 전달.
+ *
+ * 플러시 트리거 (우선순위):
+ *   1. utterance_end 이벤트 (화자 침묵 감지 → 즉시 플러시)
+ *   2. 한국어 종결어미 감지 + 800ms 디바운스
+ *   3. 하드 타임아웃 10초 (안전망)
  */
-class SegmentAggregator {
-  private buffer: string[] = [];
-  private timer: NodeJS.Timeout | null = null;
-  private lastConfidence: number = 0;
-  private readonly WINDOW_MS = 300;
-  private onFlush: (text: string, confidence: number) => void;
+class SentenceBuffer {
+  private buffer: string = '';
+  private sentenceTimer: NodeJS.Timeout | null = null;
+  private hardTimer: NodeJS.Timeout | null = null;
+  private onFlush: (text: string) => void;
 
-  constructor(onFlush: (text: string, confidence: number) => void) {
+  // 설정
+  private readonly SENTENCE_DEBOUNCE_MS = 800;
+  private readonly HARD_TIMEOUT_MS = 10000;
+  private readonly MIN_CHARS_FOR_SENTENCE = 8;
+
+  // 한국어 종결어미 패턴
+  // 형식체/비형식체 종결어미를 광범위하게 커버
+  private readonly SENTENCE_END_RE = new RegExp(
+    '(?:' +
+      // 합쇼체 (formal): ~합니다, ~습니다, ~ㅂ니다, ~합니까, ~습니까
+      '합니다|습니다|ㅂ니다|합니까|습니까|' +
+      // 해요체 (polite): ~해요, ~에요, ~예요, ~이에요, ~거든요, ~잖아요, ~네요, ~는데요, ~군요, ~죠
+      '해요|에요|예요|이에요|거든요|잖아요|네요|는데요|던데요|군요|구요|죠|' +
+      // 해체 (casual): ~해, ~야, ~지, ~네, ~거든, ~잖아
+      '거든|잖아|' +
+      // 하게체/하오체 (literary)
+      '하오|하게|' +
+      // 명령/청유: ~세요, ~십시오, ~시죠, ~합시다, ~읍시다
+      '하세요|세요|십시오|시죠|합시다|읍시다|' +
+      // 연결+종결: ~고요, ~는데, ~인데
+      '고요|는데요|인데요' +
+    ')' +
+    '[.?!。]?\\s*$'  // 선택적 문장 부호
+  );
+
+  constructor(onFlush: (text: string) => void) {
     this.onFlush = onFlush;
   }
 
-  add(text: string, confidence: number): void {
-    this.buffer.push(text);
-    this.lastConfidence = confidence;
+  /**
+   * is_final 텍스트 추가
+   */
+  add(text: string): void {
+    this.buffer += (this.buffer ? ' ' : '') + text;
 
-    if (this.timer) {
-      clearTimeout(this.timer);
+    // 하드 타임아웃 리셋
+    this.resetHardTimer();
+
+    // 한국어 종결어미 감지 → 디바운스 플러시
+    if (
+      this.buffer.length >= this.MIN_CHARS_FOR_SENTENCE &&
+      this.SENTENCE_END_RE.test(this.buffer)
+    ) {
+      this.startSentenceDebounce();
     }
+  }
 
-    this.timer = setTimeout(() => {
+  /**
+   * Deepgram utterance_end 이벤트 (화자 침묵) → 즉시 플러시
+   */
+  onUtteranceEnd(): void {
+    if (this.buffer.trim()) {
       this.flush();
-    }, this.WINDOW_MS);
+    }
+  }
+
+  private startSentenceDebounce(): void {
+    if (this.sentenceTimer) clearTimeout(this.sentenceTimer);
+    this.sentenceTimer = setTimeout(() => this.flush(), this.SENTENCE_DEBOUNCE_MS);
+  }
+
+  private resetHardTimer(): void {
+    if (this.hardTimer) clearTimeout(this.hardTimer);
+    this.hardTimer = setTimeout(() => this.flush(), this.HARD_TIMEOUT_MS);
   }
 
   flush(): void {
-    if (this.buffer.length === 0) return;
+    if (this.sentenceTimer) { clearTimeout(this.sentenceTimer); this.sentenceTimer = null; }
+    if (this.hardTimer) { clearTimeout(this.hardTimer); this.hardTimer = null; }
 
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
+    const text = this.buffer.trim();
+    this.buffer = '';
 
-    const combined = this.buffer.join(' ').trim();
-    this.buffer = [];
-
-    if (combined.length > 0) {
-      this.onFlush(combined, this.lastConfidence);
+    if (text.length > 0) {
+      this.onFlush(text);
     }
   }
 
   destroy(): void {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = null;
-    }
-    this.buffer = [];
+    if (this.sentenceTimer) { clearTimeout(this.sentenceTimer); this.sentenceTimer = null; }
+    if (this.hardTimer) { clearTimeout(this.hardTimer); this.hardTimer = null; }
+    this.buffer = '';
   }
 }
 
 /**
- * Deepgram Client - Nova-3 고정, 커스텀 버퍼링 제거, SegmentAggregator 사용
+ * Deepgram Client - Nova-3, SentenceBuffer로 완성된 문장 단위 전달
  */
 export class DeepgramClient extends STTProvider {
   private config: DeepgramConfig;
   private client: any;
   private connection: any;
   private isReady: boolean = false;
-  private aggregator: SegmentAggregator;
+  private sentenceBuffer: SentenceBuffer;
 
   // 마지막 INTERIM 결과 저장 (disconnect 시 처리용)
   private lastInterimText: string = '';
@@ -95,20 +141,19 @@ export class DeepgramClient extends STTProvider {
       ...config,
     };
 
-    // 항상 Nova-3 사용 (keywords 포기, 인식률 우선)
     this.config.model = 'nova-3';
 
-    this.aggregator = new SegmentAggregator((text, confidence) => {
+    this.sentenceBuffer = new SentenceBuffer((text) => {
       this.emit('transcript', {
         text,
-        confidence,
+        confidence: 0,
         final: true,
       });
     });
   }
 
   /**
-   * Connect - Nova-3 최적화 설정
+   * Connect - 정확도 우선 설정
    */
   async connect(): Promise<void> {
     try {
@@ -124,8 +169,8 @@ export class DeepgramClient extends STTProvider {
         smart_format: true,
         punctuate: true,
         interim_results: this.config.interimResults,
-        endpointing: 800,          // 800ms (기존 1000~1500ms → 800ms)
-        utterance_end_ms: 1500,    // 1500ms (기존 2000~3000ms → 1500ms)
+        endpointing: 1200,         // 1200ms (정확도 우선: Deepgram이 더 긴 구간을 한 번에 처리)
+        utterance_end_ms: 2000,    // 2000ms (화자 침묵 감지 → SentenceBuffer 플러시)
         vad_events: true,
         filler_words: false,
         numerals: true,
@@ -167,12 +212,17 @@ export class DeepgramClient extends STTProvider {
             return;
           }
 
-          // Final → SegmentAggregator로 전달 (300ms 윈도우로 합침)
+          // Final → SentenceBuffer (문장 완성까지 축적)
           this.lastInterimText = '';
-          this.aggregator.add(transcript, confidence);
+          this.sentenceBuffer.add(transcript);
         } catch (err) {
           console.error(`[Deepgram] Error processing transcript:`, err);
         }
+      });
+
+      // UtteranceEnd: 화자 침묵 감지 → SentenceBuffer 즉시 플러시
+      this.connection.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+        this.sentenceBuffer.onUtteranceEnd();
       });
 
       this.connection.on(LiveTranscriptionEvents.Metadata, (_metadata: any) => {
@@ -229,15 +279,15 @@ export class DeepgramClient extends STTProvider {
   }
 
   /**
-   * End stream - flush aggregator and finish connection
+   * End stream - flush buffer and finish connection
    */
   endStream(): void {
     if (this.lastInterimText) {
-      this.aggregator.add(this.lastInterimText, 0.5);
+      this.sentenceBuffer.add(this.lastInterimText);
       this.lastInterimText = '';
     }
 
-    this.aggregator.flush();
+    this.sentenceBuffer.flush();
 
     if (this.connection) {
       try {
@@ -253,12 +303,12 @@ export class DeepgramClient extends STTProvider {
    */
   disconnect(): void {
     if (this.lastInterimText) {
-      this.aggregator.add(this.lastInterimText, 0.5);
+      this.sentenceBuffer.add(this.lastInterimText);
       this.lastInterimText = '';
     }
 
-    this.aggregator.flush();
-    this.aggregator.destroy();
+    this.sentenceBuffer.flush();
+    this.sentenceBuffer.destroy();
 
     if (this.connection) {
       try {
