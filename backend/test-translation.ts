@@ -28,10 +28,10 @@ const TARGET_LANGUAGES = ['en', 'ja', 'zh'];
 const ROOM_CODE = 'test-room';
 
 async function main() {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    console.error('OPENAI_API_KEY 필요');
+    console.error('GEMINI_API_KEY 필요');
     process.exit(1);
   }
 
@@ -39,8 +39,8 @@ async function main() {
 
   const translationService = new TranslationService({
     apiKey,
-    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-    correctionModel: process.env.OPENAI_CORRECTION_MODEL || 'gpt-4.1-nano',
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    correctionModel: process.env.GEMINI_CORRECTION_MODEL || 'gemini-2.0-flash',
   });
 
   const sessionService = new SessionService();

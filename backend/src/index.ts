@@ -130,19 +130,19 @@ async function bootstrap() {
   const transcriptService = new TranscriptService();
   const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
-  // Translation service (OpenAI 2-pass: correction + translation)
+  // Translation service (Gemini 2-pass: correction + translation)
   const translationService = new TranslationService({
-    apiKey: process.env.OPENAI_API_KEY || '',
-    model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-    correctionModel: process.env.OPENAI_CORRECTION_MODEL || 'gpt-4.1-nano',
+    apiKey: process.env.GEMINI_API_KEY || '',
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    correctionModel: process.env.GEMINI_CORRECTION_MODEL || 'gemini-2.0-flash',
   });
 
   // In-memory session service (translation context)
   const sessionService = new SessionService();
 
-  console.log('[Bootstrap] Translation service initialized');
-  console.log(`[Bootstrap] - Translation Model: ${process.env.OPENAI_MODEL || 'gpt-4.1-mini'}`);
-  console.log(`[Bootstrap] - Correction Model: ${process.env.OPENAI_CORRECTION_MODEL || 'gpt-4.1-nano'}`);
+  console.log('[Bootstrap] Translation service initialized (Gemini)');
+  console.log(`[Bootstrap] - Translation Model: ${process.env.GEMINI_MODEL || 'gemini-2.5-flash'}`);
+  console.log(`[Bootstrap] - Correction Model: ${process.env.GEMINI_CORRECTION_MODEL || 'gemini-2.0-flash'}`);
 
   // STT Manager - Deepgram only, Nova-3 fixed
   const sttManager = new STTManager({

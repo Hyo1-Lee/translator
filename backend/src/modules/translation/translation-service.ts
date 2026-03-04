@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { SOURCE_LANGUAGE_NAMES, SOURCE_SCRIPT_REGEX } from '../../config/language-config';
 
 /**
@@ -18,9 +18,9 @@ export interface CorrectionResult {
 }
 
 interface TranslationConfig {
-  apiKey: string;
-  model?: string;
-  correctionModel?: string;
+  apiKey: string;              // GEMINI_API_KEY
+  model?: string;              // default: 'gemini-2.5-flash'
+  correctionModel?: string;    // default: 'gemini-2.0-flash'
 }
 
 /**
@@ -47,20 +47,21 @@ const LANGUAGE_NAMES: Record<string, string> = {
 /**
  * TranslationService — 2-pass architecture
  *
- * Pass 1: correctKorean (gpt-4.1-nano) — STT 오류 보정 전용
- * Pass 2: translateCorrected (gpt-4.1-mini) — 깨끗한 한국어 → 다국어 번역
+ * Pass 1: correctAndCheck (gemini-2.0-flash) — STT 오류 보정 전용
+ * Pass 2: translateText (gemini-2.5-flash) — 보정된 소스 → 다국어 번역
  */
 export class TranslationService {
-  private openai: OpenAI;
-  private model: string;
-  private correctionModel: string;
+  private translationModel: GenerativeModel;
+  private correctionModelInstance: GenerativeModel;
 
   constructor(config: TranslationConfig) {
-    this.openai = new OpenAI({
-      apiKey: config.apiKey
+    const genAI = new GoogleGenerativeAI(config.apiKey);
+    this.translationModel = genAI.getGenerativeModel({
+      model: config.model || 'gemini-2.5-flash',
     });
-    this.model = config.model || 'gpt-4.1-mini';
-    this.correctionModel = config.correctionModel || 'gpt-4.1-nano';
+    this.correctionModelInstance = genAI.getGenerativeModel({
+      model: config.correctionModel || 'gemini-2.0-flash',
+    });
   }
 
   /**
@@ -110,19 +111,14 @@ CORRECTION RULES:
       }
       parts.push(`[Correct this STT output]\n${text}`);
 
-      const response = await this.openai.chat.completions.create({
-        model: this.correctionModel,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: parts.join('\n\n') }
-        ],
-        max_completion_tokens: 600,
-        temperature: 0.0,
+      const result = await this.correctionModelInstance.generateContent({
+        systemInstruction: systemPrompt,
+        contents: [{ role: 'user', parts: [{ text: parts.join('\n\n') }] }],
+        generationConfig: { maxOutputTokens: 600, temperature: 0 },
       });
 
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = result.response.text().trim();
       if (!content) return { corrected: text, isComplete: true };
-
       return this.parseCorrectionResponse(content, text);
     } catch (error) {
       console.error('[TranslationService] STT correction error:', error);
@@ -178,17 +174,13 @@ CORRECTION RULES:
       const systemPrompt = this.buildTranslationSystemPrompt(langKeys, langList, sourceLanguage, context.glossary, context.environmentDescription);
       const userPrompt = this.buildTranslationUserPrompt(correctedSourceText, sourceLanguage, context);
 
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_completion_tokens: 2000,
-        temperature: 0.1,
+      const result = await this.translationModel.generateContent({
+        systemInstruction: systemPrompt,
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { maxOutputTokens: 2000, temperature: 0.1 },
       });
 
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = result.response.text().trim();
       if (!content) {
         console.error('[TranslationService] Empty translation response');
         return {};
@@ -403,23 +395,15 @@ CRITICAL RULES:
         systemContent = `Context: ${environmentDescription}\n\n${systemContent}`;
       }
 
-      const response = await this.openai.chat.completions.create({
-        model: this.correctionModel,
-        messages: [
-          {
-            role: 'system',
-            content: systemContent
-          },
-          {
-            role: 'user',
-            content: `${prevSourceText ? `[Before] ${prevSourceText}\n` : ''}[Current] ${currentSourceText}\n[After] ${nextSourceText}\n\nCurrent translation:\n${translationStr}`
-          }
-        ],
-        max_completion_tokens: 500,
-        temperature: 0.1,
+      const userContent = `${prevSourceText ? `[Before] ${prevSourceText}\n` : ''}[Current] ${currentSourceText}\n[After] ${nextSourceText}\n\nCurrent translation:\n${translationStr}`;
+
+      const result = await this.correctionModelInstance.generateContent({
+        systemInstruction: systemContent,
+        contents: [{ role: 'user', parts: [{ text: userContent }] }],
+        generationConfig: { maxOutputTokens: 500, temperature: 0.1 },
       });
 
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = result.response.text().trim();
       if (!content || content === 'OK' || content === '"OK"') return null;
 
       const improved = this.parseTranslationResponse(content, targetLanguages, sourceLanguage);
@@ -442,24 +426,19 @@ CRITICAL RULES:
   async generateSummary(recentText: string, previousSummary: string = '', sourceLanguage: string = 'ko'): Promise<string | null> {
     try {
       const langName = SOURCE_LANGUAGE_NAMES[sourceLanguage] || 'Korean';
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'user',
-            content: `Summarize this conversation in ${langName}. Keep under 80 words, focus on main topics, key points, and any specialized terminology used.
+      const userContent = `Summarize this conversation in ${langName}. Keep under 80 words, focus on main topics, key points, and any specialized terminology used.
 ${previousSummary ? `Previous: ${previousSummary}\n` : ''}
 Recent:
 ${recentText}
 
-Summary (${langName}, <80 words):`
-          }
-        ],
-        max_completion_tokens: 300,
-        temperature: 0.5
+Summary (${langName}, <80 words):`;
+
+      const result = await this.translationModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: userContent }] }],
+        generationConfig: { maxOutputTokens: 300, temperature: 0.5 },
       });
 
-      return response.choices[0]?.message?.content?.trim() || null;
+      return result.response.text().trim() || null;
     } catch (error) {
       console.error('[TranslationService] Summary generation error:', error);
       return null;

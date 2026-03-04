@@ -46,7 +46,8 @@
       "Bash(python3:*)",
       "WebFetch(domain:help.apiyi.com)",
       "WebFetch(domain:artificialanalysis.ai)",
-      "WebFetch(domain:qwenlm.github.io)"
+      "WebFetch(domain:qwenlm.github.io)",
+      "Bash(npm:*)"
     ],
     "deny": []
   }
