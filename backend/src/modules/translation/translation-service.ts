@@ -1,10 +1,11 @@
 import OpenAI from 'openai';
+import { SOURCE_LANGUAGE_NAMES, SOURCE_SCRIPT_REGEX } from '../../config/language-config';
 
 /**
  * 번역 결과
  */
 export interface TranslationResult {
-  korean: string;                        // LLM이 보정한 한국어
+  sourceText: string;                    // LLM이 보정한 소스 텍스트
   translations: Record<string, string>;  // {en: "...", ja: "...", ...}
 }
 
@@ -63,30 +64,39 @@ export class TranslationService {
   }
 
   /**
-   * Pass 1: 한국어 STT 보정 + 문장 완성 여부 판별 (gpt-4.1-nano)
+   * Pass 1: STT 보정 + 문장 완성 여부 판별 (gpt-4.1-nano)
    */
   async correctAndCheck(
     text: string,
-    context: { summary?: string; recentKorean?: string; environmentDescription?: string }
+    sourceLanguage: string,
+    context: { summary?: string; recentSourceText?: string; environmentDescription?: string }
   ): Promise<CorrectionResult> {
     try {
-      const systemPrompt = `You are a Korean speech-to-text error correction specialist.
+      const langName = SOURCE_LANGUAGE_NAMES[sourceLanguage] || 'Korean';
 
-INPUT: Raw Korean text from a speech recognition system, along with topic context.
+      let systemPrompt = `You are a ${langName} speech-to-text error correction specialist.
+
+INPUT: Raw ${langName} text from a speech recognition system, along with topic context.
 OUTPUT: JSON object with exactly two fields:
-- "corrected": The corrected Korean text
-- "isComplete": true if the text ends with a grammatically complete sentence (ends with 다/요/죠/까 etc.), false if it ends mid-sentence (connective like 며/고/면/는데, particle like 을/를/에, or modifier)
+- "corrected": The corrected ${langName} text
+- "isComplete": true if the text ends with a grammatically complete sentence, false if it ends mid-sentence or mid-phrase
 
 CORRECTION RULES:
-1. Use [Context], [Topic summary], and [Recent Korean speech] to resolve homophones. The domain is your strongest clue.
-2. Common STT errors to watch for:
+1. Use [Context], [Topic summary], and [Recent speech] to resolve ambiguities. The domain is your strongest clue.
+2. Fix common STT errors: misrecognized words, wrong spacing, missing/wrong punctuation.
+3. Do NOT add, remove, or rephrase content. Only fix errors.`;
+
+      // Korean-specific correction rules
+      if (sourceLanguage === 'ko') {
+        systemPrompt += `
+4. Common Korean STT errors to watch for:
    - 구조→구주, 진액→진흙, 성욕/상욕→성역, 이기적→이 기적, 구습→구속, 창조 축→창조주 (religious context)
    - Wrong spacing: compound words split, or separate words merged
    - Missing/wrong particles
-3. Do NOT add, remove, or rephrase content. Only fix errors.
-4. If the domain is religious/spiritual, prefer religious vocabulary (구주, 성역, 구속, 성전, etc.) over secular homophones.
+5. If the domain is religious/spiritual, prefer religious vocabulary (구주, 성역, 구속, 성전, etc.) over secular homophones.`;
+      }
 
-Output ONLY the JSON object, no explanation.`;
+      systemPrompt += `\n\nOutput ONLY the JSON object, no explanation.`;
 
       const parts: string[] = [];
       if (context.environmentDescription) {
@@ -95,8 +105,8 @@ Output ONLY the JSON object, no explanation.`;
       if (context.summary) {
         parts.push(`[Topic summary]\n${context.summary}`);
       }
-      if (context.recentKorean) {
-        parts.push(`[Recent Korean speech]\n${context.recentKorean}`);
+      if (context.recentSourceText) {
+        parts.push(`[Recent speech]\n${context.recentSourceText}`);
       }
       parts.push(`[Correct this STT output]\n${text}`);
 
@@ -115,7 +125,7 @@ Output ONLY the JSON object, no explanation.`;
 
       return this.parseCorrectionResponse(content, text);
     } catch (error) {
-      console.error('[TranslationService] Korean correction error:', error);
+      console.error('[TranslationService] STT correction error:', error);
       return { corrected: text, isComplete: true };
     }
   }
@@ -145,11 +155,12 @@ Output ONLY the JSON object, no explanation.`;
   }
 
   /**
-   * Pass 2: 보정된 한국어 → 다국어 번역 (gpt-4.1-mini)
+   * Pass 2: 보정된 소스 텍스트 → 다국어 번역 (gpt-4.1-mini)
    */
   async translateText(
-    correctedKorean: string,
+    correctedSourceText: string,
     targetLanguages: string[],
+    sourceLanguage: string,
     context: {
       summary?: string;
       recentTranslationHistory?: Record<string, string>[];
@@ -164,8 +175,8 @@ Output ONLY the JSON object, no explanation.`;
 
       const langKeys = targetLanguages.map(code => `"${code}"`).join(', ');
 
-      const systemPrompt = this.buildTranslationSystemPrompt(langKeys, langList, context.glossary, context.environmentDescription);
-      const userPrompt = this.buildTranslationUserPrompt(correctedKorean, context);
+      const systemPrompt = this.buildTranslationSystemPrompt(langKeys, langList, sourceLanguage, context.glossary, context.environmentDescription);
+      const userPrompt = this.buildTranslationUserPrompt(correctedSourceText, sourceLanguage, context);
 
       const response = await this.openai.chat.completions.create({
         model: this.model,
@@ -183,7 +194,7 @@ Output ONLY the JSON object, no explanation.`;
         return {};
       }
 
-      return this.parseTranslationResponse(content, targetLanguages);
+      return this.parseTranslationResponse(content, targetLanguages, sourceLanguage);
     } catch (error) {
       console.error('[TranslationService] Translation error:', error);
       return {};
@@ -196,9 +207,10 @@ Output ONLY the JSON object, no explanation.`;
   async translate(
     text: string,
     targetLanguages: string[],
+    sourceLanguage: string = 'ko',
     context: {
       summary?: string;
-      recentKorean?: string;
+      recentSourceText?: string;
       recentTranslationHistory?: Record<string, string>[];
       glossary?: Record<string, string>;
     } = {}
@@ -207,24 +219,24 @@ Output ONLY the JSON object, no explanation.`;
       if (!text || text.trim().length === 0) return null;
 
       if (targetLanguages.length === 0) {
-        return { korean: text, translations: {} };
+        return { sourceText: text, translations: {} };
       }
 
-      // Pass 1: 한국어 STT 보정
-      const { corrected } = await this.correctAndCheck(text, {
+      // Pass 1: STT 보정
+      const { corrected } = await this.correctAndCheck(text, sourceLanguage, {
         summary: context.summary,
-        recentKorean: context.recentKorean,
+        recentSourceText: context.recentSourceText,
       });
 
-      // Pass 2: 보정된 한국어 → 다국어 번역
-      const translations = await this.translateText(corrected, targetLanguages, {
+      // Pass 2: 보정된 텍스트 → 다국어 번역
+      const translations = await this.translateText(corrected, targetLanguages, sourceLanguage, {
         summary: context.summary,
         recentTranslationHistory: context.recentTranslationHistory,
         glossary: context.glossary,
       });
 
       return {
-        korean: corrected,
+        sourceText: corrected,
         translations,
       };
 
@@ -235,15 +247,17 @@ Output ONLY the JSON object, no explanation.`;
   }
 
   /**
-   * 번역 시스템 프롬프트 — 번역 전용 (보정된 한국어 입력)
+   * 번역 시스템 프롬프트 — 번역 전용 (보정된 소스 텍스트 입력)
    */
   private buildTranslationSystemPrompt(
     langKeys: string,
     langList: string,
+    sourceLanguage: string,
     glossary?: Record<string, string>,
     environmentDescription?: string,
   ): string {
-    let prompt = `You are a professional Korean-to-multilingual translator. You receive clean, corrected Korean text and must produce accurate translations.`;
+    const langName = SOURCE_LANGUAGE_NAMES[sourceLanguage] || 'Korean';
+    let prompt = `You are a professional ${langName}-to-multilingual translator. You receive clean, corrected ${langName} text and must produce accurate translations.`;
 
     if (environmentDescription) {
       prompt += `\n\nCONTEXT: ${environmentDescription}
@@ -258,7 +272,7 @@ OUTPUT FORMAT: JSON object with keys: ${langKeys}
 Example: {${langKeys.split(', ').map(k => `${k}: "translated text."`).join(', ')}}
 
 CRITICAL RULES:
-1. Translate ONLY the given Korean text — do NOT add, predict, or generate content beyond what is provided
+1. Translate ONLY the given ${langName} text — do NOT add, predict, or generate content beyond what is provided
 2. Your translations continue a flowing paragraph — write as a natural continuation of previous translations
 3. Do NOT repeat content from previous translations
 4. Preserve the speaker's tone and register
@@ -281,12 +295,14 @@ CRITICAL RULES:
    * 번역 유저 프롬프트
    */
   private buildTranslationUserPrompt(
-    correctedKorean: string,
+    correctedSourceText: string,
+    sourceLanguage: string,
     context: {
       summary?: string;
       recentTranslationHistory?: Record<string, string>[];
     }
   ): string {
+    const langName = SOURCE_LANGUAGE_NAMES[sourceLanguage] || 'Korean';
     const parts: string[] = [];
 
     if (context.summary) {
@@ -303,7 +319,7 @@ CRITICAL RULES:
       parts.push(`[Previous translations — your output continues after these]\n${historyLines}`);
     }
 
-    parts.push(`[Translate this Korean text]\n${correctedKorean}`);
+    parts.push(`[Translate this ${langName} text]\n${correctedSourceText}`);
 
     return parts.join('\n\n');
   }
@@ -313,7 +329,8 @@ CRITICAL RULES:
    */
   private parseTranslationResponse(
     content: string,
-    targetLanguages: string[]
+    targetLanguages: string[],
+    sourceLanguage: string = 'ko',
   ): Record<string, string> {
     const translations: Record<string, string> = {};
 
@@ -332,16 +349,18 @@ CRITICAL RULES:
       }
 
       const parsed = JSON.parse(jsonStr);
+      const scriptRegex = SOURCE_SCRIPT_REGEX[sourceLanguage];
 
       for (const lang of targetLanguages) {
         if (parsed[lang] && typeof parsed[lang] === 'string') {
           const value = parsed[lang].trim();
-          // 한국어가 아닌 언어에 한국어 문자가 섞여있으면 제거
-          if (lang !== 'ko' && /[\uAC00-\uD7AF\u3131-\u3163]/.test(value)) {
-            const cleaned = value.replace(/[\uAC00-\uD7AF\u3131-\u3163]+/g, '').replace(/\s{2,}/g, ' ').trim();
+          // 소스 언어 스크립트 오염 검사 (CJK만 — Latin 스크립트는 스킵)
+          if (scriptRegex && lang !== sourceLanguage && scriptRegex.test(value)) {
+            const cleanRegex = new RegExp(scriptRegex.source, 'g');
+            const cleaned = value.replace(cleanRegex, '').replace(/\s{2,}/g, ' ').trim();
             if (cleaned.length > 0) {
               translations[lang] = cleaned;
-              console.warn(`[TranslationService] Korean chars removed from ${lang} translation`);
+              console.warn(`[TranslationService] Source language chars removed from ${lang} translation`);
             }
           } else {
             translations[lang] = value;
@@ -366,18 +385,20 @@ CRITICAL RULES:
    * 비동기 번역 개선 — 앞뒤 문맥으로 이전 세그먼트 번역 보정
    */
   async refineTranslation(
-    prevKorean: string,
-    currentKorean: string,
-    nextKorean: string,
+    prevSourceText: string,
+    currentSourceText: string,
+    nextSourceText: string,
     currentTranslation: Record<string, string>,
     targetLanguages: string[],
+    sourceLanguage: string = 'ko',
     environmentDescription?: string,
   ): Promise<Record<string, string> | null> {
     try {
+      const langName = SOURCE_LANGUAGE_NAMES[sourceLanguage] || 'Korean';
       const langKeys = targetLanguages.map(code => `"${code}"`).join(', ');
       const translationStr = JSON.stringify(currentTranslation);
 
-      let systemContent = `You refine translations using surrounding Korean context. Output improved JSON ({${langKeys}}) or exactly "OK" if no improvement needed. No explanation.`;
+      let systemContent = `You refine translations using surrounding ${langName} context. Output improved JSON ({${langKeys}}) or exactly "OK" if no improvement needed. No explanation.`;
       if (environmentDescription) {
         systemContent = `Context: ${environmentDescription}\n\n${systemContent}`;
       }
@@ -391,7 +412,7 @@ CRITICAL RULES:
           },
           {
             role: 'user',
-            content: `${prevKorean ? `[Before] ${prevKorean}\n` : ''}[Current] ${currentKorean}\n[After] ${nextKorean}\n\nCurrent translation:\n${translationStr}`
+            content: `${prevSourceText ? `[Before] ${prevSourceText}\n` : ''}[Current] ${currentSourceText}\n[After] ${nextSourceText}\n\nCurrent translation:\n${translationStr}`
           }
         ],
         max_completion_tokens: 500,
@@ -401,7 +422,7 @@ CRITICAL RULES:
       const content = response.choices[0]?.message?.content?.trim();
       if (!content || content === 'OK' || content === '"OK"') return null;
 
-      const improved = this.parseTranslationResponse(content, targetLanguages);
+      const improved = this.parseTranslationResponse(content, targetLanguages, sourceLanguage);
       if (Object.keys(improved).length === 0) return null;
 
       // 실제로 변경된 경우만 반환
@@ -418,19 +439,20 @@ CRITICAL RULES:
   /**
    * 요약 생성 (Tier 2: 증분 요약)
    */
-  async generateSummary(recentText: string, previousSummary: string = ''): Promise<string | null> {
+  async generateSummary(recentText: string, previousSummary: string = '', sourceLanguage: string = 'ko'): Promise<string | null> {
     try {
+      const langName = SOURCE_LANGUAGE_NAMES[sourceLanguage] || 'Korean';
       const response = await this.openai.chat.completions.create({
         model: this.model,
         messages: [
           {
             role: 'user',
-            content: `Summarize this conversation in Korean. Keep under 80 words, focus on main topics, key points, and any specialized terminology used.
+            content: `Summarize this conversation in ${langName}. Keep under 80 words, focus on main topics, key points, and any specialized terminology used.
 ${previousSummary ? `Previous: ${previousSummary}\n` : ''}
 Recent:
 ${recentText}
 
-Summary (Korean, <80 words):`
+Summary (${langName}, <80 words):`
           }
         ],
         max_completion_tokens: 300,

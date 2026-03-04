@@ -23,7 +23,7 @@ export interface HandlerContext {
   translationService: TranslationService;
   sessionService: SessionService;
   audioChunksReceived: Map<string, number>;
-  setupSttCallbacks: (roomCode: string, promptTemplate?: string) => Promise<void>;
+  setupSttCallbacks: (roomCode: string, promptTemplate?: string, sourceLanguage?: string) => Promise<void>;
   sendTranscriptHistory: (socket: Socket, roomId: string) => Promise<void>;
   sendTranslationHistory: (socket: Socket, roomId: string) => Promise<void>;
   cleanupTranslationState: (roomId: string) => void;

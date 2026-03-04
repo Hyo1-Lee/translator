@@ -40,7 +40,7 @@ export class SocketHandler {
   // 최근 세그먼트: 비동기 refinement용
   private recentSegmentData: Map<string, Array<{
     id: string;
-    korean: string;
+    sourceText: string;
     translations: Record<string, string>;
     sequence: number;
   }>> = new Map();
@@ -114,7 +114,7 @@ export class SocketHandler {
    * STT 콜백 설정
    * TextAccumulator가 축적한 텍스트를 전달 → carry-over 파이프라인으로 순차 처리
    */
-  private async setupSttCallbacks(roomCode: string, promptTemplate?: string): Promise<void> {
+  private async setupSttCallbacks(roomCode: string, promptTemplate?: string, sourceLanguage?: string): Promise<void> {
     await this.sttManager.createClient(
       roomCode,
       async (transcriptData) => {
@@ -143,7 +143,8 @@ export class SocketHandler {
         this.enqueueTranslation(roomId, text, forceComplete);
       },
       undefined,
-      promptTemplate || 'general'
+      promptTemplate || 'general',
+      sourceLanguage,
     );
   }
 
@@ -190,6 +191,7 @@ export class SocketHandler {
     if (!room) return;
 
     const targetLanguages = room.roomSettings?.targetLanguagesArray || ['en'];
+    const sourceLanguage = room.roomSettings?.sourceLanguage || 'ko';
 
     try {
       // 1. carry-over 합치기
@@ -204,9 +206,10 @@ export class SocketHandler {
       const envDesc = customDesc || (preset !== 'general' ? `Session type: ${preset}` : '');
       const { corrected, isComplete } = await this.translationService.correctAndCheck(
         fullText,
+        sourceLanguage,
         {
           summary: this.sessionService.getSummary(roomId),
-          recentKorean: this.sessionService.getRecentContext(roomId),
+          recentSourceText: this.sessionService.getRecentContext(roomId),
           environmentDescription: envDesc,
         }
       );
@@ -224,6 +227,7 @@ export class SocketHandler {
       const translations = await this.translationService.translateText(
         corrected,
         targetLanguages,
+        sourceLanguage,
         {
           summary: this.sessionService.getSummary(roomId),
           recentTranslationHistory: this.sessionService.getRecentTranslationHistory(roomId),
@@ -243,18 +247,18 @@ export class SocketHandler {
         // segment 이벤트 전송
         this.io.to(roomId).emit('segment', {
           id: segmentId,
-          korean: corrected,
+          sourceText: corrected,
           translations,
           timestamp: Date.now(),
           sequence,
         });
 
         // refinement용 저장 + 이전 세그먼트 개선 트리거
-        this.storeAndRefine(roomId, { id: segmentId, korean: corrected, translations, sequence }, targetLanguages, envDesc);
+        this.storeAndRefine(roomId, { id: segmentId, sourceText: corrected, translations, sequence }, targetLanguages, sourceLanguage, envDesc);
 
         // 비동기 DB 저장
         this.transcriptService.saveSegment(
-          roomId, sequence, rawText, corrected, translations, latencyMs
+          roomId, sequence, rawText, corrected, translations, latencyMs, undefined, sourceLanguage
         ).catch(err => {
           console.error(`[SocketHandler][${roomId}] Segment save error:`, err);
         });
@@ -276,8 +280,9 @@ export class SocketHandler {
    */
   private storeAndRefine(
     roomId: string,
-    segment: { id: string; korean: string; translations: Record<string, string>; sequence: number },
+    segment: { id: string; sourceText: string; translations: Record<string, string>; sequence: number },
     targetLanguages: string[],
+    sourceLanguage: string,
     environmentDescription?: string,
   ): void {
     if (!this.recentSegmentData.has(roomId)) {
@@ -295,7 +300,7 @@ export class SocketHandler {
       const before = segments.length >= 3 ? segments[segments.length - 3] : null;
       const after = segments[segments.length - 1];
 
-      this.refineSegment(roomId, target, before, after, targetLanguages, environmentDescription).catch(err => {
+      this.refineSegment(roomId, target, before, after, targetLanguages, sourceLanguage, environmentDescription).catch(err => {
         console.error(`[SocketHandler][${roomId}] Refinement error:`, err);
       });
     }
@@ -306,18 +311,20 @@ export class SocketHandler {
    */
   private async refineSegment(
     roomId: string,
-    target: { id: string; korean: string; translations: Record<string, string>; sequence: number },
-    before: { korean: string } | null,
-    after: { korean: string },
+    target: { id: string; sourceText: string; translations: Record<string, string>; sequence: number },
+    before: { sourceText: string } | null,
+    after: { sourceText: string },
     targetLanguages: string[],
+    sourceLanguage: string,
     environmentDescription?: string,
   ): Promise<void> {
     const improved = await this.translationService.refineTranslation(
-      before?.korean || '',
-      target.korean,
-      after.korean,
+      before?.sourceText || '',
+      target.sourceText,
+      after.sourceText,
       target.translations,
       targetLanguages,
+      sourceLanguage,
       environmentDescription,
     );
 
@@ -344,10 +351,12 @@ export class SocketHandler {
    * 요약 재생성 (비동기)
    */
   private async regenerateSummary(roomCode: string): Promise<void> {
+    const room = await this.roomService.getRoom(roomCode);
+    const sourceLanguage = room?.roomSettings?.sourceLanguage || 'ko';
     const recentContext = this.sessionService.getRecentContext(roomCode);
     const previousSummary = this.sessionService.getSummary(roomCode);
 
-    const newSummary = await this.translationService.generateSummary(recentContext, previousSummary);
+    const newSummary = await this.translationService.generateSummary(recentContext, previousSummary, sourceLanguage);
     if (newSummary) {
       this.sessionService.updateSummary(roomCode, newSummary);
     }
@@ -379,7 +388,7 @@ export class SocketHandler {
       for (const seg of segments) {
         socket.emit('segment', {
           id: seg.id,
-          korean: seg.koreanCorrected,
+          sourceText: seg.sourceCorrected,
           translations: seg.translations || {},
           timestamp: seg.timestamp ? new Date(seg.timestamp).getTime() : Date.now(),
           sequence: seg.sequence,

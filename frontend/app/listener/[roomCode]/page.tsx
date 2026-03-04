@@ -45,7 +45,8 @@ interface Transcript {
   originalText?: string;
   isPartial?: boolean;
   isHistory?: boolean;
-  korean?: string;
+  sourceText?: string;
+  korean?: string; // legacy compat
   segmentId?: string;
 }
 
@@ -63,7 +64,8 @@ interface SocketData {
   originalText?: string;
   isPartial?: boolean;
   isHistory?: boolean;
-  korean?: string;
+  sourceText?: string;
+  korean?: string; // legacy compat
   translations?: Record<string, string>;
   segmentId?: string;
   roomSettings?: {
@@ -270,7 +272,7 @@ export default function ListenerRoom() {
 
       const newTranscript: Transcript = {
         type: "translation",
-        korean: data.korean,
+        sourceText: data.sourceText || data.korean,
         translations: data.translations || {},
         timestamp: String(data.timestamp),
         isHistory: data.isHistory || false,
@@ -395,7 +397,7 @@ export default function ListenerRoom() {
           }
         } else {
           if (showOriginal) {
-            data += `한국어: ${item.korean}\n`;
+            data += `원문: ${item.sourceText || item.korean || ""}\n`;
           }
           const translation = item.translations?.[selectedLanguage] || item.translations?.en || "";
           data += `${langName}: ${translation}\n\n`;
@@ -525,7 +527,7 @@ export default function ListenerRoom() {
                   : (item.translations?.[selectedLanguage] || item.translations?.en || "");
                 if (!translationText) return null;
 
-                const koreanText = showOriginal ? (item.korean || item.originalText || "") : "";
+                const originalText = showOriginal ? (item.sourceText || item.korean || item.originalText || "") : "";
                 const timestamp = item.timestamp ? parseInt(item.timestamp) : 0;
 
                 // Show timestamp on first segment, 60s+ gap, or every 10 segments
@@ -548,9 +550,9 @@ export default function ListenerRoom() {
                       <p className={styles.segmentText}>
                         {getDisplayText(translationText)}
                       </p>
-                      {koreanText && (
+                      {originalText && (
                         <p className={styles.segmentOriginal}>
-                          {getDisplayText(koreanText)}
+                          {getDisplayText(originalText)}
                         </p>
                       )}
                     </div>

@@ -34,10 +34,14 @@ export class Segment extends Model {
   declare sequence: number;
 
   @Column(DataType.TEXT)
-  declare koreanOriginal: string;
+  declare sourceOriginal: string;
 
   @Column(DataType.TEXT)
-  declare koreanCorrected: string;
+  declare sourceCorrected: string;
+
+  @Default('ko')
+  @Column(DataType.STRING(10))
+  declare sourceLanguage: string;
 
   @Column(DataType.JSON)
   declare translations: Record<string, string>;

@@ -240,7 +240,7 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
       });
 
       const transcriptsData = segments.map((seg: any) => ({
-        korean: seg.koreanCorrected || seg.koreanOriginal,
+        sourceText: seg.sourceCorrected || seg.sourceOriginal,
         english: seg.translations?.en || '',
         translations: seg.translations || {},
         timestamp: seg.timestamp

@@ -10,7 +10,8 @@ import styles from './page.module.css';
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 interface Transcript {
-  korean: string;
+  sourceText: string;
+  korean?: string; // legacy compat
   english: string;
   translations: Record<string, string>;
   timestamp: number;
@@ -137,7 +138,7 @@ export default function RecordingDetailPage() {
       recording.transcripts.forEach((t) => {
         const timestamp = formatTimestamp(t.timestamp - recording.transcripts[0].timestamp);
         content += `[${timestamp}]\n`;
-        content += `Korean: ${t.korean}\n`;
+        content += `Source: ${t.sourceText || t.korean || ""}\n`;
         if (t.translations && t.translations[selectedLanguage]) {
           const langName = LANGUAGES.find(l => l.code === selectedLanguage)?.name || selectedLanguage;
           content += `${langName}: ${t.translations[selectedLanguage]}\n`;
@@ -325,8 +326,9 @@ export default function RecordingDetailPage() {
               <div className={styles.transcriptsList}>
                 {recording.transcripts.map((transcript, index) => {
                   const relativeTime = index === 0 ? 0 : transcript.timestamp - recording.transcripts[0].timestamp;
+                  const srcText = transcript.sourceText || transcript.korean || "";
                   const translation = selectedLanguage === 'ko'
-                    ? transcript.korean
+                    ? srcText
                     : transcript.translations?.[selectedLanguage] || "";
 
                   return (
@@ -340,11 +342,11 @@ export default function RecordingDetailPage() {
 
                       {selectedLanguage === 'ko' ? (
                         <div className={styles.transcriptContent}>
-                          <div className={styles.originalText}>{transcript.korean}</div>
+                          <div className={styles.originalText}>{srcText}</div>
                         </div>
                       ) : (
                         <div className={styles.transcriptContent}>
-                          <div className={styles.originalText}>{transcript.korean}</div>
+                          <div className={styles.originalText}>{srcText}</div>
                           <div className={styles.divider}></div>
                           <div className={styles.translatedText}>{translation}</div>
                         </div>

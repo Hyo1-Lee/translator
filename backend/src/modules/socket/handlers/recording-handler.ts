@@ -38,7 +38,7 @@ export async function handleStartRecording(
     ctx.cleanupTranslationState(roomId);
 
     try {
-      await ctx.setupSttCallbacks(roomId, room.roomSettings?.promptTemplate || 'general');
+      await ctx.setupSttCallbacks(roomId, room.roomSettings?.promptTemplate || 'general', room.roomSettings?.sourceLanguage || 'ko');
 
       await recordingStateService.startRecording(room.id);
       await sessionManager.updateHeartbeat(room.id);

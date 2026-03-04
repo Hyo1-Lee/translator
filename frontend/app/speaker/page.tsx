@@ -96,6 +96,7 @@ function SpeakerContent() {
   const backgroundSessionRef = useRef<BackgroundSessionManager | null>(null);
   const roomIdRef = useRef<string>("");
   const seenSegmentIds = useRef<Set<string>>(new Set());
+  const pendingModalRef = useRef(false); // Prevents auto-create while modal is pending
 
   // Debug audio recording refs
   const debugMediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -336,6 +337,7 @@ function SpeakerContent() {
   // Create room with settings
   const createRoom = useCallback(() => {
     if (!socketRef.current) return;
+    pendingModalRef.current = false;
 
     const name = user?.name || speakerName || "Speaker";
     setSpeakerName(name);
@@ -421,6 +423,7 @@ function SpeakerContent() {
 
       // Force new room - clear localStorage and show settings modal
       if (forceNew === "true") {
+        pendingModalRef.current = true;
         clearRoomInfo();
         // Load default settings if available
         const defaultSettings = loadDefaultSettings();
@@ -430,6 +433,11 @@ function SpeakerContent() {
         setShowSettingsModal(true);
         // Clear URL parameter
         router.replace("/speaker");
+        return;
+      }
+
+      // Skip auto-create if modal is pending (forceNew was set in a previous connect)
+      if (pendingModalRef.current) {
         return;
       }
 
@@ -750,7 +758,7 @@ function SpeakerContent() {
       setTranscripts((prev) => {
         const newTranscript: Transcript = {
           type: "translation",
-          korean: data.korean,
+          sourceText: data.sourceText || data.korean,
           translations: data.translations || {},
           timestamp: String(data.timestamp),
           segmentId,
@@ -1310,8 +1318,8 @@ function SpeakerContent() {
                   }).map((item, index) => (
                     <div key={index} className={styles.translationCard}>
                       <div className={styles.translationCardContent}>
-                        {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
-                        {!item.korean && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
+                        {(item.sourceText || item.korean) && <p className={styles.originalText}>{getDisplayText(item.sourceText || item.korean || "")}</p>}
+                        {!(item.sourceText || item.korean) && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
                         <p className={styles.translatedText}>
                           {getDisplayText(
                             item.translations?.[selectedLanguage || "en"] || item.text || ""
@@ -1503,8 +1511,8 @@ function SpeakerContent() {
                   }).map((item, index) => (
                     <div key={index} className={styles.translationCard}>
                       <div className={styles.translationCardContent}>
-                        {item.korean && <p className={styles.originalText}>{getDisplayText(item.korean)}</p>}
-                        {!item.korean && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
+                        {(item.sourceText || item.korean) && <p className={styles.originalText}>{getDisplayText(item.sourceText || item.korean || "")}</p>}
+                        {!(item.sourceText || item.korean) && item.originalText && <p className={styles.originalText}>{getDisplayText(item.originalText)}</p>}
                         <p className={styles.translatedText}>
                           {getDisplayText(
                             item.translations?.[selectedLanguage || "en"] || item.text || ""
@@ -1523,7 +1531,14 @@ function SpeakerContent() {
       {/* Settings Modal */}
       <SettingsModal
         isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
+        onClose={() => {
+          pendingModalRef.current = false;
+          setShowSettingsModal(false);
+          // No active room → go back to dashboard
+          if (!roomId) {
+            router.push("/dashboard");
+          }
+        }}
         roomId={roomId}
         roomSettings={roomSettings}
         onSettingsChange={setRoomSettings}

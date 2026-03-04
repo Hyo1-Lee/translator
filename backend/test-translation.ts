@@ -54,25 +54,25 @@ async function main() {
 
     const context = {
       summary: sessionService.getSummary(ROOM_CODE),
-      recentKorean: sessionService.getRecentContext(ROOM_CODE),
+      recentSourceText: sessionService.getRecentContext(ROOM_CODE),
       recentTranslationHistory: sessionService.getRecentTranslationHistory(ROOM_CODE),
     };
 
     const start = Date.now();
-    const result = await translationService.translate(sentence, TARGET_LANGUAGES, context);
+    const result = await translationService.translate(sentence, TARGET_LANGUAGES, 'ko', context);
     const latency = Date.now() - start;
     totalLatency += latency;
 
     if (result) {
       successCount++;
       console.log(`[${i + 1}] 원문: ${sentence}`);
-      console.log(`    보정: ${result.korean}`);
+      console.log(`    보정: ${result.sourceText}`);
       for (const lang of TARGET_LANGUAGES) {
         console.log(`    ${lang}: ${result.translations[lang] || '(누락)'}`);
       }
       console.log(`    (${latency}ms)\n`);
 
-      sessionService.updateCorrectedSegment(ROOM_CODE, result.korean);
+      sessionService.updateCorrectedSegment(ROOM_CODE, result.sourceText);
       sessionService.addTranslationHistory(ROOM_CODE, result.translations);
 
       if (sessionService.shouldRegenerateSummary(ROOM_CODE)) {

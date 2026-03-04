@@ -34,11 +34,11 @@ export class SessionService {
   }
 
   /**
-   * 한국어 세그먼트 추가 (슬라이딩 윈도우)
+   * 소스 텍스트 세그먼트 추가 (슬라이딩 윈도우)
    */
-  addSegment(roomCode: string, koreanText: string): number {
+  addSegment(roomCode: string, sourceText: string): number {
     const session = this.getSession(roomCode);
-    session.contextWindow.push(koreanText);
+    session.contextWindow.push(sourceText);
 
     // 최근 4문장 유지
     if (session.contextWindow.length > 4) {
@@ -52,12 +52,12 @@ export class SessionService {
   }
 
   /**
-   * 보정된 한국어로 마지막 세그먼트 교체
+   * 보정된 소스 텍스트로 마지막 세그먼트 교체
    */
-  updateCorrectedSegment(roomCode: string, correctedKorean: string): void {
+  updateCorrectedSegment(roomCode: string, correctedSourceText: string): void {
     const session = this.getSession(roomCode);
     if (session.contextWindow.length > 0) {
-      session.contextWindow[session.contextWindow.length - 1] = correctedKorean;
+      session.contextWindow[session.contextWindow.length - 1] = correctedSourceText;
     }
   }
 

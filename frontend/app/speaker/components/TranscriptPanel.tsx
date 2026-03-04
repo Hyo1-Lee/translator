@@ -103,7 +103,7 @@ export default function TranscriptPanel({
                     <div className={styles.translationTexts}>
                       {item.originalText && (
                         <>
-                          <p className={styles.koreanTextLarge}>
+                          <p className={styles.sourceTextLarge}>
                             {getDisplayText(item.originalText)}
                           </p>
                           <div className={styles.divider}></div>
@@ -124,8 +124,8 @@ export default function TranscriptPanel({
                 ) : (
                   <div className={styles.translationCardContent}>
                     <div className={styles.translationTexts}>
-                      <p className={styles.koreanTextLarge}>
-                        {getDisplayText(item.korean || "")}
+                      <p className={styles.sourceTextLarge}>
+                        {getDisplayText(item.sourceText || item.korean || "")}
                       </p>
                     </div>
                   </div>

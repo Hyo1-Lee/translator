@@ -110,11 +110,12 @@ export class TranscriptService {
   async saveSegment(
     roomCode: string,
     sequence: number,
-    koreanOriginal: string,
-    koreanCorrected: string,
+    sourceOriginal: string,
+    sourceCorrected: string,
     translations: Record<string, string>,
     latencyMs?: number,
-    contextSummary?: string
+    contextSummary?: string,
+    sourceLanguage?: string,
   ): Promise<any> {
     const room = await Room.findOne({ where: { roomCode } });
     if (!room) {
@@ -124,11 +125,12 @@ export class TranscriptService {
     return await Segment.create({
       roomId: room.id,
       sequence,
-      koreanOriginal,
-      koreanCorrected,
+      sourceOriginal,
+      sourceCorrected,
       translations,
       latencyMs: latencyMs || null,
       contextSummary: contextSummary || null,
+      sourceLanguage: sourceLanguage || 'ko',
     });
   }
 

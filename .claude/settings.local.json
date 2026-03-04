@@ -43,7 +43,10 @@
       "Bash(ls:*)",
       "Bash(grep:*)",
       "Bash(sed:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "WebFetch(domain:help.apiyi.com)",
+      "WebFetch(domain:artificialanalysis.ai)",
+      "WebFetch(domain:qwenlm.github.io)"
     ],
     "deny": []
   }

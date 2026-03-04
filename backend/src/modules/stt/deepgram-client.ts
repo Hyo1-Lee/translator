@@ -1,5 +1,6 @@
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 import { STTProvider } from './stt-provider.interface';
+import { SENTENCE_ENDINGS, SENTENCE_SPLIT_PATTERNS } from '../../config/language-config';
 
 /**
  * Deepgram Configuration
@@ -36,11 +37,16 @@ class TextAccumulator {
   private readonly DEBOUNCE_MS = 1000;
   private readonly HARD_TIMEOUT_MS = 8000;
 
-  // 한국어 문장 종결 패턴 (마지막 글자 기준)
-  private readonly ENDS_WITH_SENTENCE = /[다요죠까오니]\s*[.?!。]?\s*$/;
+  // 문장 종결 패턴 (언어별)
+  private readonly ENDS_WITH_SENTENCE: RegExp;
+  private readonly SENTENCE_SPLIT: RegExp;
 
-  constructor(onFlush: (text: string, forceComplete: boolean) => void) {
+  constructor(language: string, onFlush: (text: string, forceComplete: boolean) => void) {
     this.onFlush = onFlush;
+    this.ENDS_WITH_SENTENCE = SENTENCE_ENDINGS[language] || SENTENCE_ENDINGS['en'];
+    // Clone regex with global flag for split pattern
+    const splitSrc = SENTENCE_SPLIT_PATTERNS[language] || SENTENCE_SPLIT_PATTERNS['en'];
+    this.SENTENCE_SPLIT = new RegExp(splitSrc.source, splitSrc.flags);
   }
 
   add(text: string): void {
@@ -97,7 +103,7 @@ class TextAccumulator {
    * 텍스트 내에서 마지막 문장 종결 위치 찾기
    */
   private findLastSentenceEnd(text: string): number {
-    const re = /[다요죠까오니]\s*[.?!。]?\s+/g;
+    const re = new RegExp(this.SENTENCE_SPLIT.source, this.SENTENCE_SPLIT.flags);
     let lastEnd = -1;
     let match;
     while ((match = re.exec(text)) !== null) {
@@ -160,7 +166,7 @@ export class DeepgramClient extends STTProvider {
       ...config,
     };
 
-    this.textAccumulator = new TextAccumulator((text, forceComplete) => {
+    this.textAccumulator = new TextAccumulator(this.config.language || 'ko', (text, forceComplete) => {
       this.emit('transcript', {
         text,
         confidence: 0,

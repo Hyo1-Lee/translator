@@ -1874,7 +1874,7 @@
   gap: 1rem;
 }
 
-.koreanTextLarge {
+.sourceTextLarge {
   color: var(--text-primary);
   font-size: 1.25rem;
   font-weight: 600;
@@ -2994,7 +2994,7 @@
     border-radius: 0.75rem;
   }
 
-  .koreanTextLarge {
+  .sourceTextLarge {
     font-size: 1rem;
   }
 

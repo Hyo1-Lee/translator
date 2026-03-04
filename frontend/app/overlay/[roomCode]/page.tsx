@@ -9,7 +9,7 @@ const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
 interface SubtitleLine {
-  korean: string;
+  sourceText: string;
   translation: string;
   timestamp: number;
 }
@@ -44,14 +44,14 @@ export default function OverlayPage() {
       });
     });
 
-    socket.on("segment", (data: { translations?: Record<string, string>; korean?: string; timestamp?: number }) => {
+    socket.on("segment", (data: { translations?: Record<string, string>; sourceText?: string; korean?: string; timestamp?: number }) => {
       const translation = data.translations?.[lang] || "";
       if (!translation) return;
 
       setLines((prev) => [
         ...prev.slice(-2),
         {
-          korean: data.korean || "",
+          sourceText: data.sourceText || data.korean || "",
           translation,
           timestamp: data.timestamp || Date.now(),
         },
@@ -82,12 +82,12 @@ export default function OverlayPage() {
               key={line.timestamp}
               className={`${styles.line} ${opClass}`}
             >
-              {showOriginal && line.korean && (
+              {showOriginal && line.sourceText && (
                 <div
                   className={styles.original}
                   style={{ fontSize: `${Math.round(fontSize * 0.75)}px` }}
                 >
-                  {line.korean}
+                  {line.sourceText}
                 </div>
               )}
               <div

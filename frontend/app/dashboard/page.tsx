@@ -209,7 +209,8 @@ export default function Dashboard() {
         (
           item: {
             timestamp: string;
-            korean: string;
+            sourceText?: string;
+            korean?: string;
             english: string;
             translations?: Record<string, string>;
           },
@@ -217,7 +218,7 @@ export default function Dashboard() {
         ) => {
           const timestamp = new Date(item.timestamp).toLocaleString("ko-KR");
           content += `[${index + 1}] ${timestamp}\n`;
-          content += `KR: ${item.korean}\n`;
+          content += `SRC: ${item.sourceText || item.korean || ""}\n`;
 
           if (item.translations && typeof item.translations === "object") {
             Object.entries(item.translations).forEach(([lang, text]) => {

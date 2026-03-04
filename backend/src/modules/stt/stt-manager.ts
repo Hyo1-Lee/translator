@@ -41,6 +41,7 @@ export class STTManager {
     onTranscript: (data: TranscriptData) => void,
     _onTranslation?: (data: any) => void,
     promptTemplate?: string,
+    language?: string,
   ): Promise<void> {
     if (this.clients.has(roomId)) {
       return;
@@ -48,6 +49,7 @@ export class STTManager {
 
     const client = new DeepgramClient(roomId, {
       ...this.config.deepgram,
+      language: language || this.config.deepgram.language || 'ko',
       promptTemplate: promptTemplate || this.config.defaultPromptTemplate || 'general',
     });
 

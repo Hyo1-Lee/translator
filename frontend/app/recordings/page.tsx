@@ -12,7 +12,8 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:500
 interface Transcript {
   id: string;
   timestamp: string;
-  korean: string;
+  sourceText: string;
+  korean?: string; // legacy compat
   english: string;
 }
 

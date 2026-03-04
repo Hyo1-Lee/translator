@@ -96,9 +96,17 @@ export default function SettingsModal({
             <label>출발 언어</label>
             <select
               value={roomSettings.sourceLanguage}
-              onChange={(e) =>
-                updateSettings({ sourceLanguage: e.target.value })
-              }
+              onChange={(e) => {
+                const newSource = e.target.value;
+                // Remove new source language from targets to avoid source→source translation
+                const cleanedTargets = roomSettings.targetLanguages.filter(
+                  (l) => l !== newSource
+                );
+                updateSettings({
+                  sourceLanguage: newSource,
+                  targetLanguages: cleanedTargets,
+                });
+              }}
               className={styles.select}
             >
               {SOURCE_LANGUAGES.map((lang) => (

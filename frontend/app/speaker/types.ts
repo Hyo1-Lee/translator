@@ -28,7 +28,8 @@ export interface Transcript {
   originalText?: string;
   isPartial?: boolean;
   isHistory?: boolean;
-  korean?: string;
+  sourceText?: string;
+  korean?: string; // legacy compat
   segmentId?: string;
 }
 
@@ -62,7 +63,8 @@ export interface SocketData {
   originalText?: string;
   isPartial?: boolean;
   isHistory?: boolean;
-  korean?: string;
+  sourceText?: string;
+  korean?: string; // legacy compat
 }
 
 export type RecordingState = "idle" | "recording" | "paused";
@@ -78,6 +80,7 @@ export const SESSION_PRESETS = [
 // Target languages (all supported languages)
 export const TARGET_LANGUAGES = [
   { code: "en", name: "English" },
+  { code: "ko", name: "한국어" },
   { code: "ja", name: "日本語" },
   { code: "zh", name: "中文 (简体)" },
   { code: "zh-TW", name: "繁體中文" },
@@ -94,14 +97,12 @@ export const TARGET_LANGUAGES = [
   { code: "ur", name: "اردو" },
 ];
 
-// Source languages
+// Source languages (supported for STT + correction pipeline)
 export const SOURCE_LANGUAGES = [
   { code: "ko", name: "한국어" },
   { code: "en", name: "English" },
-  { code: "ja", name: "日本語" },
-  { code: "zh", name: "中文" },
   { code: "es", name: "Español" },
-  { code: "fr", name: "Français" },
+  { code: "ja", name: "日本語" },
 ];
 
 // Constants

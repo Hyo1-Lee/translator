@@ -40,7 +40,7 @@ export class RecordingService {
     });
 
     const formattedTranscripts = segments.map(seg => ({
-      korean: seg.koreanCorrected,
+      sourceText: seg.sourceCorrected,
       english: seg.translations?.en || '',
       translations: seg.translations || {},
       timestamp: seg.timestamp.getTime()
