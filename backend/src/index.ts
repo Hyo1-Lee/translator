@@ -128,7 +128,6 @@ async function bootstrap() {
   // Initialize services
   const roomService = new RoomService();
   const transcriptService = new TranscriptService();
-  const promptTemplate = process.env.STT_PROMPT_TEMPLATE || 'church';
 
   // Translation service (Gemini 2-pass: correction + translation)
   const translationService = new TranslationService({
@@ -148,11 +147,7 @@ async function bootstrap() {
   const sttManager = new STTManager({
     deepgram: {
       apiKey: process.env.DEEPGRAM_API_KEY || '',
-      language: process.env.DEEPGRAM_LANGUAGE || 'ko',
-      smartFormat: process.env.DEEPGRAM_SMART_FORMAT !== 'false',
-      punctuate: process.env.DEEPGRAM_PUNCTUATE !== 'false',
     },
-    defaultPromptTemplate: promptTemplate
   });
 
   // Initialize Socket handler
